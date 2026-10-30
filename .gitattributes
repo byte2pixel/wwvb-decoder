@@ -1,0 +1,10 @@
+# Keep LF everywhere (matches .editorconfig) so home and work machines check out identical files.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.pptx binary
+*.gif binary
+*.mp4 binary

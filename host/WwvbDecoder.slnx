@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/WwvbDecoder.Core/WwvbDecoder.Core.csproj" />
+    <Project Path="src/WwvbDecoder.Host/WwvbDecoder.Host.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/WwvbDecoder.Core.Tests/WwvbDecoder.Core.Tests.csproj" />
+  </Folder>
+</Solution>
