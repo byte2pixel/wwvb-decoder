@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <ItemGroup>
     <ProjectReference Include="..\WwvbDecoder.Core\WwvbDecoder.Core.csproj" />
   </ItemGroup>
@@ -12,4 +11,46 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
+  </ItemGroup>
+
+  <!--
+    React UI (../../../ui). Its dist/ is copied to $(OutDir)wwwroot on build and publish.
+    Release runs the npm build first; Debug only copies an existing dist/ since the host
+    prefers the Vite dev server when it's running. Override with -p:BuildUi=true|false.
+  -->
+  <PropertyGroup>
+    <UiDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '..', '..', '..', 'ui'))</UiDir>
+    <UiDistDir>$(UiDir)dist\</UiDistDir>
+    <UiOutputFolder>wwwroot</UiOutputFolder>
+    <BuildUi Condition="'$(BuildUi)' == '' and '$(Configuration)' == 'Release'">true</BuildUi>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <UiSource Include="$(UiDir)src\**;$(UiDir)public\**;$(UiDir)index.html;$(UiDir)*.json;$(UiDir)vite.config.ts" />
+  </ItemGroup>
+
+  <Target Name="NpmInstall" Condition="'$(BuildUi)' == 'true'"
+          Inputs="$(UiDir)package-lock.json" Outputs="$(UiDir)node_modules\.package-lock.json">
+    <Exec Command="npm ci" WorkingDirectory="$(UiDir)" />
+  </Target>
+
+  <Target Name="BuildUi" Condition="'$(BuildUi)' == 'true'" DependsOnTargets="NpmInstall"
+          Inputs="@(UiSource)" Outputs="$(UiDistDir)index.html">
+    <Exec Command="npm run build" WorkingDirectory="$(UiDir)" />
+  </Target>
+
+  <!-- Globbed inside a target so a dist/ produced by BuildUi on a clean build is picked up. -->
+  <Target Name="IncludeUiDist" BeforeTargets="AssignTargetPaths" DependsOnTargets="BuildUi">
+    <ItemGroup>
+      <_UiDistFile Include="$(UiDistDir)**\*" />
+      <None Include="@(_UiDistFile)"
+            Link="$(UiOutputFolder)\%(_UiDistFile.RecursiveDir)%(_UiDistFile.Filename)%(_UiDistFile.Extension)"
+            CopyToOutputDirectory="PreserveNewest"
+            CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+    <Message Condition="'@(_UiDistFile)' == ''" Importance="high"
+             Text="ui/dist not found; the host will only work against the Vite dev server (npm run dev in ui/)." />
+  </Target>
 </Project>
