@@ -109,11 +109,11 @@ Mapped onto the milestone table from the plan, adjusted for actual deliveries (u
 
 | Arrives | Parts |
 | --- | --- |
-| Sat Oct 31 | Both Pico 2 boards (headers pre-soldered), USB logic analyzer, 22 AWG wire |
+| Sat Oct 31 | Pico 2 #1 (headers pre-soldered), USB logic analyzer, 22 AWG wire |
 | Sun Nov 1 | Receiver #1, breadboard and jumper kit, breakaway headers, USB hub, 5 m active extension |
-| Wed Nov 4 | Receiver #2, resistor kit |
+| Wed Nov 4 | Pico 2 #2 (tracking said delivered Oct 31 but it has not shipped), receiver #2, resistor kit |
 
-Because the Picos arrived three days early, Step 9 starts immediately and its hardware bring-up needs only a jumper to ground. Raw overnight captures can start as soon as Step 9 streams lines, before Step 10 exists: log the serial port to a file with any terminal program and add the Step 1 header by hand (Step 9, Task 7). With the logic analyzer today and receiver #1 tomorrow, the receiver's idle and reduced-carrier levels can be read in PulseView on Sunday night, settling the polarity note in Step 1 before any firmware runs. Soldering the 4-pin receiver headers needs the header strips (Sunday) and an iron; until then, header pins pushed into the module's holes and held by the breadboard are enough for a bench test.
+Because the first Pico arrived three days early, Step 9 starts immediately and its hardware bring-up needs only a jumper to ground. Raw overnight captures can start as soon as Step 9 streams lines, before Step 10 exists: log the serial port to a file with any terminal program and add the Step 1 header by hand (Step 9, Task 7). With the logic analyzer today and receiver #1 tomorrow, the receiver's idle and reduced-carrier levels can be read in PulseView on Sunday night, settling the polarity note in Step 1 before any firmware runs. Soldering the 4-pin receiver headers needs the header strips (Sunday) and an iron; until then, header pins pushed into the module's holes and held by the breadboard are enough for a bench test.
 
 This schedule is tight for evenings and weekends; the cut order in the header applies.
 
@@ -570,7 +570,7 @@ Revert the PR. The page returns to the template; Core is untouched.
 **Depends on**: Step 1
 **Parallel with**: Steps 2, 4, 5, 6, 7
 **Model tier**: strongest
-**Window**: Oct 31 to Nov 4 (Picos arrived Oct 31; receiver #1 arrives Nov 1)
+**Window**: Oct 31 to Nov 4 (Pico #1 arrived Oct 31; receiver #1 arrives Nov 1)
 
 ### Context brief
 
@@ -641,7 +641,7 @@ Overnight captures at home are the demo's safety net (ADR-0004). Step 9 may alre
    - `record --port COM5 [--label west-window] [--out <file>]`: streams serial to a capture file named per `capture-format.md`, prints the banner when seen, and prints one status line per minute: edges, resets, parse errors, and the last timestamp.
 3. Add both projects to `WwvbDecoder.slnx` and to the CI build (the solution build covers them). Adapters tests in a new `host/tests/WwvbDecoder.Adapters.Tests`: `CaptureWriterTests` (header, wall line cadence with `FakeTimeProvider`, raw lines preserved byte for byte) and `SerialEdgeSourceTests` for the backwards-timestamp reset using a `StreamReader` over a `MemoryStream` (factor the line loop so it takes a `TextReader`).
 4. Update `host/README.md` (project table) and `captures/README.md` (how to record overnight, naming, what the status line shows, keep the antenna away from the laptop, point the rod north-south).
-5. Hardware: run `record` overnight at home. Commit the first recorder-made capture of at least one hour to `captures/` (text, a few megabytes; if over 10 MB, commit a one-hour excerpt). Whether it contains decodable frames is checked in Step 11. Receiver #2 (arrives Nov 4) can record in parallel on the second Pico to compare locations; label the files accordingly.
+5. Hardware: run `record` overnight at home. Commit the first recorder-made capture of at least one hour to `captures/` (text, a few megabytes; if over 10 MB, commit a one-hour excerpt). Whether it contains decodable frames is checked in Step 11. Receiver #2 and Pico #2 (both arrive Nov 4) can record in parallel to compare locations; label the files accordingly.
 
 ### Files
 
