@@ -111,7 +111,7 @@ Mapped onto the milestone table from the plan, adjusted for actual deliveries (u
 | --- | --- |
 | Sat Oct 31 | Pico 2 #1 (headers pre-soldered), USB logic analyzer, 22 AWG wire |
 | Sun Nov 1 | Receiver #1, breadboard and jumper kit, breakaway headers, USB hub, 5 m active extension |
-| Wed Nov 4 | Pico 2 #2 (tracking said delivered Oct 31 but it has not shipped), receiver #2, resistor kit |
+| Wed Nov 4 | Pico 2 #2 (was expected Oct 31 but has not shipped), receiver #2, resistor kit |
 
 Because the first Pico arrived three days early, Step 9 starts immediately and its hardware bring-up needs only a jumper to ground. Raw overnight captures can start as soon as Step 9 streams lines, before Step 10 exists: log the serial port to a file with any terminal program and add the Step 1 header by hand (Step 9, Task 7). With the logic analyzer today and receiver #1 tomorrow, the receiver's idle and reduced-carrier levels can be read in PulseView on Sunday night, settling the polarity note in Step 1 before any firmware runs. Soldering the 4-pin receiver headers needs the header strips (Sunday) and an iron; until then, header pins pushed into the module's holes and held by the breadboard are enough for a bench test.
 
