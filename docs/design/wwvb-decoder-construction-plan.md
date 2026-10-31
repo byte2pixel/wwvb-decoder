@@ -932,7 +932,7 @@ Every mutation is one commit touching only this file, merged before the affected
 
 | Step | Status | PR | Date | Notes |
 | --- | --- | --- | --- | --- |
-| 1 | pending | | | |
+| 1 | done | [#1](https://github.com/byte2pixel/wwvb-decoder/pull/1) | 2026-10-31 | ADRs and this plan committed in the same PR. Example polarity provisional until Step 9 |
 | 2 | pending | | | |
 | 3 | pending | | | |
 | 4 | pending | | | |
