@@ -20,7 +20,7 @@ cargo run --release
 
 | Module pin | Pico 2 | Note |
 | --- | --- | --- |
-| V | 3V3 OUT (pin 36) | 1.1–3.3 V only. Never 5 V / VBUS. |
-| G | GND (pin 38) | |
-| T | GP2 (pin 4) | Receiver data output |
-| P1 | GND, or a GPIO driven low | Low = receiver on |
+| VDD | 3V3 OUT (pin 36) | 1.1–3.3 V only. Never 5 V / VBUS. |
+| GND (unlabeled, next to VDD) | GND (pin 38) | |
+| P | GND | Low = receiver on |
+| T | GP2 (pin 4) | Receiver data output. Idles low; high during the reduced-carrier pulse (measured 2026-11-02) |
