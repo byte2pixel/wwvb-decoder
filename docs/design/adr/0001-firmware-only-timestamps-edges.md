@@ -12,7 +12,7 @@ The CME6005 receiver module outputs one digital pulse per second whose width car
 
 The Pico 2 firmware timestamps every rising and falling edge on the receiver pin with a microsecond timer and writes one line per edge over USB CDC serial. It makes no decisions: no pulse-width measurement, no glitch filtering, no symbol or frame logic. Each line carries the raw pin level after the edge; which level means "reduced carrier" is decided on the host, because the module listing does not say whether the output idles high or low.
 
-*Amended 2026-10-31 (construction plan review):* the original text made edge polarity a firmware setting. That would have been the firmware's one decision, so it moved to the host, where the pulse-measurement stage has a `ReducedCarrierLevel` option switchable from the UI.
+*Amended 2026-10-31 (construction plan review):* the original text made edge polarity a firmware setting. That would have been the firmware's one decision, so it moved to the host, where the pulse-measurement stage has a `ReducedCarrierLevel` option switchable from the UI. Measured 2026-11-02 with a logic analyzer: the WVB-0860N-03A output idles low and goes high during reduced carrier, so the host default is `High`.
 
 ## Alternatives Considered
 

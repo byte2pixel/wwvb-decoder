@@ -109,18 +109,18 @@ A fresh connection, then a "zero" second (0.2 s of reduced carrier) and a marker
 ```text
 # boot
 # wwvb-edge-logger 0.1.0 pin=2
-L 12000000
-H 12200412
-L 13000003
-H 13800377
-L 14000011
-H 14500398
-L 15000006
-H 15200401
-L 16000002
-H 16800390
+H 12000000
+L 12200412
+H 13000003
+L 13800377
+H 14000011
+L 14500398
+H 15000006
+L 15200401
+H 16000002
+L 16800390
 ```
 
-Reading it: each `L` starts a reduced-carrier pulse at the top of a second, each `H` ends it. The first pulse lasts 200 ms (a 0), the second 800 ms (a marker), the third 500 ms (a 1), the fourth 200 ms (a 0), the fifth 800 ms (a marker).
+Reading it: each `H` starts a reduced-carrier pulse at the top of a second, each `L` ends it. The first pulse lasts 200 ms (a 0), the second 800 ms (a marker), the third 500 ms (a 1), the fourth 200 ms (a 0), the fifth 800 ms (a marker).
 
-**Polarity note.** This example assumes the receiver's data output goes **low** during reduced carrier, so `L` starts a pulse. The WVB-0860N-03A listing does not say. Construction plan Step 9 (or a logic analyzer reading of the T pin before that) confirms the real behavior; if it is inverted, this example is rewritten with `H` and `L` swapped and the host default for `ReducedCarrierLevel` is changed. The protocol itself does not change either way.
+**Polarity.** Measured 2026-11-02 with the USB logic analyzer on the T pin of receiver #1 (`captures/pulseview/`): the output idles **low** during full carrier and goes **high** for the reduced-carrier pulse, so `H` starts a pulse and `L` ends it. The host default for `ReducedCarrierLevel` is therefore `High`. The setting stays switchable from the UI in case another module is inverted; the protocol does not change either way.

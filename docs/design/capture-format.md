@@ -42,8 +42,8 @@ After the header, the body is the serial output **verbatim**, one line per line,
 Edge lines therefore have exactly the `serial-protocol.md` form:
 
 ```text
-L 12000000
-H 12200412
+H 12000000
+L 12200412
 ```
 
 ## Wall-clock lines
@@ -80,20 +80,20 @@ A complete, valid capture with a header, the firmware's boot lines, ten edge lin
 # capture v1
 # recorded 2026-11-02T03:10:27Z
 # source serial COM5, WVB-0860N-03A receiver #1, home west window on 5 m extension
-# reduced-carrier-level L
+# reduced-carrier-level H
 # boot
 # wwvb-edge-logger 0.1.0 pin=2
-L 12000000
-H 12200412
-L 13000003
-H 13800377
-L 14000011
-H 14500398
+H 12000000
+L 12200412
+H 13000003
+L 13800377
+H 14000011
+L 14500398
 # wall 2026-11-02T03:11:00Z 14500398
-L 15000006
-H 15200401
-L 16000002
-H 16800390
+H 15000006
+L 15200401
+H 16000002
+L 16800390
 ```
 
 To turn a terminal log into a capture by hand: save the terminal session to a file, add the first three header lines above it (and the fourth if the polarity is known), rename it per the File name rules, and remove any carriage returns the terminal added (`(Get-Content raw.log -Raw) -replace "`r", "" | Set-Content -NoNewline out.edges.txt` in PowerShell).
