@@ -66,7 +66,7 @@ Any line starting with `#` is informational. The firmware emits three kinds:
 
 | Line | When | Meaning |
 | --- | --- | --- |
-| `# boot` | First line after the device starts writing (after DTR) | The firmware has (re)started. Timestamps restart from zero |
+| `# boot` | First line of every session: each time the host asserts DTR | A new session has started; discard any state from before it. Timestamps restart from zero only if the Pico itself restarted; on a reconnect they continue from the Pico's boot |
 | `# wwvb-edge-logger <semver> pin=<gpio>` | Immediately after `# boot` | Banner. `<semver>` is the firmware's Cargo version, `<gpio>` the input pin number, for example `# wwvb-edge-logger 0.1.0 pin=2` |
 | `# dropped <n>` | At most every 10 s, only when `n` is greater than 0 | `n` edges were lost since the last report because the firmware's queue was full |
 
@@ -78,12 +78,12 @@ Host rules:
 
 ## Reset detection
 
-Two conditions mean the Pico restarted and the timestamp baseline changed:
+Two conditions mean the edge stream may not continue from the previous edge (a new session, or the Pico restarted and the timestamp baseline changed):
 
 1. A `# boot` line arrived.
 2. An edge line's `micros` is strictly smaller than the previous edge line's `micros`.
 
-On either, the serial adapter emits a reset event (reason `boot` or `timestamp went backwards`), and the pipeline calls `Reset()` on every stage, discarding partial pulses and any frame in progress. The second condition exists because a host that opens the port late may miss `# boot`.
+On either, the serial adapter emits a reset event (reason `boot` or `timestamp went backwards`), and the pipeline calls `Reset()` on every stage, discarding partial pulses and any frame in progress. The firmware discards edges queued while no host held DTR, so a session never starts with stale edges. The second condition is a safety net for a stream whose `# boot` was lost.
 
 Replay follows the same rules: a `# boot` line in a capture file resets the pacing baseline.
 
