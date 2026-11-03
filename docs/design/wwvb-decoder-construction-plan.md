@@ -43,6 +43,7 @@ These are already decided and recorded. Steps implement them; they do not reopen
 **Decided in this plan** (Steps 1 to 3 write these up in detail; later steps follow them):
 
 - **Hexagonal layout of the host solution.** `WwvbDecoder.Core` holds the domain types, the ports, the six host-side stages, the pipeline composition, the serial/capture line codec, `SyntheticEdgeSource`, and `ReplayEdgeSource` over in-memory lines. It has no reference to WPF, WebView2, `System.IO.Ports`, or the file system. A new `WwvbDecoder.Adapters` class library holds `SerialEdgeSource`, file-backed capture reading and writing, and serial port enumeration. `WwvbDecoder.Host` (WPF) is the composition root plus the WebView2 bridge. A new `WwvbDecoder.Tools` console app records captures and replays them to stdout for development before the visualizer exists.
+- **Shared build settings.** `host/Directory.Build.props` sets nullable, implicit usings, and `TreatWarningsAsErrors` for every project in every configuration, so a build that is clean locally is clean in CI. `host/src/Directory.Build.props` adds `GenerateDocumentationFile`, so every public member in production code needs an XML doc comment. `host/tests/Directory.Build.props` adds the xunit stack and `using Xunit` to every test project. Both nested files import the root one. Package versions live only in `host/Directory.Packages.props` (central package management); a csproj names a package without a version. `host/Directory.Build.props` and `host/src/Directory.Build.props` never hold a `PackageReference`: a production package goes in the csproj that needs it, where the hexagonal rule can see it.
 - **Stage shape.** Every host stage implements `IStage<TIn, TOut>` with `IEnumerable<TOut> Push(TIn input)` and `void Reset()`. Stages are synchronous and single-threaded; zero or more outputs per input. The pipeline pumps one `Task` from the source through the stages in order and raises a per-stage `event Action<T>` on that pump thread. Subscribers (the bridge) marshal to their own thread. Options that the UI changes while running (`Noise`, `Speed`, `ReducedCarrierLevel`) are written from the dispatcher thread and read on the pump thread; they are `volatile` fields or use `Volatile.Read`/`Volatile.Write`.
 - **Source events.** `IEdgeSource.ReadAsync` yields `EdgeEvent`, a sealed record hierarchy with three cases: `EdgeEvent.Sample(Edge Edge)`, `EdgeEvent.Reset(string Reason)`, `EdgeEvent.Info(string Line)`. The case is named `Sample`, not `Edge`, to avoid colliding with the `Edge` struct.
 - **Time.** All stage logic uses edge timestamps in microseconds (`ulong`) from the Pico. PC time enters only through .NET's `TimeProvider`, injected into the clock stage and the paced sources. Pacing uses `Task.Delay(TimeSpan, TimeProvider, CancellationToken)`, so tests drive it with `FakeTimeProvider` (package `Microsoft.Extensions.TimeProvider.Testing`, namespace `Microsoft.Extensions.Time.Testing`) by calling `Advance`.
@@ -338,14 +339,14 @@ Revert the PR.
 
 ### Context brief
 
-First code step. `host/src/WwvbDecoder.Core/` is an empty `net10.0` class library with nullable and implicit usings on. `host/tests/WwvbDecoder.Core.Tests/` is an xunit 2.9.3 project referencing it. The contracts to implement are in `docs/design/pipeline-contracts.md`; the line grammar is in `docs/design/serial-protocol.md`. Hexagonal rule: Core references no I/O packages. The synthetic source is in Core because it is pure computation. There is no CI yet and no `.github/` directory. The Host csproj runs `npm ci` and `npm run build` whenever `BuildUi` is true, which defaults on in Release; pass `-p:BuildUi=false` on every CI and local build that is not a publish.
+First code step. `host/src/WwvbDecoder.Core/` is an empty `net10.0` class library with nullable and implicit usings on. `host/tests/WwvbDecoder.Core.Tests/` is an xunit 2.9.3 project referencing it. Each csproj sets these properties and package versions itself; task 2 moves them into shared props files (see "Shared build settings" above). The contracts to implement are in `docs/design/pipeline-contracts.md`; the line grammar is in `docs/design/serial-protocol.md`. Hexagonal rule: Core references no I/O packages. The synthetic source is in Core because it is pure computation. There is no CI yet and no `.github/` directory. The Host csproj runs `npm ci` and `npm run build` whenever `BuildUi` is true, which defaults on in Release; pass `-p:BuildUi=false` on every CI and local build that is not a publish.
 
 Use records and init-only properties (immutability), `ArgumentNullException.ThrowIfNull`, `CancellationToken` on every async method, and no `async void`.
 
 ### Tasks
 
 1. In `WwvbDecoder.Core`, create folders `Domain/`, `Ports/`, `Stages/`, `Sources/`, `Protocol/`, `Pipeline/`. Implement from the contracts document: `PinLevel`, `Edge`, `EdgeEvent` (cases `Sample`, `Reset`, `Info`), `Pulse`, `Symbol`, `SymbolKind`, `Frame`, `FrameSyncEvent`, `DecodedFrame`, `Ut1Sign`, `DstStatus`, `ValidationResult`, `ValidationFailure`, `ValidationCheck`, `ClockState`, `ClockStatus`, `WwvbFrameLayout`, `WwvbFrameEncoder` (Domain); `IEdgeSource`, `IStage<TIn,TOut>` (Ports); `EdgeLineCodec` (Protocol). Stage classes and `DecoderPipeline` come in Steps 5 to 7; do not stub them.
-2. Add the package `Microsoft.Extensions.TimeProvider.Testing` to the test project only. `ImmutableArray` comes from the shared framework.
+2. Shared build settings. Add `host/Directory.Build.props` (`Nullable`, `ImplicitUsings`, `TreatWarningsAsErrors` with no condition, and `ContinuousIntegrationBuild` when `GITHUB_ACTIONS` is `true`), `host/src/Directory.Build.props` (`GenerateDocumentationFile`, plus a comment that it never holds a `PackageReference`), `host/tests/Directory.Build.props` (`IsPackable` false, references to `Microsoft.NET.Test.Sdk`, `xunit`, `xunit.runner.visualstudio`, and `coverlet.collector`, and `<Using Include="Xunit" />`), and `host/Directory.Packages.props` (`ManagePackageVersionsCentrally`, with the versions in a `Production` group and a `Tests` group). Each nested `Directory.Build.props` imports the root one with `GetPathOfFileAbove`. Remove the properties, `Version` attributes, and test package references these files now supply from the three csproj files. Add the package `Microsoft.Extensions.TimeProvider.Testing` to the test project only: its version goes in the `Tests` group and the reference in `WwvbDecoder.Core.Tests.csproj`. Document `MainWindow`'s public constructor so the Host builds with documentation required. `ImmutableArray` comes from the shared framework.
 3. Implement `SyntheticEdgeSource : IEdgeSource` (Sources) exactly as the contracts document specifies, pacing with `Task.Delay(TimeSpan, TimeProvider, CancellationToken)` when `Speed > 0`.
 4. Tests (`WwvbDecoder.Core.Tests`), one file per type under test:
    - `EdgeLineCodecTests`: parses `H 1234567`, `L 0` as `Sample`; `# session` as `Reset`; `# dropped 3` as `Info`; rejects `X 12`, `H -1`, `H 1.5`, an empty line, and a 100-character line; `Format` round-trips.
@@ -359,16 +360,20 @@ Use records and init-only properties (immutability), `ArgumentNullException.Thro
 
 - `host/src/WwvbDecoder.Core/**` (new source)
 - `host/tests/WwvbDecoder.Core.Tests/**` (new tests, csproj package addition)
+- `host/Directory.Build.props`, `host/Directory.Packages.props`, `host/src/Directory.Build.props`, `host/tests/Directory.Build.props` (new)
+- `host/src/WwvbDecoder.Host/WwvbDecoder.Host.csproj` (shared properties and the WebView2 version move out), `host/src/WwvbDecoder.Host/MainWindow.xaml.cs` (doc comment)
 - `.github/workflows/ci.yml` (new)
 - `host/README.md`
 
 ### Verification
 
 ```powershell
+dotnet build host/WwvbDecoder.slnx --no-incremental -p:BuildUi=false
 dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false
 dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false
-# Hexagonal rule: Core has no I/O package references
+# Hexagonal rule: Core has no I/O package references, and the props files Core inherits add none
 Select-String -Path host/src/WwvbDecoder.Core/WwvbDecoder.Core.csproj -Pattern 'System.IO.Ports|WebView2|UseWPF'   # expect no output
+Select-String -Path host/Directory.Build.props, host/src/Directory.Build.props -Pattern '<PackageReference'   # expect no output
 # CI green on the PR
 gh pr checks
 ```
@@ -376,6 +381,7 @@ gh pr checks
 ### Exit criteria
 
 - All Step 4 tests pass; test count is at least 20.
+- The solution builds with no warnings in Debug and Release, and a warning fails the build in both.
 - `WwvbFrameEncoder` is the only place that writes bits into a frame and `WwvbFrameLayout` the only place the layout is written down.
 - CI runs all three jobs on the PR and is green.
 
@@ -533,7 +539,7 @@ Serial and replay sources arrive in Steps 10 and 11; this step wires only `Synth
 ### Tasks
 
 1. Host: `Bridge/WebMessageBridge.cs` subscribes to every `DecoderPipeline` event, serializes with `System.Text.Json` (`JsonNamingPolicy.CamelCase`, `JsonStringEnumConverter(JsonNamingPolicy.CamelCase)`, `[JsonPolymorphic(TypeDiscriminatorPropertyName = "kind")]` plus `[JsonDerivedType]` on `FrameSyncEvent`), batches edges on a 100 ms timer or 200 items, and posts on the dispatcher with `PostWebMessageAsJson`. `Bridge/CommandHandler.cs` parses page commands (including `hello` and its protocol number) and calls a `Services/SourceController.cs` that stops the current source, creates the requested one, and starts `DecoderPipeline.RunAsync`. `App.xaml.cs` becomes the composition root creating `TimeProvider.System`, the pipeline, the controller, and the bridge.
-2. Host tests: new project `host/tests/WwvbDecoder.Host.Tests` (xunit, `net10.0-windows`, `<UseWPF>true</UseWPF>` because it references the WPF exe). Include the examples as content: `<Content Include="..\..\..\docs\design\message-examples\*.json" Link="examples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />`. `MessageSerializationTests` serializes a sample of each message type and compares, after parsing both sides to `JsonNode` and normalizing, with the matching example file. Add the project to `WwvbDecoder.slnx` and to the CI `host` job (already covered by building the solution).
+2. Host tests: new project `host/tests/WwvbDecoder.Host.Tests` (`net10.0-windows`, `<UseWPF>true</UseWPF>` because it references the WPF exe; the xunit stack comes from `host/tests/Directory.Build.props`). Include the examples as content: `<Content Include="..\..\..\docs\design\message-examples\*.json" Link="examples\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />`. `MessageSerializationTests` serializes a sample of each message type and compares, after parsing both sides to `JsonNode` and normalizing, with the matching example file. Add the project to `WwvbDecoder.slnx` and to the CI `host` job (already covered by building the solution).
 3. UI: add dev dependencies `vitest`, `zod`, and set `"test": "vitest run"` in `package.json`. Add `ui/tsconfig.test.json` (extends the app config, `"types": ["vitest/globals", "node"]`, includes `src/**/*.test.ts*`) and exclude `src/**/*.test.ts*` from `tsconfig.app.json`; reference the new config from `tsconfig.json`. `src/protocol/messages.ts` with zod schemas and inferred types for every envelope and command; `src/protocol/bridge.ts` wrapping `window.chrome.webview` with a typed `onMessage` and `send`, plus a dev fallback that logs when `window.chrome.webview` is absent; `src/protocol/messages.test.ts` reads every file in `../../../docs/design/message-examples/` (relative to `ui/src/protocol/`, resolved with `import.meta.dirname` or `fileURLToPath`) and parses each through the schema its file name selects.
 4. UI: replace `App.tsx`, `App.css`, `index.css`, and the template assets with a protocol page: a source selector (synthetic only enabled, with the noise slider), a `hello` command on load, and a scrolling list of the last 200 messages grouped by type with counters per type. Remove `src/assets/hero.png`, `src/assets/react.svg`, `src/assets/vite.svg`, and `public/icons.svg`.
 5. Update `host/README.md` and `ui/README.md` (test commands, bridge overview). Extend CI's `ui` job with `npm test`.
@@ -639,7 +645,7 @@ Overnight captures at home are the demo's safety net (ADR-0004). Step 9 may alre
 2. New project `host/src/WwvbDecoder.Tools` (console, references Core and Adapters, `System.CommandLine` or hand-rolled args). Subcommands:
    - `ports`: lists serial ports.
    - `record --port COM5 [--label west-window] [--out <file>]`: streams serial to a capture file named per `capture-format.md`, prints the banner when seen, and prints one status line per minute: edges, resets, parse errors, and the last timestamp.
-3. Add both projects to `WwvbDecoder.slnx` and to the CI build (the solution build covers them). Adapters tests in a new `host/tests/WwvbDecoder.Adapters.Tests`: `CaptureWriterTests` (header, wall line cadence with `FakeTimeProvider`, raw lines preserved byte for byte) and `SerialEdgeSourceTests` for the backwards-timestamp reset using a `StreamReader` over a `MemoryStream` (factor the line loop so it takes a `TextReader`).
+3. Add both projects to `WwvbDecoder.slnx` and to the CI build (the solution build covers them). Package versions (`System.IO.Ports`, and `System.CommandLine` if used) go in the `Production` group of `host/Directory.Packages.props`; the references stay in the csproj files. Both projects are under `host/src/`, so their public members need XML doc comments. Adapters tests in a new `host/tests/WwvbDecoder.Adapters.Tests`, which references `Microsoft.Extensions.TimeProvider.Testing` itself: `CaptureWriterTests` (header, wall line cadence with `FakeTimeProvider`, raw lines preserved byte for byte) and `SerialEdgeSourceTests` for the backwards-timestamp reset using a `StreamReader` over a `MemoryStream` (factor the line loop so it takes a `TextReader`).
 4. Update `host/README.md` (project table) and `captures/README.md` (how to record overnight, naming, what the status line shows, keep the antenna away from the laptop, point the rod north-south).
 5. Hardware: run `record` overnight at home. Commit the first recorder-made capture of at least one hour to `captures/` (text, a few megabytes; if over 10 MB, commit a one-hour excerpt). Whether it contains decodable frames is checked in Step 11. Receiver #2 and Pico #2 (both arrive Nov 4) can record in parallel to compare locations; label the files accordingly.
 
@@ -648,7 +654,7 @@ Overnight captures at home are the demo's safety net (ADR-0004). Step 9 may alre
 - `host/src/WwvbDecoder.Adapters/**` (new)
 - `host/src/WwvbDecoder.Tools/**` (new)
 - `host/tests/WwvbDecoder.Adapters.Tests/**` (new)
-- `host/WwvbDecoder.slnx`, `host/README.md`, `captures/README.md`
+- `host/WwvbDecoder.slnx`, `host/Directory.Packages.props`, `host/README.md`, `captures/README.md`
 - `captures/*.edges.txt` (first real capture)
 
 ### Verification
@@ -908,10 +914,10 @@ Revert the PR; the Debug workflow still works for the talk as a last resort.
 
 ## Invariants (check after every step)
 
-1. `dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false` and `dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false` pass.
+1. `dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false` and `dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false` pass. From Step 4, warnings are errors in every configuration, so passing means no warnings.
 2. `npm run lint`, `npm test` (from Step 8), and `npm run build` pass in `ui/`.
 3. `cargo build --release` and `cargo clippy --release -- -D warnings` pass in `firmware/` whenever `firmware/` changed.
-4. `WwvbDecoder.Core.csproj` references no I/O, UI, or platform packages, and no `System.IO.Ports` type appears under `host/src/WwvbDecoder.Core/`.
+4. `WwvbDecoder.Core.csproj` references no I/O, UI, or platform packages, and no `System.IO.Ports` type appears under `host/src/WwvbDecoder.Core/`. From Step 4, `host/Directory.Build.props` and `host/src/Directory.Build.props` hold no `PackageReference`.
 5. The frame layout is written down in exactly two places: `WwvbFrameLayout` (C#) and, from Step 14, the `wwvb-frame` crate (Rust), both tested against the same 2026-12-10T19:30:00Z vector.
 6. Every message type in `docs/design/webview2-messages.md` has an example file, and both test suites still pass against it.
 7. All text files use LF (`git ls-files --eol | Select-String 'w/crlf'` prints nothing).
