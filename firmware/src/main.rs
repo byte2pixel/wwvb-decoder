@@ -10,7 +10,7 @@
 //!   edge and queues it without blocking.
 //! - `usb_task` runs the USB device.
 //! - `control_task` watches DTR.
-//! - `writer_task` waits for DTR, writes `# boot` and the banner, then drains
+//! - `writer_task` waits for DTR, writes `# session` and the banner, then drains
 //!   the queue as whole lines.
 
 #![no_std]
@@ -244,14 +244,14 @@ async fn wait_for_dtr() -> u32 {
 /// The host dropped DTR, or the USB bus reset.
 struct Disconnected;
 
-/// Writes one session: `# boot`, the banner, then edges until the host leaves.
+/// Writes one session: `# session`, the banner, then edges until the host leaves.
 async fn stream(
     sender: &mut Sender<'static, UsbDriver>,
     epoch: u32,
     pin: u8,
 ) -> Result<Infallible, Disconnected> {
     let mut packet = Packet::new();
-    put(sender, epoch, &mut packet, Line::Boot).await?;
+    put(sender, epoch, &mut packet, Line::Session).await?;
     put(sender, epoch, &mut packet, Line::Banner { pin }).await?;
     flush(sender, epoch, &mut packet).await?;
 
@@ -312,10 +312,10 @@ async fn flush(
         return Ok(());
     }
     // A write while DTR is down would wait until the next host opens the port
-    // and then deliver stale lines ahead of its `# boot`. So nothing starts
+    // and then deliver stale lines ahead of its `# session`. So nothing starts
     // after the session ends, and a write still waiting for the host when it
     // ends is abandoned. A packet the USB hardware already holds still goes
-    // out to the next host, but it is at most one, and the `# boot` right
+    // out to the next host, but it is at most one, and the `# session` right
     // behind it resets the host.
     if DTR_EPOCH.load(Ordering::Relaxed) != epoch {
         return Err(Disconnected);
@@ -337,7 +337,7 @@ async fn session_ended(epoch: u32) {
 }
 
 enum Line {
-    Boot,
+    Session,
     Banner { pin: u8 },
     Edge(Edge),
     Dropped(u32),
@@ -346,7 +346,7 @@ enum Line {
 impl fmt::Display for Line {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Line::Boot => f.write_str("# boot"),
+            Line::Session => f.write_str("# session"),
             Line::Banner { pin } => write!(
                 f,
                 "# wwvb-edge-logger {} pin={pin}",

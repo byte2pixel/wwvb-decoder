@@ -25,7 +25,7 @@ Open the port with any serial terminal (PuTTY, Tera Term, the VS Code Serial Mon
 Every time a terminal opens the port, the firmware starts a fresh session with these two lines, which is how you know you have the right port:
 
 ```text
-# boot
+# session
 # wwvb-edge-logger 0.1.0 pin=2
 ```
 

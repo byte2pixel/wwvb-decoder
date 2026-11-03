@@ -37,7 +37,7 @@ A reader treats any other `#` line in the header position as an info line, so th
 
 ## Body
 
-After the header, the body is the serial output **verbatim**, one line per line, including the firmware's own `#` lines (`# boot`, the banner, `# dropped <n>`). The recorder does not filter, reformat, or renumber anything. Malformed lines, if the recorder saw any, are kept as-is so replay exercises the same error handling as live reception.
+After the header, the body is the serial output **verbatim**, one line per line, including the firmware's own `#` lines (`# session`, the banner, `# dropped <n>`). The recorder does not filter, reformat, or renumber anything. Malformed lines, if the recorder saw any, are kept as-is so replay exercises the same error handling as live reception.
 
 Edge lines therefore have exactly the `serial-protocol.md` form:
 
@@ -67,21 +67,21 @@ Terminal-logged captures (Step 9 interim recordings) have no `# wall` lines. The
 
 - **Timestamps are relative.** Only differences between consecutive `micros` values matter. The absolute values are microseconds since the Pico booted, not time of day.
 - **Pacing.** At speed 1, replay waits the difference between consecutive edge timestamps before emitting the next edge. At speed N it waits that difference divided by N. At speed 0 it emits everything as fast as possible (tests, and the Tools `decode` command).
-- **Resets.** A `# boot` line in the body resets the pacing baseline and emits a reset event, exactly as live. A timestamp smaller than its predecessor does the same.
+- **Resets.** A `# session` line in the body resets the pacing baseline and emits a reset event, exactly as live. A timestamp smaller than its predecessor does the same.
 - **Header and wall lines.** Header lines populate the capture's metadata. `# wall` lines are forwarded as info events so the UI can show the recorded PC offset. Other `#` lines are forwarded as info events and otherwise ignored.
 - **Memory.** The reader loads the whole file into memory before starting. A night is a few megabytes; this keeps the replay source free of file I/O and lets it loop.
 - **Looping.** When looping is enabled, reaching the end of the file emits a reset event (reason `loop`) and starts again from the first body line.
 
 ## Example
 
-A complete, valid capture with a header, the firmware's boot lines, ten edge lines, and one wall-clock line:
+A complete, valid capture with a header, the firmware's session lines, ten edge lines, and one wall-clock line:
 
 ```text
 # capture v1
 # recorded 2026-11-02T03:10:27Z
 # source serial COM5, WVB-0860N-03A receiver #1, home west window on 5 m extension
 # reduced-carrier-level H
-# boot
+# session
 # wwvb-edge-logger 0.1.0 pin=2
 H 12000000
 L 12200412
