@@ -940,7 +940,7 @@ Every mutation is one commit touching only this file, merged before the affected
 | 6 | pending | | | |
 | 7 | pending | | | |
 | 8 | pending | | | |
-| 9 | pending | | | |
+| 9 | done | [#3](https://github.com/byte2pixel/wwvb-decoder/pull/3) | 2026-11-03 | Receiver #1 locked in daylight and rain: `H` starts each pulse, widths ~210/505/800 ms. Edge task runs on an interrupt executor. `serial-protocol.md` amended: the first line starts every DTR session (renamed to `# session` in #4, plan updated in #6). Task 7 overnight capture deferred to its own PR, recorded with the `# session` firmware. The "CI" exit criterion was checked locally (`cargo build`, `clippy -D warnings`, `fmt --check`) because CI arrives with Step 4 |
 | 10 | pending | | | |
 | 11 | pending | | | |
 | 12 | pending | | | |

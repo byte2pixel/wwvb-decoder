@@ -66,9 +66,9 @@ Any line starting with `#` is informational. The firmware emits three kinds:
 
 | Line | When | Meaning |
 | --- | --- | --- |
-| `# boot` | First line after the device starts writing (after DTR) | The firmware has (re)started. Timestamps restart from zero |
+| `# boot` | First line of every session: each time the host asserts DTR | A new session has started; discard any state from before it. Timestamps restart from zero only if the Pico itself restarted; on a reconnect they continue from the Pico's boot |
 | `# wwvb-edge-logger <semver> pin=<gpio>` | Immediately after `# boot` | Banner. `<semver>` is the firmware's Cargo version, `<gpio>` the input pin number, for example `# wwvb-edge-logger 0.1.0 pin=2` |
-| `# dropped <n>` | At most every 10 s, only when `n` is greater than 0 | `n` edges were lost since the last report because the firmware's queue was full |
+| `# dropped <n>` | At most every 10 s, only when `n` is greater than 0 | At least `n` edges were lost since the last report, because the firmware's queue was full or because edges came too close together to stamp one by one (see Rate and back-pressure) |
 
 Host rules:
 
@@ -78,12 +78,12 @@ Host rules:
 
 ## Reset detection
 
-Two conditions mean the Pico restarted and the timestamp baseline changed:
+Two conditions mean the edge stream may not continue from the previous edge (a new session, or the Pico restarted and the timestamp baseline changed):
 
 1. A `# boot` line arrived.
 2. An edge line's `micros` is strictly smaller than the previous edge line's `micros`.
 
-On either, the serial adapter emits a reset event (reason `boot` or `timestamp went backwards`), and the pipeline calls `Reset()` on every stage, discarding partial pulses and any frame in progress. The second condition exists because a host that opens the port late may miss `# boot`.
+On either, the serial adapter emits a reset event (reason `boot` or `timestamp went backwards`), and the pipeline calls `Reset()` on every stage, discarding partial pulses and any frame in progress. The firmware discards edges queued while no host held DTR, so a session never starts with stale edges. At most one USB packet of lines from the previous session (a few edges) can arrive ahead of `# boot`; the reset discards them. The second condition is a safety net for a stream whose `# boot` was lost.
 
 Replay follows the same rules: a `# boot` line in a capture file resets the pacing baseline.
 
@@ -92,13 +92,13 @@ Replay follows the same rules: a `# boot` line in a capture file resets the paci
 - A line that does not match an edge line or a `#` line is **malformed**. Examples: `X 12`, `H -1`, `H 1.5`, `H`, an empty line, a line longer than 64 bytes, a line containing a carriage return.
 - The host counts malformed lines and skips them. It never disconnects, throws, or resets the pipeline because of a malformed line.
 - The host should surface the malformed-line count to the user. A steadily rising count means the wrong port or wrong baud convention, not a noisy signal.
-- Firmware never emits a partial line. If it cannot fit a complete line in its buffer, it drops the edge and counts it instead.
+- Firmware never emits a partial line. Every line fits one USB packet, so lines are never split across packets.
 
 ## Rate and back-pressure
 
 - Nominal rate: the receiver produces one reduced-carrier pulse per second, so two edges per second, about 30 bytes per second.
 - Noise bursts: a laptop charger or LED driver near the antenna can produce hundreds of edges per second for a while.
-- The firmware **never blocks** waiting for USB. Edges are timestamped in the interrupt path and queued; a writer task drains the queue. If the queue (256 entries) is full, the edge is dropped and the dropped counter incremented. The count is reported with `# dropped <n>` and reset.
+- The firmware **never blocks** waiting for USB. Edges are timestamped in the interrupt path and queued; a writer task drains the queue. If the queue (256 entries) is full, the edge is dropped and the dropped counter incremented. Edges closer together than the firmware's wake-up time (a few microseconds) share one line; the firmware detects that from the pin's edge latches and counts at least one as dropped. The count is reported with `# dropped <n>` and reset.
 - The host should treat `# dropped` as a signal-quality indicator (the pulse-measurement stage will also see unpaired edges) and display it, not as an error.
 - There is no flow control and no acknowledgement. CDC over full-speed USB can carry far more than the worst-case burst; the queue exists for scheduling latency, not throughput.
 
