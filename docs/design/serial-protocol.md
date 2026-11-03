@@ -66,13 +66,13 @@ Any line starting with `#` is informational. The firmware emits three kinds:
 
 | Line | When | Meaning |
 | --- | --- | --- |
-| `# boot` | First line of every session: each time the host asserts DTR | A new session has started; discard any state from before it. Timestamps restart from zero only if the Pico itself restarted; on a reconnect they continue from the Pico's boot |
-| `# wwvb-edge-logger <semver> pin=<gpio>` | Immediately after `# boot` | Banner. `<semver>` is the firmware's Cargo version, `<gpio>` the input pin number, for example `# wwvb-edge-logger 0.1.0 pin=2` |
+| `# session` | First line of every session: each time the host asserts DTR | A new session has started; discard any state from before it. Timestamps restart from zero only if the Pico itself restarted; on a reconnect they continue from the Pico's boot |
+| `# wwvb-edge-logger <semver> pin=<gpio>` | Immediately after `# session` | Banner. `<semver>` is the firmware's Cargo version, `<gpio>` the input pin number, for example `# wwvb-edge-logger 0.1.0 pin=2` |
 | `# dropped <n>` | At most every 10 s, only when `n` is greater than 0 | At least `n` edges were lost since the last report, because the firmware's queue was full or because edges came too close together to stamp one by one (see Rate and back-pressure) |
 
 Host rules:
 
-- `# boot` is a **reset event**. Other `#` lines are **info events**. Edge lines are **sample events**. The codec makes exactly this three-way split.
+- `# session` is a **reset event**. Other `#` lines are **info events**. Edge lines are **sample events**. The codec makes exactly this three-way split.
 - A host must ignore any `#` line it does not recognize, after forwarding it as an info event. This is how the capture format adds its own `#` header lines without a protocol change.
 - The banner is the host's confirmation that the port belongs to the logger. The host should show it to the user.
 
@@ -80,12 +80,12 @@ Host rules:
 
 Two conditions mean the edge stream may not continue from the previous edge (a new session, or the Pico restarted and the timestamp baseline changed):
 
-1. A `# boot` line arrived.
+1. A `# session` line arrived.
 2. An edge line's `micros` is strictly smaller than the previous edge line's `micros`.
 
-On either, the serial adapter emits a reset event (reason `boot` or `timestamp went backwards`), and the pipeline calls `Reset()` on every stage, discarding partial pulses and any frame in progress. The firmware discards edges queued while no host held DTR, so a session never starts with stale edges. At most one USB packet of lines from the previous session (a few edges) can arrive ahead of `# boot`; the reset discards them. The second condition is a safety net for a stream whose `# boot` was lost.
+On either, the serial adapter emits a reset event (reason `session` or `timestamp went backwards`), and the pipeline calls `Reset()` on every stage, discarding partial pulses and any frame in progress. The firmware discards edges queued while no host held DTR, so a session never starts with stale edges. At most one USB packet of lines from the previous session (a few edges) can arrive ahead of `# session`; the reset discards them. The second condition is a safety net for a stream whose `# session` was lost.
 
-Replay follows the same rules: a `# boot` line in a capture file resets the pacing baseline.
+Replay follows the same rules: a `# session` line in a capture file resets the pacing baseline.
 
 ## Error handling
 
@@ -107,7 +107,7 @@ Replay follows the same rules: a `# boot` line in a capture file resets the paci
 A fresh connection, then a "zero" second (0.2 s of reduced carrier) and a marker second (0.8 s). Timestamps are microseconds since boot.
 
 ```text
-# boot
+# session
 # wwvb-edge-logger 0.1.0 pin=2
 H 12000000
 L 12200412
