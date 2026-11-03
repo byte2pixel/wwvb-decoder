@@ -179,7 +179,8 @@ The stage is stateless. `Reset()` does nothing.
 ## Stage 4: frame sync
 
 ```csharp
-/// Exactly 60 symbols; the constructor throws ArgumentException otherwise.
+/// Exactly 60 symbols; the constructor throws ArgumentOutOfRangeException otherwise, including for a default array.
+/// Symbols is get-only, so a with-expression cannot replace it; build a changed frame with the constructor.
 /// StartMicros is the start of the second-0 symbol; EndMicros is the end of the second-59 symbol.
 public sealed record Frame(ulong StartMicros, ulong EndMicros, ImmutableArray<SymbolKind> Symbols);
 
