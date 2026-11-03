@@ -5,8 +5,9 @@
 //! (ADR-0001); the line format is the contract in
 //! `docs/design/serial-protocol.md`.
 //!
-//! - `edge_task` runs on a high-priority interrupt executor, so USB work never
-//!   delays a timestamp. It stamps each edge and queues it without blocking.
+//! - `edge_task` runs on an interrupt executor above both the USB interrupt
+//!   and thread mode, so USB work never delays a timestamp. It stamps each
+//!   edge and queues it without blocking.
 //! - `usb_task` runs the USB device.
 //! - `control_task` watches DTR.
 //! - `writer_task` waits for DTR, writes `# boot` and the banner, then drains
@@ -67,6 +68,18 @@ const PACKET_LEN: usize = 63;
 /// `H `, 20 digits of `u64`, and the line feed.
 const MAX_EDGE_LINE: usize = 23;
 
+/// The banner with the longest possible pin number.
+const MAX_BANNER_LINE: usize =
+    "# wwvb-edge-logger ".len() + env!("CARGO_PKG_VERSION").len() + " pin=255\n".len();
+
+/// `# dropped` with the largest `u32`.
+const MAX_DROPPED_LINE: usize = "# dropped 4294967295\n".len();
+
+// A line is never split, so every kind must fit an empty packet.
+const _: () = assert!(
+    MAX_EDGE_LINE <= PACKET_LEN && MAX_BANNER_LINE <= PACKET_LEN && MAX_DROPPED_LINE <= PACKET_LEN
+);
+
 #[derive(Clone, Copy)]
 struct Edge {
     micros: u64,
@@ -114,12 +127,17 @@ async fn main(spawner: Spawner) {
     let pin_number = p.PIN_2.pin();
     let input = Input::new(p.PIN_2, Pull::None);
 
-    // Above IO_IRQ_BANK0 (P3), which wakes it, and above thread mode, where
-    // the USB stack and the writer run.
-    interrupt::SWI_IRQ_0.set_priority(Priority::P2);
+    // Edge path above everything USB: the edge executor (P1) above the GPIO
+    // interrupt that wakes it (P2), both above the USB interrupt (P3) and
+    // thread mode, where the USB stack and the writer run. embassy-rp sets
+    // IO_IRQ_BANK0 to P3 and leaves USBCTRL_IRQ at P0, the highest, so both
+    // are overridden here.
+    interrupt::USBCTRL_IRQ.set_priority(Priority::P3);
+    interrupt::IO_IRQ_BANK0.set_priority(Priority::P2);
+    interrupt::SWI_IRQ_0.set_priority(Priority::P1);
     EDGE_EXECUTOR
         .start(interrupt::SWI_IRQ_0)
-        .spawn(edge_task(input).unwrap());
+        .spawn(edge_task(input, pin_number).unwrap());
 
     let mut config = Config::new(0xC0DE, 0xCAFE);
     config.manufacturer = Some("wwvb-decoder");
@@ -157,7 +175,9 @@ async fn main(spawner: Spawner) {
 }
 
 #[embassy_executor::task]
-async fn edge_task(mut pin: Input<'static>) {
+async fn edge_task(mut pin: Input<'static>, pin_number: u8) {
+    let raw_interrupts = embassy_rp::pac::IO_BANK0.intr(usize::from(pin_number) / 8);
+    let group = usize::from(pin_number) % 8;
     loop {
         pin.wait_for_any_edge().await;
         let micros = Instant::now().as_micros();
@@ -165,6 +185,15 @@ async fn edge_task(mut pin: Input<'static>) {
         // reports the same level twice. The protocol allows that.
         let high = pin.is_high();
         if EDGES.try_send(Edge { micros, high }).is_err() {
+            DROPPED.fetch_add(1, Ordering::Relaxed);
+        }
+        // The raw edge latches hold every edge since the last re-arm, and
+        // `wait_for_any_edge` clears them when it re-arms. Both set means at
+        // least two edges went into this one line, so count at least one as
+        // dropped. Only an edge in the few cycles between this read and the
+        // clear goes uncounted.
+        let latched = raw_interrupts.read();
+        if latched.edge_high(group) && latched.edge_low(group) {
             DROPPED.fetch_add(1, Ordering::Relaxed);
         }
     }
@@ -235,11 +264,13 @@ async fn stream(
             let dropped = DROPPED.swap(0, Ordering::Relaxed);
             if dropped > 0 {
                 put(sender, epoch, &mut packet, Line::Dropped(dropped)).await?;
+                // Now, not with the next edge, which may be a while away.
+                flush(sender, epoch, &mut packet).await?;
             }
         }
 
         let edge = with_deadline(next_report, EDGES.receive());
-        match select(edge, DTR_CHANGED.wait()).await {
+        match select(edge, session_ended(epoch)).await {
             Either::First(Ok(edge)) => {
                 put(sender, epoch, &mut packet, Line::Edge(edge)).await?;
                 // Fill the rest of this packet with edges already queued.
@@ -249,11 +280,7 @@ async fn stream(
                 }
             }
             Either::First(Err(_)) => {}
-            Either::Second(()) => {
-                if DTR_EPOCH.load(Ordering::Relaxed) != epoch {
-                    return Err(Disconnected);
-                }
-            }
+            Either::Second(()) => return Err(Disconnected),
         }
         flush(sender, epoch, &mut packet).await?;
     }
@@ -268,11 +295,10 @@ async fn put(
 ) -> Result<(), Disconnected> {
     if !packet.push(&line) {
         flush(sender, epoch, packet).await?;
-        // Every line fits an empty packet, so this cannot fail; if it ever
-        // did, the line is dropped rather than split.
-        if !packet.push(&line) {
-            DROPPED.fetch_add(1, Ordering::Relaxed);
-        }
+        // Every line fits an empty packet; the assertion under
+        // `MAX_EDGE_LINE` checks that at compile time.
+        let pushed = packet.push(&line);
+        debug_assert!(pushed);
     }
     Ok(())
 }
@@ -285,19 +311,29 @@ async fn flush(
     if packet.len == 0 {
         return Ok(());
     }
-    // A write while DTR is down would block until the next host opens the
-    // port and then deliver stale lines ahead of its `# boot`. A write already
-    // in flight when DTR drops still lands that way, but it is one packet and
-    // the `# boot` right behind it resets the host.
+    // A write while DTR is down would wait until the next host opens the port
+    // and then deliver stale lines ahead of its `# boot`. So nothing starts
+    // after the session ends, and a write still waiting for the host when it
+    // ends is abandoned. A packet the USB hardware already holds still goes
+    // out to the next host, but it is at most one, and the `# boot` right
+    // behind it resets the host.
     if DTR_EPOCH.load(Ordering::Relaxed) != epoch {
         return Err(Disconnected);
     }
-    sender
-        .write_packet(&packet.buf[..packet.len])
-        .await
-        .map_err(|_| Disconnected)?;
+    let write = sender.write_packet(&packet.buf[..packet.len]);
+    match select(write, session_ended(epoch)).await {
+        Either::First(result) => result.map_err(|_| Disconnected)?,
+        Either::Second(()) => return Err(Disconnected),
+    }
     packet.len = 0;
     Ok(())
+}
+
+/// Completes when the session that started at `epoch` ends.
+async fn session_ended(epoch: u32) {
+    while DTR_EPOCH.load(Ordering::Relaxed) == epoch {
+        DTR_CHANGED.wait().await;
+    }
 }
 
 enum Line {

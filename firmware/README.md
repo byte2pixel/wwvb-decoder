@@ -40,7 +40,7 @@ L 12200412
 | --- | --- |
 | `H <micros>` | Pin went high: a reduced-carrier pulse started. `<micros>` is microseconds since the Pico booted |
 | `L <micros>` | Pin went low: the pulse ended |
-| `# dropped <n>` | `n` edges were lost because the queue (256 edges) was full. At most once every 10 s, only when `n` > 0 |
+| `# dropped <n>` | At least `n` edges were lost: the queue (256 edges) was full, or edges came microseconds apart. At most once every 10 s, only when `n` > 0 |
 
 With the receiver locked you get about **two lines per second**: an `H` at the top of each second, then an `L` 0.2 s (a 0 bit), 0.5 s (a 1 bit), or 0.8 s (a marker) later. Bursts of many lines per second mean noise near the antenna (chargers, LED drivers, the laptop itself).
 
@@ -54,7 +54,7 @@ To check the firmware without a receiver, disconnect T and touch a jumper from G
 | --- | --- |
 | On-board LED (GP25) | Off until a terminal asserts DTR, then steadily on. It never blinks: a blinking LED modulates the 3V3 rail enough to show up on the receiver output |
 | GP23 (regulator PS) | Driven high at boot to force PWM mode, which has less ripple than power-save mode |
-| Timing | The edge interrupt runs above the USB stack, so serial traffic does not delay timestamps |
+| Timing | The edge interrupt runs above the USB interrupt and the USB tasks, so serial traffic does not delay timestamps |
 
 ## Wiring (WVB-0860N-03A receiver)
 

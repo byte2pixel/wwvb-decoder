@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 embassy-executor = "0.10.0"
-embassy-rp = { version = "0.10.0", features = ["rp235xa", "time-driver", "critical-section-impl", "binary-info", "executor-thread", "executor-interrupt"] }
+embassy-rp = { version = "0.10.0", features = ["rp235xa", "time-driver", "critical-section-impl", "binary-info", "executor-thread", "executor-interrupt", "unstable-pac"] }
 embassy-time = "0.5.1"
 embassy-usb = { version = "0.6", default-features = false }
 embassy-sync = "0.8"
