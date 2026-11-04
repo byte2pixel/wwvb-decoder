@@ -22,7 +22,7 @@ public enum ValidationCheck
     ErrorSymbols,
 
     /// <summary>
-    /// Any of the nine minute, hour, day-of-year, and year digits, re-derived from the frame through <c>WwvbFrameLayout</c>, exceeds 9.
+    /// Any of the nine minute, hour, day-of-year, and year digits, re-derived from the frame through <see cref="WwvbFrameLayout"/>, exceeds 9.
     /// </summary>
     BcdDigits,
 

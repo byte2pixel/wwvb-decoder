@@ -6,9 +6,9 @@ namespace WwvbDecoder.Core;
 /// Stage 5's output, a plain read of the frame with no range checks.
 /// </summary>
 /// <param name="Frame">The original frame of symbols, which contains all 60 symbols for that frame.</param>
-/// <param name="Minute">Sum of the set bits' weights, 0 to 79.</param>
-/// <param name="Hour">0 to 39</param>
-/// <param name="DayOfYear">0 to 399</param>
+/// <param name="Minute">Sum of the set bits' weights, 0 to 85.</param>
+/// <param name="Hour">0 to 45</param>
+/// <param name="DayOfYear">0 to 465</param>
 /// <param name="Year">The two transmitted digits, 0 to 165.</param>
 /// <param name="Ut1Sign">The sign of the UT1 time correction, which can be plus, minus, or invalid.</param>
 /// <param name="Ut1Tenths">Seconds 40 to 43 as a sum of weights, 0 to 15.</param>
