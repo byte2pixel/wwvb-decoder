@@ -462,7 +462,7 @@ public static class EdgeLineCodec
 | Any other line starting with `#` | `true`, `Info(line)`, the whole line |
 | Anything else: empty, longer than 63 characters, containing a carriage return, a sign, a decimal point, or a second space | `false` (malformed) |
 
-The 63-character limit is the protocol's 64 bytes including the line feed. It applies to every line, `#` lines included.
+The 63-character limit is the protocol's 64 bytes including the line feed. It applies to every line, `#` lines included. So does the carriage-return rule: `# session\r` is malformed, not `Info`, which is what lets `CaptureFile.Open` leave a stray `\r` for the codec to report.
 
 `Format` returns `H <micros>` or `L <micros>` without a line feed, using invariant digits. `TryParse(Format(edge))` yields `Sample(edge)` for every edge.
 
