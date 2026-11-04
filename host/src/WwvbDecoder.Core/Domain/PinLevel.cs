@@ -1,17 +1,17 @@
 namespace WwvbDecoder.Core;
 
 /// <summary>
-/// Represents the level of a pin, either Low or High.
+/// Which level is reduced carrier depends on the receiver; receiver #1 measured <see cref="High"/>.
 /// </summary>
 public enum PinLevel
 {
     /// <summary>
-    /// Represents a low pin level.
+    /// Pin reads low.
     /// </summary>
     Low,
 
     /// <summary>
-    /// Represents a high pin level.
+    /// Pin reads high.
     /// </summary>
     High,
 }

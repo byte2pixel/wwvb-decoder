@@ -1,27 +1,27 @@
 namespace WwvbDecoder.Core;
 
 /// <summary>
-/// Represents the kind of symbol in a WWVB signal, which can be Zero, One, Marker, or Error.
+/// Stage 3's classification of one pulse.
 /// </summary>
 public enum SymbolKind
 {
     /// <summary>
-    /// Represents a symbol that corresponds to a binary 0 in the WWVB signal.
+    /// 0.2 s of reduced carrier, representing a binary 0 in the WWVB signal.
     /// </summary>
     Zero,
 
     /// <summary>
-    /// Represents a symbol that corresponds to a binary 1 in the WWVB signal.
+    /// 0.5 s of reduced carrier, representing a binary 1 in the WWVB signal.
     /// </summary>
     One,
 
     /// <summary>
-    /// Represents a marker symbol in the WWVB signal, which is used for synchronization and timing
+    /// 0.8 s of reduced carrier, representing a marker in the WWVB signal.
     /// </summary>
     Marker,
 
     /// <summary>
-    /// Represents an error symbol in the WWVB signal, which indicates that there was a problem decoding the signal at this point.
+    /// A duration outside every class.
     /// </summary>
     Error,
 }

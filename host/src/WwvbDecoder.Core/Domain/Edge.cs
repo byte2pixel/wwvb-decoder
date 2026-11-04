@@ -1,8 +1,8 @@
 namespace WwvbDecoder.Core;
 
 /// <summary>
-/// Represents an edge in a signal, defined by the time in microseconds and the pin level (high or low).
+/// One edge on the receiver's data pin.
 /// </summary>
-/// <param name="Micros">The time of the edge in microseconds.</param>
-/// <param name="Level">The level of the pin (high or low) at the edge.</param>
+/// <param name="Micros">Microseconds since the Pico booted.</param>
+/// <param name="Level">The level after the edge.</param>
 public readonly record struct Edge(ulong Micros, PinLevel Level);

@@ -1,24 +1,25 @@
 namespace WwvbDecoder.Core;
 
 /// <summary>
-/// Represents an event related to an edge, which can be a sample, a reset, or an informational message.
+/// What a source yields.
 /// </summary>
 public abstract record EdgeEvent
 {
     private EdgeEvent() { }
 
     /// <summary>
-    /// Represents a sample event with the associated edge.
+    /// One edge.
     /// </summary>
     public sealed record Sample(Edge Edge) : EdgeEvent;
 
     /// <summary>
-    /// Represents a reset event with the reason for the reset.
+    /// Stages must discard their state. The reasons are provided in the <see cref="Reason"/> property.
+    /// <c>start</c>, <c>open</c>, <c>session</c>, <c>loop</c>, and <c>timestamp went backwards</c>.
     /// </summary>
     public sealed record Reset(string Reason) : EdgeEvent;
 
     /// <summary>
-    /// Represents an informational event with a message line.
+    /// The whole <c>#</c> line verbatim.
     /// </summary>
     public sealed record Info(string Line) : EdgeEvent;
 }

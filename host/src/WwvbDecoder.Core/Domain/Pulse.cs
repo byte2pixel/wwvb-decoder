@@ -1,7 +1,7 @@
 namespace WwvbDecoder.Core;
 
 /// <summary>
-/// Represents a pulse in a signal, defined by its start time and duration in microseconds.
+/// One reduced-carrier pulse, in Pico microseconds; stage 2's output.
 /// </summary>
 /// <param name="StartMicros">The start time of the pulse in microseconds.</param>
 /// <param name="DurationMicros">The duration of the pulse in microseconds.</param>
