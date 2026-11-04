@@ -214,7 +214,7 @@ public class WwvbFrameEncoderTests
     [Theory]
     [InlineData(-1)]
     [InlineData(10)]
-    public void Encode_Ut1TenthsOutsideZeroToNine_Throws(int ut1Tent)
+    public void Encode_Ut1TenthsOutsideZeroToNine_Throws(int ut1Tenths)
     {
         // Act & Assert
         Should.Throw<ArgumentOutOfRangeException>(() =>
@@ -222,7 +222,7 @@ public class WwvbFrameEncoderTests
                 new DateTimeOffset(2026, 12, 10, 19, 30, 0, TimeSpan.Zero),
                 0,
                 Ut1Sign.Plus,
-                ut1Tent,
+                ut1Tenths,
                 false,
                 DstStatus.Standard
             )

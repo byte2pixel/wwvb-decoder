@@ -13,7 +13,7 @@ public static class WwvbFrameEncoder
     /// <param name="sign">The sign of the UT1 time correction</param>
     /// <param name="ut1Tenths">The UT1 time correction in tenths of a second</param>
     /// <param name="leapSecondPending">Whether a leap second is pending at the end of the month</param>
-    /// <param name="dstStatus">The Daylight Saving Time (DST) status</param>
+    /// <param name="dst">The Daylight Saving Time (DST) status</param>
     /// <returns>
     /// A Frame containing the encoded symbols, start time, and end time.
     /// </returns>
@@ -25,7 +25,7 @@ public static class WwvbFrameEncoder
         Ut1Sign sign,
         int ut1Tenths,
         bool leapSecondPending,
-        DstStatus dstStatus
+        DstStatus dst
     )
     {
         // convert utcMinute to UTC
@@ -77,7 +77,7 @@ public static class WwvbFrameEncoder
 
         WriteUt1Sign(symbols, sign);
 
-        WriteDstStatus(symbols, dstStatus);
+        WriteDstStatus(symbols, dst);
 
         return new Frame(
             Symbols: [.. symbols],
