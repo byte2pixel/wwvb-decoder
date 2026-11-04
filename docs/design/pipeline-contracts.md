@@ -485,7 +485,7 @@ public sealed class SyntheticEdgeSource : IEdgeSource
 }
 ```
 
-`Speed` below 0, or `Noise` outside 0 to 1, throws `ArgumentOutOfRangeException` from the setter. `StartUtc` must be a whole UTC minute from 2000 to 2099. Otherwise the enumeration throws `ArgumentException` when it starts.
+`Speed` below 0, or `Noise` outside 0 to 1, throws `ArgumentOutOfRangeException` from the setter. `StartUtc` must be a whole UTC minute from 2000 to 2099; otherwise its `init` throws `ArgumentException`. An enumeration that runs past 2099 throws `ArgumentException` from `WwvbFrameEncoder.Encode`.
 
 **Timeline.**
 
