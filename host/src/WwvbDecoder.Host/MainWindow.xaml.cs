@@ -23,6 +23,9 @@ public partial class MainWindow
     private const string DevServerUrl = "http://localhost:5173/";
 #endif
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MainWindow"/> class and sets up the WebView2 control.
+    /// </summary>
     public MainWindow()
     {
         InitializeComponent();

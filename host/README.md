@@ -8,6 +8,32 @@ C# / .NET 10 solution (`WwvbDecoder.slnx`).
 | `src/WwvbDecoder.Host` | WPF app that hosts the React UI in WebView2 and owns the serial port. |
 | `tests/WwvbDecoder.Core.Tests` | xUnit tests for Core. |
 
+## Core layout
+
+Every type in Core is in the namespace `WwvbDecoder.Core`, whichever folder it lives in.
+
+| Folder | Holds |
+| --- | --- |
+| `Domain/` | Records and enums shared by the pipeline, plus `WwvbFrameLayout` and `WwvbFrameEncoder`. |
+| `Ports/` | The interfaces Core works through: `IEdgeSource` and `IStage<TIn,TOut>`. |
+| `Sources/` | Edge sources that are pure computation: `SyntheticEdgeSource`. |
+| `Protocol/` | The serial line grammar: `EdgeLineCodec`. |
+| `Stages/` | The decoder stages. Added in Steps 5 to 7. |
+| `Pipeline/` | `DecoderPipeline`. Added in Steps 5 to 7. |
+
+## Hexagonal rule
+
+Core does no I/O and references no I/O packages: no `System.IO.Ports`, no WebView2, no WPF. Code that touches the serial port or the file system belongs outside Core, behind a port such as `IEdgeSource`. PC time enters Core only through an injected `TimeProvider`.
+
+`SyntheticEdgeSource` is in Core because it only computes edges. It paces them on the injected `TimeProvider`.
+
+To check the rule, run these from the repo root. Both should print nothing:
+
+```powershell
+Select-String -Path host/src/WwvbDecoder.Core/WwvbDecoder.Core.csproj -Pattern 'System.IO.Ports|WebView2|UseWPF'
+Select-String -Path host/Directory.Build.props, host/src/Directory.Build.props -Pattern '<PackageReference'
+```
+
 ## React UI
 
 The Host serves the React app from `../ui`. Its built `dist/` is copied to `wwwroot/` next to the exe.
