@@ -1,3 +1,5 @@
+using System.Runtime.CompilerServices;
+
 namespace WwvbDecoder.Core;
 
 /// <summary>
@@ -107,9 +109,66 @@ public sealed class SyntheticEdgeSource : IEdgeSource
     /// </summary>
     /// <param name="ct">A cancellation token that can be used to cancel the enumeration</param>
     /// <returns>An asynchronous enumerable of <see cref="EdgeEvent"/> instances.</returns>
-    public IAsyncEnumerable<EdgeEvent> ReadAsync(CancellationToken ct)
+    public async IAsyncEnumerable<EdgeEvent> ReadAsync(
+        [EnumeratorCancellation] CancellationToken ct
+    )
     {
-        throw new NotImplementedException();
+        yield return new EdgeEvent.Reset("start");
+
+        ulong? previous = null;
+        foreach (Edge edge in GenerateEdges())
+        {
+            double speed = Speed;
+            ct.ThrowIfCancellationRequested();
+            if (speed > 0.0 && previous.HasValue)
+            {
+                await Task.Delay(
+                    TimeSpan.FromMicroseconds((edge.Micros - previous.Value) / speed),
+                    _timeProvider,
+                    ct
+                );
+            }
+            yield return new EdgeEvent.Sample(edge);
+            previous = edge.Micros;
+        }
+    }
+
+    private IEnumerable<Edge> GenerateEdges()
+    {
+        PinLevel normalCarrierLevel =
+            ReducedCarrierLevel == PinLevel.High ? PinLevel.Low : PinLevel.High;
+
+        yield return new Edge(0, ReducedCarrierLevel);
+        yield return new Edge(800_000, normalCarrierLevel);
+
+        ulong minute = 0;
+        while (true)
+        {
+            Frame frame = WwvbFrameEncoder.Encode(
+                StartUtc.AddMinutes(minute),
+                1_000_000UL + minute * 60_000_000UL,
+                Ut1Sign.Plus,
+                0,
+                false,
+                DstStatus.Standard
+            );
+
+            ulong pulseStart = frame.StartMicros;
+            foreach (SymbolKind symbol in frame.Symbols)
+            {
+                ulong duration = symbol switch
+                {
+                    SymbolKind.Zero => 200_000UL,
+                    SymbolKind.One => 500_000UL,
+                    SymbolKind.Marker => 800_000UL,
+                    _ => throw new InvalidOperationException($"Unexpected symbol: {symbol}"),
+                };
+                yield return new Edge(pulseStart, ReducedCarrierLevel);
+                yield return new Edge(pulseStart + duration, normalCarrierLevel);
+                pulseStart += 1_000_000;
+            }
+            minute++;
+        }
     }
 
     /// <summary>
