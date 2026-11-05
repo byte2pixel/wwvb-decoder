@@ -939,9 +939,9 @@ Every mutation is one commit touching only this file, merged before the affected
 | Step | Status | PR | Date | Notes |
 | --- | --- | --- | --- | --- |
 | 1 | done | [#1](https://github.com/byte2pixel/wwvb-decoder/pull/1) | 2026-10-31 | ADRs and this plan committed in the same PR. Example polarity confirmed 2026-11-02 by logic analyzer (`H` = reduced carrier) |
-| 2 | pending | | | |
+| 2 | done | | 2026-11-05 | Merged in the same PR as Step 4, not its own. Implementing Step 4 amended the contracts: `Frame` throws `ArgumentOutOfRangeException`, a carriage return is malformed in every line, an invalid `StartUtc` throws from `init`, and running past 2099 throws `ArgumentOutOfRangeException` |
 | 3 | pending | | | |
-| 4 | pending | | | |
+| 4 | done | | 2026-11-05 | 126 tests. The plan mutations for shared build settings, Shouldly, the `Speed = 1` pacing test, and xunit.v3 were committed on this branch, not merged before the step started as the protocol requires. Outside the **Files** list: the `.editorconfig` style settings, including CA2012 as a warning so command-line builds catch what the IDE reports, and the `.DotSettings` files. CI differs from task 5 in two ways: `push` runs on `main` only, so a push to a PR branch doesn't run everything twice, and NuGet caches through `actions/cache`, because `setup-dotnet`'s cache needs a `packages.lock.json` |
 | 5 | pending | | | |
 | 6 | pending | | | |
 | 7 | pending | | | |
