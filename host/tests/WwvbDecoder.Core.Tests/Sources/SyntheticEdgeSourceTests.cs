@@ -5,6 +5,16 @@ namespace WwvbDecoder.Core.Tests;
 
 public class SyntheticEdgeSourceTests
 {
+    private enum Fault
+    {
+        None,
+        DroppedEntering,
+        DroppedLeaving,
+        Jitter,
+        PulseGlitch,
+        GapGlitch,
+    }
+
     private readonly FakeTimeProvider _timeProvider = new();
     private static readonly DateTimeOffset StartUtc = new(2026, 11, 04, 12, 30, 00, TimeSpan.Zero);
 
@@ -481,6 +491,242 @@ public class SyntheticEdgeSourceTests
         );
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task ReadAsync_SameSeed_GivesSameStream(int seed)
+    {
+        SyntheticEdgeSource noisySource1 = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 0.5,
+            Seed = seed,
+        };
+
+        SyntheticEdgeSource noisySource2 = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 0.5,
+            Seed = seed,
+        };
+
+        var noisyEdges1 = await ReadSecondsAsync(noisySource1, 600);
+        var noisyEdges2 = await ReadSecondsAsync(noisySource2, 600);
+
+        noisyEdges1.ShouldBeEquivalentTo(noisyEdges2);
+    }
+
+    [Fact]
+    public async Task ReadAsync_NoiseSecondEnumeration_StartsOver()
+    {
+        SyntheticEdgeSource noisySource = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 0.5,
+            Seed = 7,
+        };
+
+        var firstRead = await ReadSecondsAsync(noisySource, 600);
+        var secondRead = await ReadSecondsAsync(noisySource, 600);
+        firstRead.ShouldBeEquivalentTo(secondRead);
+    }
+
+    [Fact]
+    public async Task ReadAsync_DifferentSeed_GivesDifferentStream()
+    {
+        SyntheticEdgeSource noisySource1 = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 0.5,
+            Seed = 1,
+        };
+
+        SyntheticEdgeSource noisySource2 = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 0.5,
+            Seed = 2,
+        };
+
+        (await ReadSecondsAsync(noisySource1, 600)).ShouldNotBe(
+            await ReadSecondsAsync(noisySource2, 600)
+        );
+    }
+
+    [Theory]
+    [InlineData(1, PinLevel.High)]
+    [InlineData(2, PinLevel.High)]
+    [InlineData(3, PinLevel.High)]
+    [InlineData(1, PinLevel.Low)]
+    [InlineData(2, PinLevel.Low)]
+    [InlineData(3, PinLevel.Low)]
+    public async Task ReadAsync_NoiseOne_FaultsEverySecond(int seed, PinLevel reducedCarrierLevel)
+    {
+        SyntheticEdgeSource noisySource = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 1.0,
+            Seed = seed,
+            ReducedCarrierLevel = reducedCarrierLevel,
+        };
+
+        var faults = await ClassifySecondsAsync(noisySource, 600);
+        faults.ShouldAllBe(f => f != Fault.None);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task ReadAsync_NoiseOne_TimestampsIncrease(int seed)
+    {
+        SyntheticEdgeSource noisySource = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 1.0,
+            Seed = seed,
+        };
+
+        var edges = await ReadSecondsAsync(noisySource, 600);
+        for (int i = 1; i < edges.Count; i++)
+        {
+            edges[i].Micros.ShouldBeGreaterThan(edges[i - 1].Micros);
+        }
+    }
+
+    [Fact]
+    public async Task ReadAsync_Jitter_ReachesBothClamps()
+    {
+        SyntheticEdgeSource noisySource = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 1.0,
+            Seed = 42,
+        };
+
+        var edges = await ReadSecondsAsync(noisySource, 1200);
+        List<ulong> durations =
+        [
+            .. edges
+                .GroupBy(edge => edge.Micros / 1_000_000UL)
+                .Where(second => second.Count() == 2)
+                .Select(second => second.Last().Micros - second.First().Micros),
+        ];
+
+        durations.ShouldContain(10_000UL);
+        durations.ShouldContain(990_000UL);
+    }
+
+    [Fact]
+    public async Task ReadAsync_NoiseQuarter_FaultsAboutQuarter()
+    {
+        SyntheticEdgeSource noisySource = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 0.25,
+        };
+
+        var faults = await ClassifySecondsAsync(noisySource, 600);
+        int faultCount = faults.Count(f => f != Fault.None);
+        faultCount.ShouldBeInRange(100, 200); // Expect about 25% of seconds to have faults, but allow for some randomness
+    }
+
+    [Fact]
+    public async Task ReadAsync_NoiseChangedMidStream_AppliesToLaterSeconds()
+    {
+        SyntheticEdgeSource cleanSource = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 0.0,
+            Seed = 5,
+        };
+        SyntheticEdgeSource noisySource = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 0.0,
+            Seed = 5,
+        };
+
+        List<Edge> cleanEdges = await ReadSecondsAsync(cleanSource, 60);
+        List<Edge> noisyEdges = [];
+        await foreach (
+            EdgeEvent evt in noisySource.ReadAsync(TestContext.Current.CancellationToken)
+        )
+        {
+            if (evt is not EdgeEvent.Sample sample)
+            {
+                continue;
+            }
+
+            if (sample.Edge.Micros >= 60_000_000UL)
+            {
+                break;
+            }
+
+            noisyEdges.Add(sample.Edge);
+            if (noisyEdges.Count == 60)
+            {
+                noisySource.Noise = 1.0; // seconds 0 to 29 gave 2 edges each
+            }
+        }
+        var noisy = noisyEdges.ToLookup(edge => edge.Micros / 1_000_000UL);
+        var clean = cleanEdges.ToLookup(edge => edge.Micros / 1_000_000UL);
+
+        List<Fault> faults = [];
+        for (ulong second = 0; second < 60; second++)
+        {
+            faults.Add(Classify([.. noisy[second]], [.. clean[second]]));
+        }
+
+        faults.Take(30).ShouldAllBe(fault => fault == Fault.None);
+        faults.Skip(30).ShouldAllBe(fault => fault != Fault.None);
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    public async Task ReadAsync_NoiseOne_UsesAllFaultsEvenly(int seed)
+    {
+        // Arrange
+        SyntheticEdgeSource noisySource = new(_timeProvider)
+        {
+            StartUtc = StartUtc,
+            Speed = 0.0,
+            Noise = 1.0,
+            Seed = seed,
+        };
+
+        // Act
+        var faults = await ClassifySecondsAsync(noisySource, 600);
+
+        // Assert
+        int jitterCount = faults.Count(f => f == Fault.Jitter);
+        int gapCount = faults.Count(f => f == Fault.GapGlitch);
+        int pulseCount = faults.Count(f => f == Fault.PulseGlitch);
+        int droppedEnteringCount = faults.Count(f => f == Fault.DroppedEntering);
+        int droppedLeavingCount = faults.Count(f => f == Fault.DroppedLeaving);
+
+        droppedEnteringCount.ShouldBeGreaterThan(40);
+        droppedLeavingCount.ShouldBeGreaterThan(40);
+        (droppedEnteringCount + droppedLeavingCount).ShouldBeInRange(100, 200);
+        jitterCount.ShouldBeInRange(100, 200);
+        gapCount.ShouldBeInRange(100, 200);
+        pulseCount.ShouldBeInRange(100, 200);
+    }
+
     private static readonly Edge[] FirstFrameEdges =
     [
         new(1_000_000, PinLevel.High), // second 0: Marker
@@ -624,6 +870,107 @@ public class SyntheticEdgeSourceTests
         }
 
         return events;
+    }
+
+    private static async Task<List<Edge>> ReadSecondsAsync(
+        SyntheticEdgeSource source,
+        ulong seconds
+    )
+    {
+        List<Edge> edges = [];
+        await foreach (EdgeEvent evt in source.ReadAsync(TestContext.Current.CancellationToken))
+        {
+            if (evt is not EdgeEvent.Sample sample)
+            {
+                continue;
+            }
+
+            if (sample.Edge.Micros >= seconds * 1_000_000UL)
+            {
+                break;
+            }
+            edges.Add(sample.Edge);
+        }
+
+        return edges;
+    }
+
+    private async Task<List<Fault>> ClassifySecondsAsync(
+        SyntheticEdgeSource noisySource,
+        ulong seconds
+    )
+    {
+        List<Fault> faults = [];
+        SyntheticEdgeSource cleanSource = new(_timeProvider)
+        {
+            StartUtc = noisySource.StartUtc,
+            Speed = 0.0,
+            Noise = 0.0,
+            ReducedCarrierLevel = noisySource.ReducedCarrierLevel,
+        };
+
+        var cleanEdges = await ReadSecondsAsync(cleanSource, seconds);
+        var noisyEdges = await ReadSecondsAsync(noisySource, seconds);
+
+        var noisy = noisyEdges.ToLookup(edge => edge.Micros / 1_000_000UL);
+        var clean = cleanEdges.ToLookup(edge => edge.Micros / 1_000_000UL);
+
+        // classify
+        for (ulong second = 0; second < seconds; second++)
+        {
+            faults.Add(Classify([.. noisy[second]], [.. clean[second]]));
+        }
+        return faults;
+    }
+
+    private static Fault Classify(List<Edge> edges, List<Edge> cleanEdges)
+    {
+        Edge cleanEnter = cleanEdges[0];
+        Edge cleanLeave = cleanEdges[1];
+
+        switch (edges.Count)
+        {
+            case 1:
+                if (edges[0] == cleanEnter)
+                {
+                    return Fault.DroppedLeaving;
+                }
+                edges[0].ShouldBe(cleanLeave);
+                return Fault.DroppedEntering;
+
+            case 2:
+                edges[0].ShouldBe(cleanEnter);
+                edges[1].Level.ShouldBe(cleanLeave.Level);
+                long cleanDuration = (long)(cleanLeave.Micros - cleanEnter.Micros);
+                long duration = (long)(edges[1].Micros - edges[0].Micros);
+                duration.ShouldBeInRange(
+                    Math.Clamp(cleanDuration - 300_000, 10_000, 990_000),
+                    Math.Clamp(cleanDuration + 300_000, 10_000, 990_000)
+                );
+                return duration == cleanDuration ? Fault.None : Fault.Jitter;
+
+            case 4:
+                edges[0].ShouldBe(cleanEnter);
+                edges[1].Level.ShouldBe(cleanLeave.Level);
+                edges[2].Level.ShouldBe(cleanEnter.Level);
+                edges[3].Level.ShouldBe(cleanLeave.Level);
+
+                if (edges[1] == cleanLeave)
+                {
+                    (edges[3].Micros - edges[2].Micros).ShouldBeInRange(10_000UL, 40_000UL);
+                    edges[2].Micros.ShouldBeGreaterThanOrEqualTo(cleanLeave.Micros + 60_000UL);
+                    edges[3].Micros.ShouldBeLessThanOrEqualTo(cleanEnter.Micros + 940_000UL);
+                    return Fault.PulseGlitch;
+                }
+
+                edges[3].ShouldBe(cleanLeave);
+                (edges[2].Micros - edges[1].Micros).ShouldBeInRange(10_000UL, 40_000UL);
+                edges[1].Micros.ShouldBeGreaterThanOrEqualTo(cleanEnter.Micros + 20_000UL);
+                (edges[2].Micros + 20_000UL).ShouldBeLessThanOrEqualTo(cleanLeave.Micros);
+                return Fault.GapGlitch;
+            default:
+                throw new ShouldAssertException($"{edges.Count} edges at {cleanEnter.Micros}");
+        }
     }
 
     private static IEnumerable<Edge> ExpectedFrameEdges(DateTimeOffset start, int minute)

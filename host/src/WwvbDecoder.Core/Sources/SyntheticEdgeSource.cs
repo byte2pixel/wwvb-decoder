@@ -102,7 +102,7 @@ public sealed class SyntheticEdgeSource : IEdgeSource
     /// <summary>
     /// Gets the seed for the random number generator used in the synthetic edge source.
     /// </summary>
-    public int Seed { get; init; } = 0;
+    public int Seed { get; init; }
 
     /// <summary>
     /// Reads the synthetic edge events asynchronously, yielding them in order.
@@ -135,11 +135,12 @@ public sealed class SyntheticEdgeSource : IEdgeSource
 
     private IEnumerable<Edge> GenerateEdges()
     {
+        Random random = new(Seed);
         PinLevel normalCarrierLevel =
             ReducedCarrierLevel == PinLevel.High ? PinLevel.Low : PinLevel.High;
 
-        yield return new Edge(0, ReducedCarrierLevel);
-        yield return new Edge(800_000, normalCarrierLevel);
+        foreach (Edge edge in GenerateSecond(0, 800_000, normalCarrierLevel, random))
+            yield return edge;
 
         ulong minute = 0;
         while (true)
@@ -163,11 +164,84 @@ public sealed class SyntheticEdgeSource : IEdgeSource
                     SymbolKind.Marker => 800_000UL,
                     _ => throw new InvalidOperationException($"Unexpected symbol: {symbol}"),
                 };
-                yield return new Edge(pulseStart, ReducedCarrierLevel);
-                yield return new Edge(pulseStart + duration, normalCarrierLevel);
+                foreach (
+                    Edge edge in GenerateSecond(pulseStart, duration, normalCarrierLevel, random)
+                )
+                    yield return edge;
                 pulseStart += 1_000_000;
             }
             minute++;
+        }
+    }
+
+    private IEnumerable<Edge> GenerateSecond(
+        ulong pulseStart,
+        ulong duration,
+        PinLevel normalCarrierLevel,
+        Random random
+    )
+    {
+        if (random.NextDouble() < Noise)
+        {
+            int fault = random.Next(4);
+            switch (fault)
+            {
+                // select 1 of 4 possible faults. dropped edge, gap glitch, pulse glitch, or jitter.
+                case 0:
+                    // dropped edge
+                    int keepEdge = random.Next(2);
+                    Edge edge = keepEdge switch
+                    {
+                        0 => new Edge(pulseStart, ReducedCarrierLevel),
+                        1 => new Edge(pulseStart + duration, normalCarrierLevel),
+                        _ => throw new InvalidOperationException(
+                            $"Unexpected keepEdge value: {keepEdge}"
+                        ),
+                    };
+                    yield return edge;
+                    break;
+                case 1:
+                    // gap glitch
+                    ulong gapWidth = (ulong)random.NextInt64(10_000, 40_001);
+                    ulong gapStart = (ulong)
+                        random.NextInt64(20_000, (long)duration - 20_000 - (long)gapWidth + 1);
+                    yield return new Edge(pulseStart, ReducedCarrierLevel);
+                    yield return new Edge(pulseStart + gapStart, normalCarrierLevel);
+                    yield return new Edge(pulseStart + gapStart + gapWidth, ReducedCarrierLevel);
+                    yield return new Edge(pulseStart + duration, normalCarrierLevel);
+                    break;
+                case 2:
+                    // pulse glitch
+                    ulong glitchWidth = (ulong)random.NextInt64(10_000, 40_001);
+                    ulong glitchStart = (ulong)
+                        random.NextInt64(
+                            (long)duration + 60_000,
+                            1_000_000 - 60_000 - (long)glitchWidth + 1
+                        );
+                    yield return new Edge(pulseStart, ReducedCarrierLevel);
+                    yield return new Edge(pulseStart + duration, normalCarrierLevel);
+                    yield return new Edge(pulseStart + glitchStart, ReducedCarrierLevel);
+                    yield return new Edge(
+                        pulseStart + glitchStart + glitchWidth,
+                        normalCarrierLevel
+                    );
+                    break;
+                default:
+                {
+                    // jitter
+                    long jittered = (long)duration + random.NextInt64(-300_000, 300_001);
+                    duration = (ulong)Math.Clamp(jittered, 10_000L, 990_000L);
+
+                    yield return new Edge(pulseStart, ReducedCarrierLevel);
+                    yield return new Edge(pulseStart + duration, normalCarrierLevel);
+                    break;
+                }
+            }
+        }
+        else
+        {
+            yield return new Edge(pulseStart, ReducedCarrierLevel);
+            yield return new Edge(pulseStart + duration, normalCarrierLevel);
         }
     }
 
