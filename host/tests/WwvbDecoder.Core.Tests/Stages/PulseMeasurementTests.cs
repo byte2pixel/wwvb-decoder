@@ -263,6 +263,191 @@ public class PulseMeasurementTests
         stage.UnpairedEdges.ShouldBe(1);
     }
 
+    [Fact]
+    public void Push_LowReducedCarrier_InvertsLevels()
+    {
+        // Arrange
+        var stage = new PulseMeasurement { ReducedCarrierLevel = PinLevel.Low };
+
+        // Act & Assert
+        stage.Push(L(0)).ShouldBeEmpty();
+        stage.Push(H(200_000)).ShouldBeEmpty();
+        stage.Push(L(1_000_000)).ShouldBe([new Pulse(0, 200_000)]);
+    }
+
+    [Fact]
+    public void Push_EqualTimestamps_DoNotThrow()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(1_000)).ShouldBeEmpty();
+
+        // Act & Assert
+        Should.NotThrow(() => stage.Push(L(1_000)));
+    }
+
+    [Fact]
+    public void Push_DecreasingTimestamp_ThrowsAndLeavesStateUnchanged()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(1_000)).ShouldBeEmpty();
+        stage.Push(L(201_000)).ShouldBeEmpty();
+
+        // Act & Assert
+        Should.Throw<InvalidOperationException>(() => stage.Push(H(200_999)));
+        Should.Throw<InvalidOperationException>(() => stage.Push(H(200_999)));
+        stage.Push(H(1_000_000)).ShouldBe([new Pulse(1_000, 200_000)]);
+    }
+
+    [Fact]
+    public void Push_IgnoredDuplicate_StillSetsLastTimestamp()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(100)).ShouldBeEmpty();
+
+        // Act & Assert
+        stage.Push(H(200)).ShouldBeEmpty();
+        stage.UnpairedEdges.ShouldBe(1);
+        Should.Throw<InvalidOperationException>(() => stage.Push(L(150)));
+    }
+
+    [Fact]
+    public void Push_PolarityChange_DiscardsStateFromOldPolarity()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(0)).ShouldBeEmpty();
+        stage.Push(L(200_000)).ShouldBeEmpty();
+
+        // Act & Assert
+        stage.ReducedCarrierLevel = PinLevel.Low;
+        stage.Push(L(1_000_000)).ShouldBeEmpty();
+        stage.UnpairedEdges.ShouldBe(0);
+        stage.Push(H(1_200_000)).ShouldBeEmpty();
+        stage.Push(L(2_000_000)).ShouldBe([new Pulse(1_000_000, 200_000)]);
+    }
+
+    [Fact]
+    public void Push_PolarityChange_DiscardsOpenPulse()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(0)).ShouldBeEmpty();
+
+        // Act & Assert
+        stage.ReducedCarrierLevel = PinLevel.Low;
+        stage.Push(H(200_000)).ShouldBeEmpty();
+        stage.Push(L(1_000_000)).ShouldBeEmpty();
+        stage.UnpairedEdges.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Push_PolarityChange_StillChecksOrder()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(1_000)).ShouldBeEmpty();
+        stage.Push(L(201_000)).ShouldBeEmpty();
+
+        // Act & Assert
+        stage.ReducedCarrierLevel = PinLevel.Low;
+        Should.Throw<InvalidOperationException>(() => stage.Push(L(999)));
+        stage.ReducedCarrierLevel = PinLevel.High;
+        stage.Push(H(1_000_000)).ShouldBe([new Pulse(1_000, 200_000)]);
+    }
+
+    [Fact]
+    public void Push_PolarityChangedAndRestoredBetweenEdges_KeepsState()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(0)).ShouldBeEmpty();
+        stage.Push(L(200_000)).ShouldBeEmpty();
+
+        // Act
+        stage.ReducedCarrierLevel = PinLevel.Low;
+        stage.ReducedCarrierLevel = PinLevel.High;
+        var pulses = stage.Push(H(1_000_000));
+
+        // Assert
+        pulses.ShouldBe([new Pulse(0, 200_000)]);
+    }
+
+    [Fact]
+    public void Reset_DiscardsPendingPulse()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(0)).ShouldBeEmpty();
+        stage.Push(L(200_000)).ShouldBeEmpty();
+
+        // Act
+        stage.Reset();
+        var pulses = stage.Push(H(1_000_000));
+
+        // Assert
+        pulses.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Reset_DiscardsOpenPulse()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(0)).ShouldBeEmpty();
+
+        // Act
+        stage.Reset();
+        stage.Push(L(200_000)).ShouldBeEmpty();
+        var pulses = stage.Push(H(1_000_000));
+
+        // Assert
+        pulses.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Reset_AllowsSmallerTimestampAndSameLevel()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        stage.Push(H(5_000_000)).ShouldBeEmpty();
+
+        // Act
+        stage.Reset();
+        var pulses = stage.Push(H(0));
+
+        // Assert
+        pulses.ShouldBeEmpty();
+        stage.UnpairedEdges.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Reset_KeepsCounters()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges =
+        [
+            H(0),
+            L(20_000),
+            H(1_000_000),
+            L(1_100_000),
+            H(1_120_000),
+            H(1_130_000),
+        ];
+        _ = edges.SelectMany(stage.Push).ToList();
+
+        // Act
+        stage.Reset();
+
+        // Assert
+        stage.GlitchesDropped.ShouldBe(1);
+        stage.GapsBridged.ShouldBe(1);
+        stage.UnpairedEdges.ShouldBe(1);
+    }
+
     private static Edge H(ulong micros) => new(micros, PinLevel.High);
 
     private static Edge L(ulong micros) => new(micros, PinLevel.Low);
