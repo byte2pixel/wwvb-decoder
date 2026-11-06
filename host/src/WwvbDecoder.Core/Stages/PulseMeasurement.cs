@@ -14,9 +14,6 @@ public sealed class PulseMeasurement : IStage<Edge, Pulse>
     /// </summary>
     public PinLevel ReducedCarrierLevel { get; set; } = PinLevel.High;
 
-    private PinLevel NormalCarrierLevel =>
-        ReducedCarrierLevel == PinLevel.High ? PinLevel.Low : PinLevel.High;
-
     /// <summary>
     /// Gets or sets the minimum duration of a pulse in microseconds.
     /// Pulses shorter than this duration are considered glitches and are dropped.
@@ -27,19 +24,19 @@ public sealed class PulseMeasurement : IStage<Edge, Pulse>
     /// Gets the number of glitches that were dropped during pulse measurement.
     /// A glitch is defined as a short pulse that does not meet the minimum duration requirement.
     /// </summary>
-    public long GlitchesDropped { get; }
+    public long GlitchesDropped { get; private set; }
 
     /// <summary>
     /// Gets the number of gaps that were bridged during pulse measurement.
     /// </summary>
-    public long GapsBridged { get; }
+    public long GapsBridged { get; private set; }
 
     /// <summary>
     /// Gets the number of edges that were unpaired during pulse measurement.
     /// An unpaired edge is one that does not have a corresponding edge to form a complete
     /// pulse, which may occur due to signal noise or other anomalies.
     /// </summary>
-    public long UnpairedEdges { get; }
+    public long UnpairedEdges { get; private set; }
 
     /// <summary>
     /// Processes an input edge and returns the resulting pulses as a materialized collection.
@@ -58,13 +55,29 @@ public sealed class PulseMeasurement : IStage<Edge, Pulse>
                 _openingEdgeMicros = input.Micros;
                 return [];
             }
+
+            if (input.Micros - _pendingPulse.Value.EndMicros < MinPulseMicros)
+            {
+                _openingEdgeMicros = _pendingPulse.Value.StartMicros;
+                _pendingPulse = null;
+                GapsBridged++;
+                return [];
+            }
+
             Pulse returnedPulse = _pendingPulse.Value;
             _pendingPulse = null;
             _openingEdgeMicros = input.Micros;
-            return [returnedPulse];
+
+            if (returnedPulse.DurationMicros >= MinPulseMicros)
+            {
+                return [returnedPulse];
+            }
+
+            GlitchesDropped++;
+            return [];
         }
 
-        if (_openingEdgeMicros is null || input.Level != NormalCarrierLevel)
+        if (_openingEdgeMicros is null)
         {
             return [];
         }

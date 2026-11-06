@@ -91,6 +91,137 @@ public class PulseMeasurementTests
         pulses.ShouldBe([new Pulse(0, 200_000)]);
     }
 
+    [Fact]
+    public void Push_FullCarrierGlitchInsidePulse_BridgesIt()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges = [H(0), L(240_000), H(260_000), L(500_000), H(1_000_000)];
+
+        // Act & Assert
+        var pulses = edges.Take(edges.Count - 1).SelectMany(stage.Push).ToList();
+
+        pulses.ShouldBeEmpty();
+        pulses = [.. edges.TakeLast(1).SelectMany(stage.Push)];
+
+        pulses.ShouldBe([new Pulse(0, 500_000)]);
+        stage.GapsBridged.ShouldBe(1L);
+    }
+
+    [Theory]
+    [InlineData(49_999, 1)]
+    [InlineData(50_000, 0)]
+    public void Push_GapAtThreshold_BridgesOnlyBelowIt(ulong micros, int expectedGapsBridged)
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges = [H(0), L(200_000), H(200_000 + micros)];
+
+        // Act
+        _ = edges.SelectMany(stage.Push).ToList();
+
+        // Assert
+        stage.GapsBridged.ShouldBe(expectedGapsBridged);
+    }
+
+    [Fact]
+    public void Push_TwoGapsInOnePulse_BridgesBoth()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges =
+        [
+            H(0),
+            L(100_000),
+            H(120_000),
+            L(300_000),
+            H(320_000),
+            L(500_000),
+            H(1_000_000),
+        ];
+
+        // Act
+        var pulses = edges.SelectMany(stage.Push).ToList();
+
+        // Assert
+        pulses.ShouldBe([new Pulse(0, 500_000)]);
+        stage.GapsBridged.ShouldBe(2);
+    }
+
+    [Fact]
+    public void Push_ReducedCarrierGlitch_IsDropped()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges = [H(0), L(500_000), H(600_000)];
+
+        // Act & Assert
+        var pulses = edges.SelectMany(stage.Push).ToList();
+        pulses.ShouldBe([new Pulse(0, 500_000)]);
+
+        edges = [L(620_000), H(1_000_000)];
+        pulses = [.. edges.SelectMany(stage.Push)];
+        pulses.ShouldBeEmpty();
+
+        edges = [L(1_200_000), H(2_000_000)];
+        pulses = [.. edges.SelectMany(stage.Push)];
+        pulses.ShouldBe([new Pulse(1_000_000, 200_000)]);
+        stage.GlitchesDropped.ShouldBe(1);
+    }
+
+    [Theory]
+    [InlineData(49_999, 0, 1)]
+    [InlineData(50_000, 1, 0)]
+    public void Push_PulseAtThreshold_DropsOnlyBelowIt(
+        ulong micros,
+        int expectedPulses,
+        int expectedGlitchesDropped
+    )
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges = [H(0), L(micros), H(1_000_000)];
+
+        // Act
+        var pulses = edges.SelectMany(stage.Push).ToList();
+
+        // Assert
+        pulses.Count.ShouldBe(expectedPulses);
+        stage.GlitchesDropped.ShouldBe(expectedGlitchesDropped);
+    }
+
+    [Fact]
+    public void Push_CustomMinPulse_MovesBothThresholds()
+    {
+        // Arrange
+        var stage = new PulseMeasurement { MinPulseMicros = 10_000 };
+        List<Edge> edges = [H(0), L(20_000), H(40_000)];
+
+        // Act
+        var pulses = edges.SelectMany(stage.Push).ToList();
+
+        // Assert
+        pulses.ShouldBe([new Pulse(0, 20_000)]);
+        stage.GapsBridged.ShouldBe(0);
+        stage.GlitchesDropped.ShouldBe(0);
+    }
+
+    [Fact]
+    public void Push_ShortPulseThenShortGap_BridgesInsteadOfDropping()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges = [H(0), L(20_000), H(40_000), L(500_000), H(1_000_000)];
+
+        // Act
+        var pulses = edges.SelectMany(stage.Push).ToList();
+
+        // Assert
+        pulses.ShouldBe([new Pulse(0, 500_000)]);
+        stage.GapsBridged.ShouldBe(1);
+        stage.GlitchesDropped.ShouldBe(0);
+    }
+
     private static Edge H(ulong micros) => new(micros, PinLevel.High);
 
     private static Edge L(ulong micros) => new(micros, PinLevel.Low);
