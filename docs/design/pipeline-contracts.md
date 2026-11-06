@@ -131,7 +131,7 @@ For each edge, in this order:
 
 1. **Order.** If the edge's timestamp is smaller than the last edge's, throw `InvalidOperationException` and leave the state unchanged. Equal timestamps are allowed. The pipeline resets every stage on a source `Reset`, which a source emits before any decrease, so this only fires on a bug.
 2. **Polarity change.** If `ReducedCarrierLevel` differs from the value the state was measured with, discard `open`, `pending`, and the last level before going on. A pulse never mixes the two polarities.
-3. **Duplicate level.** If the edge has the same level as the last edge, increment `UnpairedEdges` and ignore the edge. The stage resynchronizes on the next edge of the other level. This covers both causes: an edge the firmware lost (`# dropped`), and an edge pair the firmware merged into one line.
+3. **Duplicate level.** If the edge has the same level as the last edge, increment `UnpairedEdges` and ignore the edge. The stage resynchronizes on the next edge of the other level. This covers both causes: an edge the firmware lost (`# dropped`), and an edge pair the firmware merged into one line. An ignored edge is still the last edge: its timestamp is the one the next edge's order check compares with.
 4. **Entering edge.**
    - With a `pending` pulse and `edge.Micros - pending.EndMicros < MinPulseMicros`: **bridge**. The gap was a full-carrier glitch, so the pending pulse continues: `open = pending.StartMicros`, `pending` is cleared, `GapsBridged` is incremented.
    - With a `pending` pulse otherwise: **confirm**. Output `pending` if `pending.DurationMicros >= MinPulseMicros`; otherwise drop it and increment `GlitchesDropped`. Then `pending` is cleared and `open = edge.Micros`.
