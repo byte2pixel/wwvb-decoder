@@ -222,6 +222,47 @@ public class PulseMeasurementTests
         stage.GlitchesDropped.ShouldBe(0);
     }
 
+    [Fact]
+    public void Push_MissingLeavingEdge_CountsUnpairedThenMeasuresNextPulse()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges = [H(0), H(1_000_000)];
+
+        // Act & Assert
+        var pulses = edges.SelectMany(stage.Push).ToList();
+        pulses.ShouldBeEmpty();
+        stage.UnpairedEdges.ShouldBe(1);
+
+        edges = [L(1_200_000), H(2_000_000)];
+        pulses = [.. edges.SelectMany(stage.Push)];
+        pulses.ShouldBe([new Pulse(0, 1_200_000)]);
+
+        edges = [L(2_500_000), H(3_000_000)];
+        pulses = [.. edges.SelectMany(stage.Push)];
+        pulses.ShouldBe([new Pulse(2_000_000, 500_000)]);
+
+        stage.UnpairedEdges.ShouldBe(1);
+    }
+
+    [Fact]
+    public void Push_MissingEnteringEdge_CountsUnpairedAndKeepsPendingPulse()
+    {
+        // Arrange
+        var stage = new PulseMeasurement();
+        List<Edge> edges = [H(0), L(200_000), L(1_200_000)];
+
+        // Act & Assert
+        var pulses = edges.SelectMany(stage.Push).ToList();
+        pulses.ShouldBeEmpty();
+        stage.UnpairedEdges.ShouldBe(1);
+
+        edges = [H(2_000_000)];
+        pulses = [.. edges.SelectMany(stage.Push)];
+        pulses.ShouldBe([new Pulse(0, 200_000)]);
+        stage.UnpairedEdges.ShouldBe(1);
+    }
+
     private static Edge H(ulong micros) => new(micros, PinLevel.High);
 
     private static Edge L(ulong micros) => new(micros, PinLevel.Low);

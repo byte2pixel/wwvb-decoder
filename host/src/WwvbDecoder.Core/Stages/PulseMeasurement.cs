@@ -7,6 +7,7 @@ public sealed class PulseMeasurement : IStage<Edge, Pulse>
 {
     private ulong? _openingEdgeMicros;
     private Pulse? _pendingPulse;
+    private PinLevel? _lastLevel;
 
     /// <summary>
     /// Gets or sets the pin level that indicates a reduced carrier signal.
@@ -21,20 +22,18 @@ public sealed class PulseMeasurement : IStage<Edge, Pulse>
     public ulong MinPulseMicros { get; init; } = 50_000;
 
     /// <summary>
-    /// Gets the number of glitches that were dropped during pulse measurement.
-    /// A glitch is defined as a short pulse that does not meet the minimum duration requirement.
+    /// Reduced-carrier pulses shorter than <see cref="MinPulseMicros"/> that were dropped.
     /// </summary>
     public long GlitchesDropped { get; private set; }
 
     /// <summary>
-    /// Gets the number of gaps that were bridged during pulse measurement.
+    /// Full-carrier gaps shorter than <see cref="MinPulseMicros"/> that were bridged.
     /// </summary>
     public long GapsBridged { get; private set; }
 
     /// <summary>
-    /// Gets the number of edges that were unpaired during pulse measurement.
-    /// An unpaired edge is one that does not have a corresponding edge to form a complete
-    /// pulse, which may occur due to signal noise or other anomalies.
+    /// Edges with the same level as the edge before
+    /// Causes: An edge the firmware lost (# dropped), and an edge pair the firmware merged into one line.
     /// </summary>
     public long UnpairedEdges { get; private set; }
 
@@ -48,6 +47,14 @@ public sealed class PulseMeasurement : IStage<Edge, Pulse>
     /// </returns>
     public IEnumerable<Pulse> Push(Edge input)
     {
+        if (input.Level == _lastLevel)
+        {
+            UnpairedEdges++;
+            return [];
+        }
+
+        _lastLevel = input.Level;
+
         if (input.Level == ReducedCarrierLevel)
         {
             if (_pendingPulse is null)
