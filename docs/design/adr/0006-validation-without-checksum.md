@@ -55,4 +55,6 @@ Rejected frames are reported with their reason so the UI can show accepted and r
 
 ### Risks
 - Consistency across minute, hour, day, and year rollovers must use real time arithmetic, not field-by-field comparison.
-- A leap second (23:59:60 UTC on June 30 or December 31) makes the next frame arrive 61 seconds later. Mitigation: when the leap-second-pending flag is set, allow the one-second slip at the month boundary.
+- A leap second (23:59:60 UTC on June 30 or December 31) makes the next frame arrive 61 seconds later. The decoder loses sync and recovers by itself about two minutes later.
+
+*Amended 2026-11-06 (end of Step 6):* the original mitigation allowed the one-second slip when the leap-second-pending flag was set. It is removed because that slip can never reach validation. Frame sync has no leap-second case, so it loses sync on the extra marker, and the next frame starts 121 seconds after the last accepted one, which skips the consistency check. Handling a leap second is also not worth the code: the last one was at the end of 2016, none will be inserted at the end of December 2026, and in 2022 the CGPM resolved to end them by 2035.
