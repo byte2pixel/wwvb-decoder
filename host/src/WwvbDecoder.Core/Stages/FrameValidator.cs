@@ -5,6 +5,12 @@ namespace WwvbDecoder.Core;
 /// </summary>
 public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
 {
+    private const ulong MaxComparableGapMicros = 90_000_000;
+    private const ulong FrameGapMicros = 60_000_000;
+    private const ulong FrameGapToleranceMicros = 50_000;
+
+    private DecodedFrame? _previousFrame;
+
     /// <summary>
     /// Validates a decoded frame and returns the validation results.
     /// </summary>
@@ -149,7 +155,45 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
             );
         }
 
-        return [new ValidationResult(input, failures.Count == 0, [.. failures])];
+        // Consecutive check. Skipped when there is no previous accepted frame, when it started
+        // more than 90 s before this one (a decreasing StartMicros wraps to a huge gap, so it
+        // is skipped too), or when a failed check means this frame's time cannot be built.
+        bool timeCanBeBuilt = !failures.Exists(failure =>
+            failure.Check
+                is ValidationCheck.BcdDigits
+                    or ValidationCheck.MinuteRange
+                    or ValidationCheck.HourRange
+                    or ValidationCheck.DayOfYearRange
+        );
+        if (_previousFrame is not null && timeCanBeBuilt)
+        {
+            ulong gap = input.Frame.StartMicros - _previousFrame.Frame.StartMicros;
+            if (gap <= MaxComparableGapMicros)
+            {
+                DateTime expected = FrameTime(_previousFrame).AddMinutes(1);
+                DateTime actual = FrameTime(input);
+                bool gapInRange =
+                    gap >= FrameGapMicros - FrameGapToleranceMicros
+                    && gap <= FrameGapMicros + FrameGapToleranceMicros;
+                if (actual != expected || !gapInRange)
+                {
+                    failures.Add(
+                        new ValidationFailure(
+                            ValidationCheck.Consecutive,
+                            $"expected {expected:yyyy-MM-ddTHH:mm}Z, got {actual:yyyy-MM-ddTHH:mm}Z, {gap} us after the previous frame"
+                        )
+                    );
+                }
+            }
+        }
+
+        bool accepted = failures.Count == 0;
+        if (accepted)
+        {
+            _previousFrame = input;
+        }
+
+        return [new ValidationResult(input, accepted, [.. failures])];
     }
 
     /// <summary>
@@ -157,8 +201,14 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
     /// </summary>
     public void Reset()
     {
-        // TODO: add the reset logic once the previous frame is stored.
+        _previousFrame = null;
     }
+
+    // Real date arithmetic carries minute, hour, day, and year rollovers.
+    private static DateTime FrameTime(DecodedFrame frame) =>
+        new DateTime(2000 + frame.Year, 1, 1, frame.Hour, frame.Minute, 0, DateTimeKind.Utc).AddDays(
+            frame.DayOfYear - 1
+        );
 
     private static int SumBits(IEnumerable<LayoutBit> bits, Frame frame)
     {

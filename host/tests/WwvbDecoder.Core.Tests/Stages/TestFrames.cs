@@ -16,7 +16,7 @@ internal static class TestFrames
     public static Frame Change(Frame frame, string changes)
     {
         ImmutableArray<SymbolKind> symbols = frame.Symbols;
-        foreach (string change in changes.Split(' '))
+        foreach (string change in changes.Split(' ', StringSplitOptions.RemoveEmptyEntries))
         {
             string[] parts = change.Split(':');
             SymbolKind kind = parts[1] switch
