@@ -57,7 +57,7 @@ On the day DST starts, second 57 changes to 1 at 00:00 UTC and second 58 follows
 - **Options.** Options are init-only properties with the defaults given here. Three options change while running: `PulseMeasurement.ReducedCarrierLevel`, `SyntheticEdgeSource.Speed` and `.Noise`, and `ReplayEdgeSource.Speed`. They are written from the UI thread and read on the pump thread, so they use a `volatile` field (`ReducedCarrierLevel`) or `Volatile.Read` and `Volatile.Write` (the `double` options, which cannot be `volatile`).
 - **Counters.** Stage counters are `long` properties, written on the pump thread. Read them on the pump thread, for example in a pipeline event handler.
 - **Immutability.** Outputs are records. Collections in outputs are `ImmutableArray<T>`. `ImmutableArray<T>` compares by reference, so two records holding equal arrays are not `Equals`. Tests compare arrays with `SequenceEqual`.
-- **Display strings.** `FrameSyncEvent.SyncLost.Reason` and `ValidationFailure.Detail` are for people. Tests assert the event case or the `ValidationCheck`, and at most the reason's first word.
+- **Display strings.** `FrameSyncEvent.SyncLost.Reason` and `ValidationFailure.Detail` are for people. Tests assert the event case or the `ValidationCheck`, and at most the first word of `Detail`. `SyncLost.Reason` is the exception: its formats under stage 4 are exact, and tests pin them.
 - **Arguments.** Public members check their arguments (`ArgumentNullException.ThrowIfNull`, `ArgumentOutOfRangeException`). Every async method takes a `CancellationToken`.
 
 ## Edges and sources
@@ -201,7 +201,7 @@ public sealed class FrameSync : IStage<Symbol, FrameSyncEvent>
 }
 ```
 
-**Gap.** For every symbol after the first since construction or `Reset()`, the gap is its `StartMicros` minus the previous symbol's `StartMicros`. A gap is in range when it is 500_000 to 1_500_000 µs inclusive.
+**Gap.** For every symbol after the first since construction or `Reset()`, the gap is its `StartMicros` minus the previous symbol's `StartMicros`. A gap is in range when it is 500_000 to 1_500_000 µs inclusive. If `StartMicros` decreases without a `Reset()`, the `ulong` subtraction wraps to a huge gap, which is out of range like any other, and the stage does not throw.
 
 **Searching** (the initial state). The stage counts consecutive markers, `n`:
 
