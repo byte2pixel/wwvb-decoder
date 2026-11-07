@@ -53,7 +53,7 @@ public enum ValidationCheck
 
     /// <summary>
     /// The frame's time isn't exactly one minute after the last accepted frame,
-    /// or the start times aren't 60 s ± 50 ms apart (61 s across a leap second).
+    /// or the start times aren't 60 s ± 50 ms apart.
     /// Skipped when there's no previous frame within 90 s.
     /// </summary>
     Consecutive,

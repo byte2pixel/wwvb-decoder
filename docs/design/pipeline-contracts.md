@@ -298,8 +298,9 @@ UT1 tenths are checked by `Ut1Range` only, because UT1 is not one of the BCD fie
 
 - **Skipped**, which is not a failure, when there is no `prev`; when `prev` started more than 90 s before this frame (`StartMicros` difference above 90_000_000); or when `BcdDigits`, `MinuteRange`, `HourRange`, or `DayOfYearRange` failed, because then the time cannot be built.
 - **Passes** when this frame's time is exactly one minute after `prev`'s, and the `StartMicros` difference is 60_000_000 ± 50_000.
-- **Leap second.** When `prev.LeapSecondPending` is set and this frame's time is 00:00 on the first day of a month, a `StartMicros` difference of 61_000_000 ± 50_000 also passes.
 - **Fails** otherwise.
+
+A leap second gets no special handling, and `LeapSecondPending` plays no part in this check. `FrameSync` loses sync on the extra marker, so the next frame starts 121 s after `prev` and `Consecutive` is skipped.
 
 State: the last accepted `DecodedFrame`, replaced only when a frame is accepted. `Reset()` forgets it; after a source reset, timestamps from before are not comparable.
 
