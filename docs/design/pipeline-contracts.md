@@ -25,7 +25,7 @@ Sources, in order of authority:
 
 **Frames.** One frame is 60 symbols, one per second, starting at second 0 of a minute. The frame starts with two consecutive markers: second 59 of the previous frame (P0) and second 0 of this one (Pr). The leading edge of the second-0 marker is the frame's on-time point.
 
-**Minute in progress.** A frame encodes the UTC time at its own second 0: the minute that has just started. A receiver has the whole frame only at the end of second 59, about 59.8 s after the instant it describes. `WwvbClock` corrects for this (stage 7).
+**Minute in progress.** A frame encodes the UTC time at its own second 0: the minute that has just started. The second-59 pulse ends about 59.8 s after that instant, but stage 2 releases a pulse only at the next entering edge, so the host has the whole frame 60 s after the instant it describes, at the next frame's on-time point. `WwvbClock` corrects for this (stage 7).
 
 ### Frame layout
 
@@ -277,7 +277,7 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
 }
 ```
 
-One `ValidationResult` per frame. Every check runs, in `ValidationCheck` order, and every failure is reported in that order. `Accepted` is true when `Failures` is empty. `Failures[0]` is the headline the UI shows.
+One `ValidationResult` per frame. Every check runs, in `ValidationCheck` order, and every failure is reported in that order. A check reports at most one failure, however many offenders it finds: its `Detail` names the first one, except `ErrorSymbols`, which lists every second. `Accepted` is true when `Failures` is empty. `Failures[0]` is the headline the UI shows.
 
 | Check | Fails when | Example `Detail` |
 | --- | --- | --- |
@@ -343,7 +343,7 @@ On an accepted frame:
 
 - `FrameUtc` is the validator's frame time as a `DateTimeOffset` with offset zero.
 - `FrameStartMicros` and `FrameEndMicros` come from the frame.
-- `OffsetFromPc = (FrameUtc + TimeSpan.FromMicroseconds(FrameEndMicros - FrameStartMicros)) - timeProvider.GetUtcNow()`, taken during `Push`. The frame completes about 59.8 s after the instant it encodes, and the first term moves `FrameUtc` to that moment.
+- `OffsetFromPc = (FrameUtc + TimeSpan.FromSeconds(60)) - timeProvider.GetUtcNow()`, taken during `Push`. The push happens when the entering edge of the next frame's second 0 releases the second-59 pulse from stage 2, 60 s after the instant the frame encodes, and the first term moves `FrameUtc` to that moment. If that edge is lost, the next entering edge releases the pulse instead, and the offset reads 1 s low until the next accepted frame.
 
 On a rejected frame these four values stay as they were, so `Holding` keeps showing the last good time. Local time is derived in the UI from `Dst`.
 
