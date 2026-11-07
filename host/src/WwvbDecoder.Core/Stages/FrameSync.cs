@@ -23,9 +23,55 @@ public sealed class FrameSync : IStage<Symbol, FrameSyncEvent>
     {
         ulong gapMicros = _lastMicros is null ? 0 : input.StartMicros - _lastMicros.Value;
         _lastMicros = input.StartMicros;
+        int expected = _symbols.Count;
 
         if (_synced)
         {
+            if (!IsGapValid(gapMicros))
+            {
+                _synced = false;
+                _markerCount = 0;
+                _symbols.Clear();
+                if (input.Kind == SymbolKind.Marker)
+                {
+                    _markerCount = 1;
+                }
+                return
+                [
+                    new FrameSyncEvent.SyncLost(
+                        $"gap {gapMicros / 1000} ms before second {expected}"
+                    ),
+                    new FrameSyncEvent.Searching(_markerCount),
+                ];
+            }
+
+            bool isMarkerExpected = WwvbFrameLayout.MarkerSeconds.Contains(_symbols.Count);
+            if (input.Kind is SymbolKind.One or SymbolKind.Zero && isMarkerExpected)
+            {
+                _synced = false;
+                _markerCount = 0;
+                _symbols.Clear();
+                return
+                [
+                    new FrameSyncEvent.SyncLost(
+                        $"expected marker at second {expected}, got {input.Kind}"
+                    ),
+                    new FrameSyncEvent.Searching(0),
+                ];
+            }
+
+            if (input.Kind is SymbolKind.Marker && !isMarkerExpected)
+            {
+                _synced = false;
+                _markerCount = 1;
+                _symbols.Clear();
+                return
+                [
+                    new FrameSyncEvent.SyncLost($"expected bit at second {expected}, got Marker"),
+                    new FrameSyncEvent.Searching(_markerCount),
+                ];
+            }
+
             switch (_symbols.Count)
             {
                 case 0:
@@ -69,7 +115,7 @@ public sealed class FrameSync : IStage<Symbol, FrameSyncEvent>
             _markerCount = 0;
             return [new FrameSyncEvent.Searching(_markerCount)];
         }
-        if (_markerCount > 0 && IsMarkerGapValid(gapMicros))
+        if (_markerCount > 0 && IsGapValid(gapMicros))
         {
             _markerCount++;
             _synced = true;
@@ -93,6 +139,5 @@ public sealed class FrameSync : IStage<Symbol, FrameSyncEvent>
         _symbols.Clear();
     }
 
-    private static bool IsMarkerGapValid(ulong gapMicros) =>
-        gapMicros is >= 500_000 and <= 1_500_000;
+    private static bool IsGapValid(ulong gapMicros) => gapMicros is >= 500_000 and <= 1_500_000;
 }
