@@ -684,6 +684,77 @@ public class FrameSyncTests
         events[0].ShouldBe(new FrameSyncEvent.SyncLost(reason));
     }
 
+    [Fact]
+    public void Reset_ForgetsTheCandidateMarker()
+    {
+        // Arrange
+        FrameSync stage = new();
+        _ = stage.Push(M(Second * 10));
+
+        // Act
+        stage.Reset();
+        var events = stage.Push(M(Second * 11));
+
+        // Assert
+        events.ShouldBe([new FrameSyncEvent.Searching(1)]);
+    }
+
+    [Fact]
+    public void Reset_MidFrame_ReturnsToSearchingWithoutSyncLost()
+    {
+        // Arrange
+        FrameSync stage = new();
+        var next = FillTo(stage, 5);
+
+        // Act
+        stage.Reset();
+        var events = PushAll(stage, Z(next), M(next + Second));
+
+        // Assert
+        events.ShouldBe([new FrameSyncEvent.Searching(0), new FrameSyncEvent.Searching(1)]);
+    }
+
+    [Fact]
+    public void Reset_AfterFrameComplete_ReturnsToSearching()
+    {
+        // Arrange
+        FrameSync stage = new();
+        Frame frame = Encoded(Second * 100, 30);
+        _ = PushAll(stage, [SymbolStream.LeadIn(frame), .. SymbolStream.Of(frame)]);
+
+        // Act
+        stage.Reset();
+        var events = stage.Push(M(Second * 160));
+
+        // Assert
+        events.ShouldBe([new FrameSyncEvent.Searching(1)]);
+    }
+
+    [Fact]
+    public void Reset_ThenSmallerTimestamps_DecodesAFreshFrame()
+    {
+        // Arrange
+        FrameSync stage = new();
+        _ = FillTo(stage, 5);
+        Frame fresh = Encoded(Second * 2, 31);
+
+        // Act
+        stage.Reset();
+        List<FrameSyncEvent> events =
+        [
+            .. PushAll(stage, [SymbolStream.LeadIn(fresh), .. SymbolStream.Of(fresh)]),
+        ];
+
+        // Assert
+        events.OfType<FrameSyncEvent.SyncLost>().ShouldBeEmpty();
+        Frame completed = events
+            .OfType<FrameSyncEvent.FrameComplete>()
+            .ShouldHaveSingleItem()
+            .Frame;
+        completed.StartMicros.ShouldBe(Second * 2);
+        completed.Symbols.SequenceEqual(fresh.Symbols).ShouldBeTrue();
+    }
+
     private static Symbol M(ulong startMicros) => new(startMicros, 0, SymbolKind.Marker);
 
     private static Symbol Z(ulong startMicros) => new(startMicros, 0, SymbolKind.Zero);
