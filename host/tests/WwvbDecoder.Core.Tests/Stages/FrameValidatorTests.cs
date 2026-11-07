@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace WwvbDecoder.Core.Tests;
 
 public class FrameValidatorTests
@@ -31,6 +33,11 @@ public class FrameValidatorTests
         act.ShouldThrow<ArgumentNullException>();
     }
 
+    [SuppressMessage(
+        "csharpsquid",
+        "S107:Methods should not have too many parameters",
+        Justification = "Parameterized test."
+    )]
     [Theory]
     [InlineData(2026, 12, 31, 23, 59, Ut1Sign.Plus, 0, false, DstStatus.Standard)]
     [InlineData(2028, 12, 31, 23, 59, Ut1Sign.Plus, 0, false, DstStatus.Standard)]
