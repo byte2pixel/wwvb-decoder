@@ -389,7 +389,7 @@ Rules:
 
 - Events fire synchronously on the pump thread, the thread running the enumeration. Handlers must be quick and must not push into the pipeline. The WebView2 bridge marshals to its own thread.
 - An exception from a stage or a handler stops the run, and the returned `Task` faults with it. Cancellation ends the run as a cancelled `Task`. The pipeline never disposes the source; its owner does.
-- One run at a time: calling `RunAsync` while a run is in progress throws `InvalidOperationException`. Switching sources means cancelling the run and starting a new one. The new source's first event, a `Reset`, clears the stages.
+- One run at a time: calling `RunAsync` while a run is in progress throws `InvalidOperationException`. A null `source` throws `ArgumentNullException`. Both are caller mistakes, so `RunAsync` throws them synchronously, before a `Task` is returned, and a rejected second call leaves the first run going. Switching sources means cancelling the run and starting a new one. The new source's first event, a `Reset`, clears the stages.
 - Stage options are reached through the stage properties. Only `PulseMeasurement.ReducedCarrierLevel` is set after construction; the init-only options keep their defaults inside the pipeline.
 
 ## Frame layout and encoder
