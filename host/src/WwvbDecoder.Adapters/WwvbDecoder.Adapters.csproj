@@ -10,4 +10,8 @@
   <ItemGroup>
     <ProjectReference Include="..\WwvbDecoder.Core\WwvbDecoder.Core.csproj" />
   </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="WwvbDecoder.Core" />
+  </ItemGroup>
 </Project>

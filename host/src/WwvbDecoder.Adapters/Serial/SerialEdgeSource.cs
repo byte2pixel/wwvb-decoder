@@ -1,6 +1,5 @@
 using System.IO.Ports;
 using System.Runtime.CompilerServices;
-using WwvbDecoder.Core;
 
 namespace WwvbDecoder.Adapters;
 
