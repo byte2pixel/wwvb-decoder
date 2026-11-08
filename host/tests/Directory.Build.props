@@ -9,5 +9,6 @@
     <PackageReference Include="Shouldly" />
     <Using Include="Xunit" />
     <Using Include="Shouldly" />
+    <Using Include="WwvbDecoder.Core" />
   </ItemGroup>
 </Project>
