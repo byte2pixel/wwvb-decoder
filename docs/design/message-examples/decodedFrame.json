@@ -1,0 +1,28 @@
+{
+  "type": "decodedFrame",
+  "seq": 46,
+  "payload": {
+    "frame": {
+      "startMicros": 1000000,
+      "endMicros": 60800000,
+      "symbols": [
+        "marker", "zero", "one", "one", "zero", "zero", "zero", "zero", "zero", "marker",
+        "zero", "zero", "zero", "one", "zero", "one", "zero", "zero", "one", "marker",
+        "zero", "zero", "one", "one", "zero", "zero", "one", "zero", "zero", "marker",
+        "zero", "one", "zero", "zero", "zero", "zero", "one", "zero", "one", "marker",
+        "zero", "zero", "zero", "zero", "zero", "zero", "zero", "one", "zero", "marker",
+        "zero", "one", "one", "zero", "zero", "zero", "zero", "zero", "zero", "marker"
+      ]
+    },
+    "minute": 30,
+    "hour": 19,
+    "dayOfYear": 344,
+    "year": 26,
+    "ut1Sign": "plus",
+    "ut1Tenths": 0,
+    "leapYear": false,
+    "leapSecondPending": false,
+    "dst": "standard",
+    "errorSeconds": []
+  }
+}

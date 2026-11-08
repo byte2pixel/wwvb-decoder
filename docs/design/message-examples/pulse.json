@@ -1,0 +1,5 @@
+{
+  "type": "pulse",
+  "seq": 43,
+  "payload": { "startMicros": 12000000, "durationMicros": 200412, "endMicros": 12200412 }
+}

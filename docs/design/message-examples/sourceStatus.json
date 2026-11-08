@@ -1,0 +1,10 @@
+{
+  "type": "sourceStatus",
+  "seq": 3,
+  "payload": {
+    "source": "serial",
+    "name": "serial COM5",
+    "state": "running",
+    "detail": "# wwvb-edge-logger 0.1.0 pin=2"
+  }
+}
