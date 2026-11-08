@@ -1,0 +1,5 @@
+{
+  "type": "symbol",
+  "seq": 44,
+  "payload": { "startMicros": 12000000, "durationMicros": 200412, "kind": "zero" }
+}

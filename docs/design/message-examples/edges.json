@@ -1,0 +1,11 @@
+{
+  "type": "edges",
+  "seq": 42,
+  "payload": {
+    "items": [
+      { "micros": 12000000, "level": "high" },
+      { "micros": 12200412, "level": "low" },
+      { "micros": 13000003, "level": "high" }
+    ]
+  }
+}

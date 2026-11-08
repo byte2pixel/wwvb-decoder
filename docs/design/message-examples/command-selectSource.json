@@ -1,0 +1,1 @@
+{ "command": "selectSource", "source": "serial", "port": "COM5" }

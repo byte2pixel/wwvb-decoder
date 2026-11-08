@@ -1,0 +1,13 @@
+{
+  "type": "clock",
+  "seq": 48,
+  "payload": {
+    "status": "locked",
+    "frameUtc": "2026-12-10T19:30:00Z",
+    "frameStartMicros": 1000000,
+    "frameEndMicros": 60800000,
+    "offsetFromPcMs": 37,
+    "consecutiveAccepted": 3,
+    "rejectedSinceLastAccepted": 0
+  }
+}

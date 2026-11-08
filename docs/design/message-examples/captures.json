@@ -1,0 +1,9 @@
+{
+  "type": "captures",
+  "seq": 5,
+  "payload": {
+    "items": [
+      { "path": "captures/2026-11-02T0310Z-home-west-window.edges.txt", "recorded": "2026-11-02T03:10:27Z", "minutes": 487.5 }
+    ]
+  }
+}

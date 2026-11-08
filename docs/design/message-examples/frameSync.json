@@ -1,0 +1,5 @@
+{
+  "type": "frameSync",
+  "seq": 45,
+  "payload": { "kind": "slotFilled", "frameStartMicros": 100000000, "second": 1, "symbol": "zero" }
+}

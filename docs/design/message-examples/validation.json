@@ -1,0 +1,34 @@
+{
+  "type": "validation",
+  "seq": 47,
+  "payload": {
+    "frame": {
+      "frame": {
+        "startMicros": 61000000,
+        "endMicros": 120800000,
+        "symbols": [
+          "marker", "zero", "one", "one", "zero", "zero", "one", "zero", "one", "marker",
+          "zero", "zero", "zero", "one", "zero", "one", "zero", "zero", "one", "marker",
+          "zero", "zero", "one", "one", "zero", "zero", "one", "zero", "zero", "marker",
+          "zero", "one", "zero", "zero", "zero", "zero", "one", "zero", "one", "marker",
+          "zero", "zero", "zero", "zero", "zero", "zero", "zero", "one", "zero", "marker",
+          "zero", "one", "one", "zero", "zero", "zero", "zero", "zero", "zero", "marker"
+        ]
+      },
+      "minute": 35,
+      "hour": 19,
+      "dayOfYear": 344,
+      "year": 26,
+      "ut1Sign": "plus",
+      "ut1Tenths": 0,
+      "leapYear": false,
+      "leapSecondPending": false,
+      "dst": "standard",
+      "errorSeconds": []
+    },
+    "accepted": false,
+    "failures": [
+      { "check": "consecutive", "detail": "expected 2026-12-10T19:31Z, got 2026-12-10T19:35Z" }
+    ]
+  }
+}
