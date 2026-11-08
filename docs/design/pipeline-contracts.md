@@ -290,7 +290,7 @@ One `ValidationResult` per frame. Every check runs, in `ValidationCheck` order, 
 | `DayOfYearRange` | `DayOfYear` is 0 or above 366, or 366 without `LeapYear` | `day 366 without the leap-year flag` |
 | `Ut1Sign` | `Ut1Sign` is `Invalid` | `sign bits 1 1 1` |
 | `Ut1Range` | `Ut1Tenths > 9` | `UT1 correction 1.0 s` |
-| `Consecutive` | See below | `expected 2026-12-10T19:31Z, got 2026-12-10T19:35Z` |
+| `Consecutive` | See below | `expected 2026-12-10T19:31Z, got 2026-12-10T19:35Z`, or when only the start time is off, `started 61.000 s after the previous frame` |
 
 UT1 tenths are checked by `Ut1Range` only, because UT1 is not one of the BCD fields.
 

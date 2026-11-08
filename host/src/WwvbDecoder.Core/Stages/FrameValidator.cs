@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace WwvbDecoder.Core;
 
 /// <summary>
@@ -35,10 +37,7 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
                 case (SecondRole.Marker, _):
                 case (_, SymbolKind.Marker):
                     failures.Add(
-                        new ValidationFailure(
-                            ValidationCheck.Markers,
-                            $"Expected {role} but got {kind} at second {second}."
-                        )
+                        new ValidationFailure(ValidationCheck.Markers, $"second {second} is {kind}")
                     );
                     failureAdded = true;
                     break;
@@ -55,10 +54,11 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
             .ToArray();
         if (unusedBitsWithErrors.Length > 0)
         {
+            int second = unusedBitsWithErrors[0];
             failures.Add(
                 new ValidationFailure(
                     ValidationCheck.UnusedBits,
-                    $"Second {unusedBitsWithErrors[0]} should be zero"
+                    $"second {second} is {input.Frame.Symbols[second]}"
                 )
             );
         }
@@ -66,12 +66,9 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
         // ErrorSymbols checks
         if (!input.ErrorSeconds.IsEmpty)
         {
-            var errorSeconds = string.Join(',', input.ErrorSeconds);
+            var errorSeconds = string.Join(", ", input.ErrorSeconds);
             failures.Add(
-                new ValidationFailure(
-                    ValidationCheck.ErrorSymbols,
-                    $"Error symbols at seconds {errorSeconds}."
-                )
+                new ValidationFailure(ValidationCheck.ErrorSymbols, $"Error at seconds {errorSeconds}")
             );
         }
 
@@ -86,7 +83,7 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
             failures.Add(
                 new ValidationFailure(
                     ValidationCheck.BcdDigits,
-                    $"BCD digit {badDigit.digit.Field} has value {badDigit.value} which exceeds maximum of 9."
+                    $"{DigitName(badDigit.digit)} digit is {badDigit.value}"
                 )
             );
         }
@@ -94,47 +91,27 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
         // Range checks
         if (input.Minute > 59)
         {
-            failures.Add(
-                new ValidationFailure(
-                    ValidationCheck.MinuteRange,
-                    $"Minute value {input.Minute} exceeds maximum of 59."
-                )
-            );
+            failures.Add(new ValidationFailure(ValidationCheck.MinuteRange, $"minute {input.Minute}"));
         }
 
         if (input.Hour > 23)
         {
-            failures.Add(
-                new ValidationFailure(
-                    ValidationCheck.HourRange,
-                    $"Hour value {input.Hour} exceeds maximum of 23."
-                )
-            );
+            failures.Add(new ValidationFailure(ValidationCheck.HourRange, $"hour {input.Hour}"));
         }
 
         switch (input.DayOfYear, input.LeapYear)
         {
             case (0, _):
+            case (> 366, _):
                 failures.Add(
-                    new ValidationFailure(
-                        ValidationCheck.DayOfYearRange,
-                        "Day of year value cannot be zero."
-                    )
+                    new ValidationFailure(ValidationCheck.DayOfYearRange, $"day {input.DayOfYear}")
                 );
                 break;
-            case (> 366, true):
+            case (366, false):
                 failures.Add(
                     new ValidationFailure(
                         ValidationCheck.DayOfYearRange,
-                        $"Day of year value {input.DayOfYear} is out of range for a leap year."
-                    )
-                );
-                break;
-            case (> 365, false):
-                failures.Add(
-                    new ValidationFailure(
-                        ValidationCheck.DayOfYearRange,
-                        $"Day of year value {input.DayOfYear} is out of range for non-leap year."
+                        "day 366 without the leap-year flag"
                     )
                 );
                 break;
@@ -142,15 +119,20 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
 
         if (input.Ut1Sign == Ut1Sign.Invalid)
         {
-            failures.Add(new ValidationFailure(ValidationCheck.Ut1Sign, "UT1 sign is invalid."));
+            var signBits = string.Join(
+                ' ',
+                WwvbFrameLayout.Ut1SignSeconds.Select(second => BitText(input.Frame.Symbols[second]))
+            );
+            failures.Add(new ValidationFailure(ValidationCheck.Ut1Sign, $"sign bits {signBits}"));
         }
 
         if (input.Ut1Tenths > 9)
         {
+            // Integer arithmetic keeps the text the same in every culture.
             failures.Add(
                 new ValidationFailure(
                     ValidationCheck.Ut1Range,
-                    $"UT1 tenths value {input.Ut1Tenths} exceeds maximum of 9."
+                    $"UT1 correction {input.Ut1Tenths / 10}.{input.Ut1Tenths % 10} s"
                 )
             );
         }
@@ -175,12 +157,25 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
                 bool gapInRange =
                     gap >= FrameGapMicros - FrameGapToleranceMicros
                     && gap <= FrameGapMicros + FrameGapToleranceMicros;
-                if (actual != expected || !gapInRange)
+                if (actual != expected)
+                {
+                    // ':' in a custom format is the culture's time separator, so pin the culture.
+                    failures.Add(
+                        new ValidationFailure(
+                            ValidationCheck.Consecutive,
+                            string.Create(
+                                CultureInfo.InvariantCulture,
+                                $"expected {expected:yyyy-MM-ddTHH:mm}Z, got {actual:yyyy-MM-ddTHH:mm}Z"
+                            )
+                        )
+                    );
+                }
+                else if (!gapInRange)
                 {
                     failures.Add(
                         new ValidationFailure(
                             ValidationCheck.Consecutive,
-                            $"expected {expected:yyyy-MM-ddTHH:mm}Z, got {actual:yyyy-MM-ddTHH:mm}Z, {gap} us after the previous frame"
+                            $"started {gap / 1_000_000}.{gap % 1_000_000 / 1_000:000} s after the previous frame"
                         )
                     );
                 }
@@ -210,6 +205,34 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
         new DateTime(2000 + frame.Year, 1, 1, frame.Hour, frame.Minute, 0, DateTimeKind.Utc).AddDays(
             frame.DayOfYear - 1
         );
+
+    // "minute units", "day of year hundreds", and so on.
+    private static string DigitName(BcdDigit digit)
+    {
+        string field = digit.Field switch
+        {
+            SecondRole.Minute => "minute",
+            SecondRole.Hour => "hour",
+            SecondRole.DayOfYear => "day of year",
+            SecondRole.Year => "year",
+            _ => digit.Field.ToString(),
+        };
+        string place = digit.PlaceValue switch
+        {
+            100 => "hundreds",
+            10 => "tens",
+            _ => "units",
+        };
+        return $"{field} {place}";
+    }
+
+    private static string BitText(SymbolKind kind) =>
+        kind switch
+        {
+            SymbolKind.One => "1",
+            SymbolKind.Zero => "0",
+            _ => kind.ToString(),
+        };
 
     private static int SumBits(IEnumerable<LayoutBit> bits, Frame frame)
     {
