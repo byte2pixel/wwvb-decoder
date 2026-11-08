@@ -19,8 +19,8 @@ The decoder is seven small stages:
 | 3 | Symbol classification | Durations | 0, 1, marker, or error (thresholds near 0.35 s and 0.65 s) |
 | 4 | Frame sync | Symbols | 60-symbol frames aligned on the double marker at seconds 59 and 0 |
 | 5 | Field decode | Frames | Minute, hour, day of year, year, UT1, and flag fields |
-| 6 | Validation | Decoded fields | Accepted or rejected frame with a reason |
-| 7 | Clock | Accepted frames | UTC and local time, time since sync, offset from the PC clock |
+| 6 | Validation | Decoded fields | Accepted or rejected frame, with a reason for each failing check |
+| 7 | Clock | Validation results, accepted and rejected | UTC and local time, time since sync, offset from the PC clock |
 
 Each host stage is its own class with a typed input and a typed output. The visualizer is one more subscriber to each stage output; stages know nothing about the UI.
 
@@ -57,3 +57,5 @@ Each host stage is its own class with a typed input and a typed output. The visu
 ### Risks
 - A boundary is drawn in the wrong place, such as glitch filtering landing in symbol classification instead of pulse measurement. Mitigation: stages are small, so moving a responsibility is cheap.
 - C# output types and TypeScript message types drift. Mitigation: one message type per stage, defined once and checked by tests on both sides.
+
+*Amended 2026-11-07 (Step 7):* stage 7's input was "Accepted frames". The clock takes every validation result, because a rejected frame is what moves a locked clock to holding. Stage 6 reports a reason for each failing check, not a single reason (ADR-0006).
