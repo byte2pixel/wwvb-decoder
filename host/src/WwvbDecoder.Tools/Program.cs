@@ -1,55 +1,75 @@
 const string defaultFolder = "captures";
 const string defaultLabel = "capture";
 
-// parse args
-if (args is ["-h"] or ["--help"] or ["help"] or [])
-{
-    Console.WriteLine("Usage: WwvbDecoder.Tools <command>");
-    Console.WriteLine("  ports                                           List available serial ports.");
-    Console.WriteLine("  record --port COM5 [--label desk] [--out <file>]  Record the edge logger to a capture file.");
-    return 0;
-}
+string label = defaultLabel;
+string? outFile = null;
 
-if (args is ["ports"])
+switch (args)
 {
-    var ports = SerialPorts.ListPortNames();
-    Console.WriteLine("Available serial ports:");
-    foreach (var port in ports)
+    // parse args
+    case ["-h"] or ["--help"] or ["help"] or []:
+        Console.WriteLine("Usage: WwvbDecoder.Tools <command>");
+        Console.WriteLine(
+            "  ports                                           List available serial ports."
+        );
+        Console.WriteLine(
+            "  record --port COM5 [--label desk] [--out <file>]  Record the edge logger to a capture file."
+        );
+        return 0;
+    case ["ports"]:
     {
-        Console.WriteLine($"  {port}");
+        var ports = SerialPorts.ListPortNames();
+        Console.WriteLine("Available serial ports:");
+        foreach (var port in ports)
+        {
+            Console.WriteLine($"  {port}");
+        }
+        return 0;
     }
-    return 0;
 }
 
 if (args is not ["record", "--port", _, ..])
 {
-    Console.Error.WriteLine("Invalid arguments. Use --help for usage information.");
+    await Console.Error.WriteLineAsync("Invalid arguments. Use --help for usage information.");
     return 1;
 }
 
 string portName = args[2];
-string label = defaultLabel;
-string? outFile = null;
-
-for (int i = 3; i < args.Length; i++)
+string[] options = args[3..];
+if (options.Length % 2 != 0)
 {
-    switch (args[i])
-    {
-        case "--label" when i + 1 < args.Length:
-            label = args[i + 1];
-            break;
-        case "--out" when i + 1 < args.Length:
-            outFile = args[i + 1];
-            break;
-        default:
-            Console.Error.WriteLine($"Unknown argument: {args[i]}");
-            return 1;
-    }
-
-    i++;
+    await Console.Error.WriteLineAsync($"Missing value for {options[^1]}");
+    return 1;
 }
 
+for (int i = 0; i < options.Length; i += 2)
+{
+    string value = options[i + 1];
+    switch (options[i])
+    {
+        case "--label":
+            label = value;
+            break;
+        case "--out":
+            outFile = value;
+            break;
+        default:
+            await Console.Error.WriteLineAsync($"Unknown argument: {options[i]}");
+            return 1;
+    }
+}
+
+using CancellationTokenSource cts = new();
+ConsoleCancelEventHandler onCancel = (_, e) =>
+{
+    e.Cancel = true; // let the loop end and the file close
+    cts.Cancel();
+};
+Console.CancelKeyPress += onCancel;
+
 long sampleCount = 0;
+bool fileCreated = false;
+
 try
 {
     outFile ??= Path.Combine(defaultFolder, CaptureFile.FileName(DateTimeOffset.UtcNow, label));
@@ -60,19 +80,13 @@ try
         Directory.CreateDirectory(directory);
     }
 
-    using var writer = CaptureFile.Create(outFile);
+    await using var writer = CaptureFile.Create(outFile);
+    fileCreated = true;
     var capture = new CaptureWriter(writer, TimeProvider.System);
     capture.WriteHeader(DateTimeOffset.UtcNow, $"serial {portName}, label {label}", null);
 
     await using var serialSource = new SerialEdgeSource(portName);
     serialSource.RawLineReceived += capture.WriteLine;
-
-    using CancellationTokenSource cts = new();
-    Console.CancelKeyPress += (_, e) =>
-    {
-        e.Cancel = true; // let the loop end and the file close
-        cts.Cancel();
-    };
 
     Console.WriteLine($"Recording {portName} to {outFile}");
     Console.WriteLine("Press Ctrl+C to stop recording.");
@@ -117,8 +131,10 @@ try
             DateTimeOffset now = DateTimeOffset.UtcNow;
             if (now >= nextStatus)
             {
-                Console.WriteLine(Status(now, sampleCount, resetCount, serialSource.MalformedLines, lastMicros));
-                writer.Flush();
+                Console.WriteLine(
+                    Status(now, sampleCount, resetCount, serialSource.MalformedLines, lastMicros)
+                );
+                await writer.FlushAsync(cts.Token);
                 nextStatus = NextMinute(now);
             }
         }
@@ -130,15 +146,28 @@ try
         Console.WriteLine("Stopped.");
     }
 
-    Console.WriteLine(Status(DateTimeOffset.UtcNow, sampleCount, resetCount, serialSource.MalformedLines, lastMicros));
+    Console.WriteLine(
+        Status(
+            DateTimeOffset.UtcNow,
+            sampleCount,
+            resetCount,
+            serialSource.MalformedLines,
+            lastMicros
+        )
+    );
     Console.WriteLine($"Wrote {outFile}");
     return 0;
 }
 catch (Exception ex)
-    when (ex is IOException or UnauthorizedAccessException or InvalidOperationException or ArgumentException)
+    when (ex
+            is IOException
+                or UnauthorizedAccessException
+                or InvalidOperationException
+                or ArgumentException
+    )
 {
-    Console.Error.WriteLine(ex.Message);
-    if (sampleCount == 0 && outFile is not null && File.Exists(outFile))
+    await Console.Error.WriteLineAsync(ex.Message);
+    if (sampleCount == 0 && outFile is not null && fileCreated)
     {
         // Nothing was recorded (the port never opened, for example): leave no header-only file behind.
         File.Delete(outFile);
@@ -146,14 +175,33 @@ catch (Exception ex)
 
     return 1;
 }
+finally
+{
+    Console.CancelKeyPress -= onCancel;
+}
 
-static string Clock() => DateTimeOffset.UtcNow.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+static string Clock() =>
+    DateTimeOffset.UtcNow.ToString("HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
 
-static string Status(DateTimeOffset now, long edges, long resets, long malformed, ulong? lastMicros) =>
+static string Status(
+    DateTimeOffset now,
+    long edges,
+    long resets,
+    long malformed,
+    ulong? lastMicros
+) =>
     string.Create(
         System.Globalization.CultureInfo.InvariantCulture,
         $"{now:HH:mm:ss}  edges {edges}  resets {resets}  malformed {malformed}  last {(lastMicros is { } m ? m.ToString(System.Globalization.CultureInfo.InvariantCulture) : "-")}"
     );
 
 static DateTimeOffset NextMinute(DateTimeOffset time) =>
-    new DateTimeOffset(time.Year, time.Month, time.Day, time.Hour, time.Minute, 0, TimeSpan.Zero).AddMinutes(1);
+    new DateTimeOffset(
+        time.Year,
+        time.Month,
+        time.Day,
+        time.Hour,
+        time.Minute,
+        0,
+        TimeSpan.Zero
+    ).AddMinutes(1);
