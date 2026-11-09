@@ -590,6 +590,8 @@ public static class SerialPorts
 
 `SerialEdgeSource` yields `Reset("open")` once the port is open. Then, for each line: it raises `RawLineReceived`, parses the line with `EdgeLineCodec`, counts and skips malformed lines, and applies the backwards-timestamp rule exactly as `ReplayEdgeSource` does. It stops when the reader returns end of stream or `ct` is cancelled. The recorder subscribes to `RawLineReceived`, because a capture keeps every raw line, malformed ones included, and the parsed events do not carry them.
 
+The port is opened when an enumeration of `ReadAsync` starts and closed when it ends, so each enumeration is a fresh DTR session. `DisposeAsync` also disposes a `TextReader` passed to the constructor. Lines are read with `ReadLineAsync`, which ends a line at `\n`, `\r`, or `\r\n`, so a carriage return never reaches `EdgeLineCodec` on the serial path. `CaptureFile.Open` splits on `\n` only and keeps a stray `\r`, so replay reports such a line as malformed.
+
 ```csharp
 public static class CaptureFile
 {
