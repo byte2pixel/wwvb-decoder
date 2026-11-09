@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.Time.Testing;
+using static WwvbDecoder.Core.Tests.EnumeratorHelpers;
 
 namespace WwvbDecoder.Core.Tests;
 
@@ -851,9 +852,6 @@ public class SyntheticEdgeSourceTests
         new(60_800_000, PinLevel.Low),
     ];
 
-    private static Task<bool> MoveAsync(IAsyncEnumerator<EdgeEvent> e) =>
-        e.MoveNextAsync().AsTask();
-
     /// <summary>
     /// Helper method to read a specified number of events from the synthetic edge source.
     /// </summary>
@@ -1001,15 +999,5 @@ public class SyntheticEdgeSourceTests
             yield return new Edge(pulseStart + duration, PinLevel.Low);
             pulseStart += 1_000_000;
         }
-    }
-
-    private static async Task<EdgeEvent> NextAsync(IAsyncEnumerator<EdgeEvent> e, Task<bool> move)
-    {
-        bool moved = await move.WaitAsync(
-            TimeSpan.FromSeconds(5),
-            TestContext.Current.CancellationToken
-        );
-        moved.ShouldBeTrue();
-        return e.Current;
     }
 }

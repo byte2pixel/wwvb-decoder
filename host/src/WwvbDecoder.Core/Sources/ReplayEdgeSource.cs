@@ -110,6 +110,7 @@ public sealed class ReplayEdgeSource : IEdgeSource
     {
         foreach (string line in _lines)
         {
+            double speed = Speed;
             ct.ThrowIfCancellationRequested();
             if (HeaderLines.Any(line.StartsWith))
             {
@@ -133,6 +134,16 @@ public sealed class ReplayEdgeSource : IEdgeSource
                         {
                             yield return new EdgeEvent.Reset("timestamp went backwards");
                         }
+                        else if (speed > 0.0 && _baseline.HasValue)
+                        {
+                            await Task.Delay(
+                                TimeSpan.FromMicroseconds(
+                                    (sample.Edge.Micros - _baseline.Value) / speed
+                                ),
+                                _timeProvider,
+                                ct
+                            );
+                        }
                         _baseline = sample.Edge.Micros;
                         break;
                     }
@@ -143,8 +154,6 @@ public sealed class ReplayEdgeSource : IEdgeSource
             }
 
             MalformedLines++;
-
-            await Task.Yield();
         }
     }
 
