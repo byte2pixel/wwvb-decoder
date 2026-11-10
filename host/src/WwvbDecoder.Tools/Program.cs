@@ -27,6 +27,19 @@ app.Configure(config =>
         .AddCommand<RecordCommand>("record")
         .WithDescription("Record edges from a serial port to a capture file.");
     config.AddCommand<PortsCommand>("ports").WithDescription("Lists all serial port ports.");
+    config.AddBranch(
+        "decode",
+        decode =>
+        {
+            decode.SetDescription("Decode edges from a capture file or serial port.");
+            decode
+                .AddCommand<DecodeCaptureCommand>("capture")
+                .WithDescription("Decode edges from a capture file.");
+            decode
+                .AddCommand<DecodePortCommand>("port")
+                .WithDescription("Decode edges from a serial port.");
+        }
+    );
     config.SetExceptionHandler(
         (ex, _) =>
         {

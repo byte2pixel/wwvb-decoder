@@ -7,7 +7,7 @@ C# / .NET 10 solution (`WwvbDecoder.slnx`).
 | `src/WwvbDecoder.Core` | Decoder pipeline. No UI or platform dependencies. |
 | `src/WwvbDecoder.Adapters` | The serial port (`SerialEdgeSource`, `SerialPorts`) and capture files on disk (`CaptureFile`, `CaptureWriter`). |
 | `src/WwvbDecoder.Host` | WPF app that hosts the React UI in WebView2 and wires Core to the adapters. |
-| `src/WwvbDecoder.Tools` | Console app: `ports` lists serial ports, `record` writes a capture file from the edge logger. |
+| `src/WwvbDecoder.Tools` | Console app on Spectre.Console.Cli, one class per command: `ports` lists serial ports, `record` writes a capture file from the edge logger, `decode` runs the pipeline on a capture or a live port and prints every stage's output. See [`captures/README.md`](../captures/README.md) for `record` and `decode`. |
 | `tests/WwvbDecoder.Core.Tests` | xUnit tests for Core. |
 | `tests/WwvbDecoder.Adapters.Tests` | xUnit tests for Adapters: the serial source over a `StringReader`, the capture writer on a `FakeTimeProvider`, capture files in a temp directory. |
 
