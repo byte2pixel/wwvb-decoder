@@ -1,9 +1,12 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/WwvbDecoder.Adapters/WwvbDecoder.Adapters.csproj" />
     <Project Path="src/WwvbDecoder.Core/WwvbDecoder.Core.csproj" />
     <Project Path="src/WwvbDecoder.Host/WwvbDecoder.Host.csproj" />
+    <Project Path="src/WwvbDecoder.Tools/WwvbDecoder.Tools.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/WwvbDecoder.Adapters.Tests/WwvbDecoder.Adapters.Tests.csproj" />
     <Project Path="tests/WwvbDecoder.Core.Tests/WwvbDecoder.Core.Tests.csproj" />
   </Folder>
 </Solution>

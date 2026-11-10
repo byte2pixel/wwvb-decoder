@@ -5,8 +5,11 @@ C# / .NET 10 solution (`WwvbDecoder.slnx`).
 | Project | Purpose |
 | --- | --- |
 | `src/WwvbDecoder.Core` | Decoder pipeline. No UI or platform dependencies. |
-| `src/WwvbDecoder.Host` | WPF app that hosts the React UI in WebView2 and owns the serial port. |
+| `src/WwvbDecoder.Adapters` | The serial port (`SerialEdgeSource`, `SerialPorts`) and capture files on disk (`CaptureFile`, `CaptureWriter`). |
+| `src/WwvbDecoder.Host` | WPF app that hosts the React UI in WebView2 and wires Core to the adapters. |
+| `src/WwvbDecoder.Tools` | Console app: `ports` lists serial ports, `record` writes a capture file from the edge logger. |
 | `tests/WwvbDecoder.Core.Tests` | xUnit tests for Core. |
+| `tests/WwvbDecoder.Adapters.Tests` | xUnit tests for Adapters: the serial source over a `StringReader`, the capture writer on a `FakeTimeProvider`, capture files in a temp directory. |
 
 ## Core layout
 
@@ -24,6 +27,8 @@ Every type in Core is in the namespace `WwvbDecoder.Core`, whichever folder it l
 ## Hexagonal rule
 
 Core does no I/O and references no I/O packages: no `System.IO.Ports`, no WebView2, no WPF. Code that touches the serial port or the file system belongs outside Core, behind a port such as `IEdgeSource`. PC time enters Core only through an injected `TimeProvider`.
+
+`WwvbDecoder.Adapters` is where that code lives: `System.IO.Ports` and the file system are referenced there and nowhere else. Every Adapters type is in the namespace `WwvbDecoder.Adapters`, whichever folder (`Serial/`, `Capture/`) it sits in.
 
 `SyntheticEdgeSource` is in Core because it only computes edges. It paces them on the injected `TimeProvider`.
 
