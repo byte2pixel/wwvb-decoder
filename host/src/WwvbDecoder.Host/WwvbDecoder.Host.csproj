@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="..\WwvbDecoder.Core\WwvbDecoder.Core.csproj" />
+    <ProjectReference Include="..\WwvbDecoder.Adapters\WwvbDecoder.Adapters.csproj" />
   </ItemGroup>
 
   <PropertyGroup>

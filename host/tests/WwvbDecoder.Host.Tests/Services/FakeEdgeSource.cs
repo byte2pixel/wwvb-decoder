@@ -2,11 +2,18 @@ using System.Runtime.CompilerServices;
 
 namespace WwvbDecoder.Host.Tests.Services;
 
-/// <summary>Resets, then faults, ends, or waits for cancellation. Records whether it was disposed.</summary>
+/// <summary>
+/// Resets, yields <see cref="Script"/>, then faults, ends, or waits for cancellation.
+/// Records whether it was disposed.
+/// </summary>
 internal sealed class FakeEdgeSource : IEdgeSource
 {
     public string Name => "fake";
     public bool Disposed { get; private set; }
+
+    /// <summary>Events yielded after the initial reset.</summary>
+    public IReadOnlyList<EdgeEvent> Script { get; init; } = [];
+
     public Exception? Fault { get; init; }
     public bool EndsAfterReset { get; init; }
 
@@ -15,6 +22,10 @@ internal sealed class FakeEdgeSource : IEdgeSource
     )
     {
         yield return new EdgeEvent.Reset("start");
+        foreach (EdgeEvent edgeEvent in Script)
+        {
+            yield return edgeEvent;
+        }
         if (Fault is not null)
         {
             throw Fault;
