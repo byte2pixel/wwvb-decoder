@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\WwvbDecoder.Host\WwvbDecoder.Host.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content
+      Include="..\..\..\docs\design\message-examples\*.json"
+      Link="examples\%(Filename)%(Extension)"
+      CopyToOutputDirectory="PreserveNewest"
+    />
+  </ItemGroup>
+</Project>
