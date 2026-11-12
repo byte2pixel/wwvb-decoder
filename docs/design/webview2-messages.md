@@ -4,7 +4,7 @@ The host (C#, WPF) and the page (React in WebView2) talk over WebView2 web messa
 
 | Side | Implemented in | Role |
 | --- | --- | --- |
-| Host bridge | `WwvbDecoder.Host`, `Bridge/WebMessageBridge.cs` and `Bridge/CommandHandler.cs` (construction plan Step 8) | Serializes stage events, parses commands |
+| Host bridge | `WwvbDecoder.Host`, `Bridge/` (construction plan Step 8): `MessageJson.cs` and `Messages.cs` serialize envelopes, `CommandJson.cs` and `Commands.cs` parse commands, `WebMessageBridge.cs` posts to WebView2 and `Services/SourceController.cs` handles the parsed commands | Serializes stage events, parses commands |
 | Page bridge | `ui/src/protocol/messages.ts` and `bridge.ts` (Step 8) | Validates envelopes with zod, sends commands |
 | Examples | [`message-examples/`](message-examples/) | One JSON file per message type and per command. Both test suites assert against them |
 
@@ -463,7 +463,7 @@ Cancels the current run and disposes the source. The host answers with `sourceSt
 
 ## Threading
 
-`DecoderPipeline` raises its events synchronously on the pump thread, the thread enumerating the source. The bridge's handlers do only two things there: serialize the event to a string, and queue it. Edges go into the batch; everything else goes straight to the dispatcher. `CoreWebView2.PostWebMessageAsJson` must be called on the WPF dispatcher thread, so the bridge posts through `Dispatcher.BeginInvoke`. The `seq` counter is assigned on the dispatcher, where posting happens, so sequence numbers match posting order.
+`DecoderPipeline` raises its events synchronously on the pump thread, the thread enumerating the source. The bridge's handlers do only two things there: serialize the event to a string, and queue it. Edges go into the batch; everything else goes straight to the dispatcher. `CoreWebView2.PostWebMessageAsJson` must be called on the WPF dispatcher thread, so the bridge posts through `Dispatcher.BeginInvoke`. The `seq` counter is assigned when a message is queued for the dispatcher, and the dispatcher queue is first in, first out, so sequence numbers match posting order.
 
 Commands arrive on the dispatcher in `CoreWebView2.WebMessageReceived`. Starting or stopping a source happens there too; the running pipeline is cancelled through its `CancellationTokenSource` and the new run starts on a thread-pool thread. Options changed by `setNoise`, `setReplaySpeed`, and `setReducedCarrierLevel` are written on the dispatcher and read on the pump thread; the Core types make those reads and writes volatile.
 

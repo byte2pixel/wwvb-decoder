@@ -8,5 +8,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/WwvbDecoder.Adapters.Tests/WwvbDecoder.Adapters.Tests.csproj" />
     <Project Path="tests/WwvbDecoder.Core.Tests/WwvbDecoder.Core.Tests.csproj" />
+    <Project Path="tests/WwvbDecoder.Host.Tests/WwvbDecoder.Host.Tests.csproj" />
   </Folder>
 </Solution>
