@@ -7,6 +7,13 @@ on:
 permissions:
   contents: read
 
+# A new push to the same PR or branch cancels the run it replaces.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# verify.ps1 runs these same steps locally; change both together.
+
 jobs:
   host:
     runs-on: windows-latest
@@ -15,10 +22,10 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           global-json-file: global.json
-      - uses: actions/cache@v6
-        with:
-          path: ~/.nuget/packages
-          key: nuget-${{ runner.os }}-${{ hashFiles('host/Directory.Packages.props', 'host/**/*.csproj') }}
+          cache: true
+          cache-dependency-path: host/**/packages.lock.json
+      - run: dotnet tool restore
+      - run: dotnet csharpier check .
       - run: dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false
       - run: dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false
 
@@ -35,6 +42,7 @@ jobs:
           cache: npm
           cache-dependency-path: ui/package-lock.json
       - run: npm ci
+      - run: npm run format:check
       - run: npm run lint
       - run: npm test
       - run: npm run build
@@ -50,5 +58,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: firmware
+      - run: cargo fmt --check
       - run: cargo build --release
       - run: cargo clippy --release -- -D warnings
