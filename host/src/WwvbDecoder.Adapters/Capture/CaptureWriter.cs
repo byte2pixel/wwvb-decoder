@@ -151,7 +151,7 @@ public sealed class CaptureWriter
         _writer.WriteLine(wallLine);
     }
 
-    private DateTimeOffset DropSecondsFromTime(DateTimeOffset wallTime)
+    private static DateTimeOffset DropSecondsFromTime(DateTimeOffset wallTime)
     {
         var minute = new DateTimeOffset(
             wallTime.Year,

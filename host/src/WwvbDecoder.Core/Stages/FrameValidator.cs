@@ -68,7 +68,10 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
         {
             var errorSeconds = string.Join(", ", input.ErrorSeconds);
             failures.Add(
-                new ValidationFailure(ValidationCheck.ErrorSymbols, $"Error at seconds {errorSeconds}")
+                new ValidationFailure(
+                    ValidationCheck.ErrorSymbols,
+                    $"Error at seconds {errorSeconds}"
+                )
             );
         }
 
@@ -91,7 +94,9 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
         // Range checks
         if (input.Minute > 59)
         {
-            failures.Add(new ValidationFailure(ValidationCheck.MinuteRange, $"minute {input.Minute}"));
+            failures.Add(
+                new ValidationFailure(ValidationCheck.MinuteRange, $"minute {input.Minute}")
+            );
         }
 
         if (input.Hour > 23)
@@ -121,7 +126,9 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
         {
             var signBits = string.Join(
                 ' ',
-                WwvbFrameLayout.Ut1SignSeconds.Select(second => BitText(input.Frame.Symbols[second]))
+                WwvbFrameLayout.Ut1SignSeconds.Select(second =>
+                    BitText(input.Frame.Symbols[second])
+                )
             );
             failures.Add(new ValidationFailure(ValidationCheck.Ut1Sign, $"sign bits {signBits}"));
         }
@@ -202,9 +209,15 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
     // UTC at second 0 of the frame. Real date arithmetic carries minute, hour, day, and year
     // rollovers. WwvbClock uses it for FrameUtc, so Consecutive and the clock share one formula.
     internal static DateTime FrameTime(DecodedFrame frame) =>
-        new DateTime(2000 + frame.Year, 1, 1, frame.Hour, frame.Minute, 0, DateTimeKind.Utc).AddDays(
-            frame.DayOfYear - 1
-        );
+        new DateTime(
+            2000 + frame.Year,
+            1,
+            1,
+            frame.Hour,
+            frame.Minute,
+            0,
+            DateTimeKind.Utc
+        ).AddDays(frame.DayOfYear - 1);
 
     // "minute units", "day of year hundreds", and so on.
     private static string DigitName(BcdDigit digit)

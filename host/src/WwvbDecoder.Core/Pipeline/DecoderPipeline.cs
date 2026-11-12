@@ -158,7 +158,6 @@ public sealed class DecoderPipeline(TimeProvider timeProvider)
                         Clock.Reset();
                         SourceReset?.Invoke(reset.Reason);
                         break;
-                    // Handle other event types as needed
                 }
             }
         }

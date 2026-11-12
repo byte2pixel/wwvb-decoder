@@ -2,7 +2,7 @@ namespace WwvbDecoder.Adapters.Tests;
 
 public sealed class CaptureCatalogTests : IDisposable
 {
-    private CancellationToken Ct => TestContext.Current.CancellationToken;
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     // A fresh directory per test, deleted afterward, so tests never see each other's files.
     private readonly string _dir = Directory
@@ -13,7 +13,7 @@ public sealed class CaptureCatalogTests : IDisposable
 
     private string PathTo(string name) => Path.Combine(_dir, name);
 
-    private async Task Write(string path, params string[] lines)
+    private static async Task Write(string path, params string[] lines)
     {
         await File.WriteAllTextAsync(path, string.Join('\n', lines) + "\n", Ct);
     }
@@ -166,7 +166,7 @@ public sealed class CaptureCatalogTests : IDisposable
         );
         string badHeader2 = PathTo("unparseable-capturev1.edges.txt");
         await Write(
-            badHeader1,
+            badHeader2,
             "# recorded not-a-date",
             "# source serial COM3, label t",
             "H 1000000",

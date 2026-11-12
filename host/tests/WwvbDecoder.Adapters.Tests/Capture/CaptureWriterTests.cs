@@ -2,7 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 
 namespace WwvbDecoder.Adapters.Tests;
 
-public class CaptureWriterTests
+public sealed class CaptureWriterTests : IDisposable, IAsyncDisposable
 {
     private static readonly DateTimeOffset Start = new(2026, 11, 2, 3, 10, 27, TimeSpan.Zero);
 
@@ -21,7 +21,8 @@ public class CaptureWriterTests
 
     private string Text => _out.ToString();
 
-    private string[] WallLines => Text.Split('\n').Where(l => l.StartsWith("# wall ")).ToArray();
+    private string[] WallLines =>
+        [.. Text.Split('\n').Where(l => l.StartsWith("# wall ", StringComparison.Ordinal))];
 
     private void WriteHeader() => _writer.WriteHeader(Start, "serial COM5, receiver #1", null);
 
@@ -292,13 +293,11 @@ public class CaptureWriterTests
         }
 
         // Assert: boundaries at 03:11:00 (i = 33), 03:12:00 (i = 93), 03:13:00 (i = 153)
-        WallLines.ShouldBe(
-            [
-                "# wall 2026-11-02T03:11:00Z 45000000",
-                "# wall 2026-11-02T03:12:00Z 105000000",
-                "# wall 2026-11-02T03:13:00Z 165000000",
-            ]
-        );
+        WallLines.ShouldBe([
+            "# wall 2026-11-02T03:11:00Z 45000000",
+            "# wall 2026-11-02T03:12:00Z 105000000",
+            "# wall 2026-11-02T03:13:00Z 165000000",
+        ]);
     }
 
     // 21
@@ -318,9 +317,10 @@ public class CaptureWriterTests
         _writer.WriteLine("L 13800377");
 
         // Assert
-        WallLines.ShouldBe(
-            ["# wall 2026-11-02T03:13:37Z 12200412", "# wall 2026-11-02T03:14:00Z 13800377"]
-        );
+        WallLines.ShouldBe([
+            "# wall 2026-11-02T03:13:37Z 12200412",
+            "# wall 2026-11-02T03:14:00Z 13800377",
+        ]);
     }
 
     // 22
@@ -369,7 +369,9 @@ public class CaptureWriterTests
     {
         // Arrange: a time provider whose local zone is not UTC; the wall line must still say Z
         FakeTimeProvider time = new(Start);
-        time.SetLocalTimeZone(TimeZoneInfo.CreateCustomTimeZone("plus2", TimeSpan.FromHours(2), "p2", "p2"));
+        time.SetLocalTimeZone(
+            TimeZoneInfo.CreateCustomTimeZone("plus2", TimeSpan.FromHours(2), "p2", "p2")
+        );
         CaptureWriter writer = new(_out, time);
         writer.WriteHeader(Start, "x", null);
         writer.WriteLine("H 12000000");
@@ -431,5 +433,15 @@ public class CaptureWriterTests
 
         // Assert
         Text.ShouldBe(expected.ReplaceLineEndings("\n"));
+    }
+
+    public void Dispose()
+    {
+        _out.Dispose();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await _out.DisposeAsync();
     }
 }
