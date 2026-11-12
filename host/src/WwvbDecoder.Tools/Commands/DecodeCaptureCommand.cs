@@ -6,7 +6,7 @@ namespace WwvbDecoder.Tools;
 [SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
 internal sealed class DecodeCaptureCommand : AsyncCommand<DecodeCaptureCommand.Settings>
 {
-    public class Settings : CommandSettings
+    public sealed class Settings : CommandSettings
     {
         [CommandArgument(0, "<path>")]
         [Description("Path to the capture file to decode.")]

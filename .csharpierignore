@@ -1,0 +1,5 @@
+# Files the dotnet CLI rewrites (dotnet add package/reference, dotnet sln add).
+# Formatting them by hand would only fight the tool's own output.
+**/*.csproj
+**/Directory.Packages.props
+**/*.slnx

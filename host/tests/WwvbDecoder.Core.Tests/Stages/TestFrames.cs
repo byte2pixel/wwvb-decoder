@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using System.Globalization;
 
 namespace WwvbDecoder.Core.Tests;
 
@@ -27,7 +28,7 @@ internal static class TestFrames
                 "E" => SymbolKind.Error,
                 _ => throw new ArgumentException(change, nameof(changes)),
             };
-            symbols = symbols.SetItem(int.Parse(parts[0]), kind);
+            symbols = symbols.SetItem(int.Parse(parts[0], CultureInfo.InvariantCulture), kind);
         }
 
         return new Frame(frame.StartMicros, frame.EndMicros, symbols);

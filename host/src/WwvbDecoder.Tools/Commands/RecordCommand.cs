@@ -87,7 +87,9 @@ internal sealed class RecordCommand : AsyncCommand<RecordCommand.Settings>
                             lastMicros = sample.Edge.Micros;
                             break;
                         case EdgeEvent.Info info:
-                            if (info.Line.StartsWith("# wwvb-edge-logger"))
+                            if (
+                                info.Line.StartsWith("# wwvb-edge-logger", StringComparison.Ordinal)
+                            )
                             {
                                 Console.WriteLine(info.Line);
                             }

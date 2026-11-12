@@ -1,0 +1,4 @@
+*.md
+
+# npm owns the lockfile.
+package-lock.json

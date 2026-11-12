@@ -100,8 +100,7 @@ public sealed class WebMessageBridgeTests : IDisposable
         JsonNode
             .DeepEquals(pulse["payload"], Examples.Read("pulse")["payload"])
             .ShouldBeTrue(pulse.ToJsonString());
-        Messages
-            .Single(m => (string)m["type"]! == "info")["payload"]!["line"]!
+        Messages.Single(m => (string)m["type"]! == "info")["payload"]!["line"]!
             .GetValue<string>()
             .ShouldBe("# wall 2026-11-02T03:11:00Z 14500398");
     }
@@ -174,9 +173,7 @@ public sealed class WebMessageBridgeTests : IDisposable
         _time.Advance(Tick);
 
         // Assert
-        JsonNode items = Messages.Single(m => (string)m["type"]! == "edges")["payload"]![
-            "items"
-        ]!;
+        JsonNode items = Messages.Single(m => (string)m["type"]! == "edges")["payload"]!["items"]!;
         items
             .AsArray()
             .Select(e => (ulong)e!["micros"]!)

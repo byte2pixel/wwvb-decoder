@@ -6,14 +6,14 @@ public class DecoderPipelineTests
 {
     private static DateTimeOffset CleanMinute => new(2026, 12, 10, 19, 30, 0, TimeSpan.Zero);
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(10);
-    private CancellationToken Ct => TestContext.Current.CancellationToken;
+    private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private DecoderPipeline NewPipeline() => new(new FakeTimeProvider(CleanMinute));
+    private static DecoderPipeline NewPipeline() => new(new FakeTimeProvider(CleanMinute));
 
-    private EdgeEvent Sample(ulong micros, PinLevel level) =>
+    private static EdgeEvent Sample(ulong micros, PinLevel level) =>
         new EdgeEvent.Sample(new Edge(micros, level));
 
-    private BoundedEdgeSource Synthetic(ulong untilMicros) =>
+    private static BoundedEdgeSource Synthetic(ulong untilMicros) =>
         new(
             new SyntheticEdgeSource(new FakeTimeProvider(CleanMinute))
             {
@@ -23,7 +23,7 @@ public class DecoderPipelineTests
             untilMicros
         );
 
-    private async Task<List<EdgeEvent>> Collect(IEdgeSource source) =>
+    private static async Task<List<EdgeEvent>> Collect(IEdgeSource source) =>
         await source.ReadAsync(Ct).ToListAsync(Ct);
 
     // Every pipeline event, in the order raised, as (kind, value).
@@ -129,7 +129,9 @@ public class DecoderPipelineTests
                 break;
             case "cancelled":
                 using (
-                    CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(Ct)
+                    CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(
+                        Ct
+                    )
                 )
                 {
                     ScriptedEdgeSource gated = ScriptedEdgeSource.Gated([]);
@@ -352,8 +354,9 @@ public class DecoderPipelineTests
         );
 
         // Assert
-        (await Should.ThrowAsync<InvalidOperationException>(run.WaitAsync(Timeout, Ct)))
-            .ShouldBeSameAs(boom);
+        (
+            await Should.ThrowAsync<InvalidOperationException>(run.WaitAsync(Timeout, Ct))
+        ).ShouldBeSameAs(boom);
         lines.ShouldBe(["boom"]);
     }
 

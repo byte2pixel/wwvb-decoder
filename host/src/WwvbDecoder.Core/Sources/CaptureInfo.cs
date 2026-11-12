@@ -52,16 +52,17 @@ public sealed record CaptureInfo(
         {
             switch (line)
             {
-                case not null when line.StartsWith(RecordedPrefix):
+                case not null when line.StartsWith(RecordedPrefix, StringComparison.Ordinal):
                     recorded ??= ParseTimestamp(line[RecordedPrefix.Length..]);
                     continue;
-                case not null when line.StartsWith(SourcePrefix):
+                case not null when line.StartsWith(SourcePrefix, StringComparison.Ordinal):
                     source ??= line[SourcePrefix.Length..];
                     continue;
-                case not null when line.StartsWith(ReducedCarrierLevelPrefix):
+                case not null
+                    when line.StartsWith(ReducedCarrierLevelPrefix, StringComparison.Ordinal):
                     reducedCarrierLevel = ParsePinLevel(line[ReducedCarrierLevelPrefix.Length..]);
                     continue;
-                case not null when line.StartsWith(WallPrefix):
+                case not null when line.StartsWith(WallPrefix, StringComparison.Ordinal):
                     if (
                         TryParseWallSample(
                             line[WallPrefix.Length..].AsSpan(),

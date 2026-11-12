@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Windows;
 using WwvbDecoder.Core;
 using WwvbDecoder.Host.Bridge;
@@ -8,6 +9,11 @@ namespace WwvbDecoder.Host;
 /// <summary>
 /// Composition root: builds the pipeline, the bridge, the controller, and the window.
 /// </summary>
+[SuppressMessage(
+    "Design",
+    "CA1001:Types that own disposable fields should be disposable",
+    Justification = "Disposed in OnExit."
+)]
 public partial class App
 {
     private WebMessageBridge? _bridge;

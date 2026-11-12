@@ -6,8 +6,9 @@ namespace WwvbDecoder.Host.Tests.Services;
 
 public sealed class HostEnvironmentTests : IDisposable
 {
-    private readonly FakeTimeProvider _time =
-        new(new DateTimeOffset(2026, 12, 10, 19, 30, 27, TimeSpan.Zero));
+    private readonly FakeTimeProvider _time = new(
+        new DateTimeOffset(2026, 12, 10, 19, 30, 27, TimeSpan.Zero)
+    );
 
     private readonly string _directory = Path.Combine(
         Path.GetTempPath(),

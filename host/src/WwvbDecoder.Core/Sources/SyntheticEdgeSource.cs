@@ -91,7 +91,7 @@ public sealed class SyntheticEdgeSource : IEdgeSource
 
             Volatile.Write(ref field, value);
         }
-    } = 0.0;
+    }
 
     /// <summary>
     /// Gets the reduced carrier level for the synthetic edge source.

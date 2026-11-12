@@ -116,7 +116,7 @@ public sealed class ReplayEdgeSource : IEdgeSource
             {
                 continue;
             }
-            if (line.StartsWith(WallLinePrefix))
+            if (line.StartsWith(WallLinePrefix, StringComparison.Ordinal))
             {
                 yield return new EdgeEvent.Info(line);
                 continue;

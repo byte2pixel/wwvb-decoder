@@ -1,0 +1,7 @@
+[*.cs]
+
+# Test names use Method_Scenario_Result; underscores are the convention here, not a defect.
+dotnet_diagnostic.CA1707.severity = none
+
+# Narrower types for performance do not matter in test code.
+dotnet_diagnostic.CA1859.severity = none

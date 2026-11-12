@@ -1,8 +1,11 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace WwvbDecoder.Tools;
 
+[SuppressMessage("ReSharper", "ClassNeverInstantiated.Global")]
 internal sealed class DecodePortCommand : AsyncCommand<DecodePortCommand.Settings>
 {
-    public class Settings : CommandSettings
+    public sealed class Settings : CommandSettings
     {
         [CommandArgument(0, "<port>")]
         [Description("The serial port to decode.")]
