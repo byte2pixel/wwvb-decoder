@@ -30,6 +30,16 @@
     <UiSource Include="$(UiDir)src\**;$(UiDir)public\**;$(UiDir)index.html;$(UiDir)*.json;$(UiDir)vite.config.ts" />
   </ItemGroup>
 
+  <!--
+    Visual Studio's fast up-to-date check cannot track dist/: the files are globbed inside
+    IncludeUiDist, and even a static UpToDateCheckInput glob lags the file watcher by many
+    seconds, so a launch right after npm run build reused the previous wwwroot. Always run
+    MSBuild instead; it is incremental and this project is small.
+  -->
+  <PropertyGroup>
+    <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
+  </PropertyGroup>
+
   <Target
     Name="NpmInstall"
     Condition="'$(BuildUi)' == 'true'"

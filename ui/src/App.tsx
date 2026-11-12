@@ -1,122 +1,83 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import './App.css'
+import { useEffect, useReducer, useState } from "react";
+import "./App.css";
+import { createBridge, findWebView } from "./protocol/bridge.ts";
+import { appendMessage, emptyLog } from "./protocol/log.ts";
+import type { SourceStatus } from "./protocol/messages.ts";
 
-function App() {
-  const [count, setCount] = useState(0)
+const bridge = createBridge(findWebView());
+
+export default function App() {
+  const [log, dispatch] = useReducer(appendMessage, emptyLog);
+  const [noise, setNoise] = useState(0);
+  const [status, setStatus] = useState<SourceStatus | null>(null);
+
+  useEffect(() => {
+    const off = bridge.onMessage((message) => {
+      dispatch(message);
+      if (message.type === "sourceStatus") setStatus(message.payload);
+    });
+    bridge.send({ command: "hello", protocol: 1 });
+    return off;
+  }, []);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
+    <div className="app">
+      <header className="header">
+        <select value="synthetic" onChange={() => {}}>
+          <option value="synthetic">synthetic</option>
+          <option value="serial" disabled>
+            serial
+          </option>
+          <option value="replay" disabled>
+            replay
+          </option>
+        </select>
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.05"
+          value={noise}
+          onChange={(e) => setNoise(Number(e.target.value))}
+        />
         <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
+          onClick={() =>
+            bridge.send({ command: "selectSource", source: "synthetic", noise })
+          }
         >
-          Count is {count}
+          Start
         </button>
-      </section>
-
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+        <button onClick={() => bridge.send({ command: "stop" })}>Stop</button>
+        <div className="status">
+          {status
+            ? `${status.name} ${status.state} ${status.detail}`
+            : "no host"}
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      </header>
+      <main className="main">
+        <section className="counts">
+          {/* one div per type */}
+          {Object.entries(log.counts).map(([type, count]) => (
+            <div key={type}>
+              <span>{type}</span>
+              <span>{count}</span>
+            </div>
+          ))}
+        </section>
+        <section className="entries">
+          {/* newest first */}
+          {log.entries
+            .slice()
+            .reverse()
+            .map((entry) => (
+              <div className="entry" key={entry.seq}>
+                <pre>{entry.type}</pre>
+                <pre>{entry.seq}</pre>
+                <pre>{JSON.stringify(entry.payload)}</pre>
+              </div>
+            ))}
+        </section>
+      </main>
+    </div>
+  );
 }
-
-export default App
