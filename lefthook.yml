@@ -1,0 +1,26 @@
+# Git hooks for the whole repo. Lefthook is a devDependency of ui/, so `npm ci` (or
+# `npm install`) in ui/ installs these hooks; its postinstall finds the repo root.
+#
+# Each job formats only the staged files it matches and re-stages them. CI runs the
+# same three formatters in check mode, so a skipped hook (--no-verify) still fails there.
+# Skip once with: LEFTHOOK=0 git commit ...
+
+pre-commit:
+  parallel: true
+  jobs:
+    - name: csharpier
+      glob: "*.{cs,props,targets}"
+      run: dotnet csharpier format {staged_files}
+      stage_fixed: true
+
+    - name: prettier
+      root: "ui/"
+      glob: "*.{ts,tsx,js,mjs,cjs,json,css,html}"
+      run: npx prettier --write --ignore-unknown {staged_files}
+      stage_fixed: true
+
+    - name: rustfmt
+      root: "firmware/"
+      glob: "*.rs"
+      run: rustfmt --edition 2024 {staged_files}
+      stage_fixed: true

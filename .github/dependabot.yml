@@ -1,0 +1,43 @@
+# One grouped PR per ecosystem per month, for releases at least 14 days old.
+# The three toolchain pins (global.json, rust-toolchain.toml, ui/.nvmrc) are covered
+# except .nvmrc, which is bumped by hand.
+version: 2
+
+updates:
+  - package-ecosystem: nuget
+    directory: /host
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+    groups:
+      nuget: { patterns: ["*"] }
+
+  - package-ecosystem: dotnet-sdk
+    directory: /
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+
+  - package-ecosystem: npm
+    directory: /ui
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+    groups:
+      npm: { patterns: ["*"] }
+
+  - package-ecosystem: cargo
+    directory: /firmware
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+    groups:
+      cargo: { patterns: ["*"] }
+
+  - package-ecosystem: rust-toolchain
+    directory: /firmware
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
+    groups:
+      actions: { patterns: ["*"] }

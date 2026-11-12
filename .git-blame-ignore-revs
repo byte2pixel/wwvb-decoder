@@ -1,0 +1,5 @@
+# Bulk formatting commits for git blame to skip. GitHub reads this file automatically;
+# locally run once per clone: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Tooling: format baseline, toolchain pins, and recommended analyzers (#20)
+d5e3199ee9b5d6953492bb5a5ca1a342094ef489
