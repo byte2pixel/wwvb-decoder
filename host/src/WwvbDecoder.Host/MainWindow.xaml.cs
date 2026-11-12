@@ -69,12 +69,6 @@ public partial class MainWindow
             uiFolder,
             CoreWebView2HostResourceAccessKind.Allow
         );
-        // The folder mapping serves files with no cache headers, so Chromium applies
-        // heuristic freshness and can show the previous bundle after a rebuild.
-        // Drop the disk cache before every navigation; the files are local.
-        await Wv.CoreWebView2.Profile.ClearBrowsingDataAsync(
-            CoreWebView2BrowsingDataKinds.DiskCache
-        );
         Wv.CoreWebView2.Navigate($"https://{VirtualHostName}/index.html");
     }
 
