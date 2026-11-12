@@ -4,7 +4,7 @@ The host (C#, WPF) and the page (React in WebView2) talk over WebView2 web messa
 
 | Side | Implemented in | Role |
 | --- | --- | --- |
-| Host bridge | `WwvbDecoder.Host`, `Bridge/` (construction plan Step 8): `MessageJson.cs` and `Messages.cs` serialize envelopes, `CommandJson.cs` and `Commands.cs` parse commands, `WebMessageBridge.cs` and `CommandHandler.cs` connect them to WebView2 | Serializes stage events, parses commands |
+| Host bridge | `WwvbDecoder.Host`, `Bridge/` (construction plan Step 8): `MessageJson.cs` and `Messages.cs` serialize envelopes, `CommandJson.cs` and `Commands.cs` parse commands, `WebMessageBridge.cs` posts to WebView2 and `Services/SourceController.cs` handles the parsed commands | Serializes stage events, parses commands |
 | Page bridge | `ui/src/protocol/messages.ts` and `bridge.ts` (Step 8) | Validates envelopes with zod, sends commands |
 | Examples | [`message-examples/`](message-examples/) | One JSON file per message type and per command. Both test suites assert against them |
 
