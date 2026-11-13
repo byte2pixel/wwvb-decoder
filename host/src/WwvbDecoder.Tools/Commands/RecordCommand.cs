@@ -31,7 +31,7 @@ internal sealed class RecordCommand : AsyncCommand<RecordCommand.Settings>
         CancellationToken cancellationToken
     )
     {
-        long sampleCount = 0;
+        var tally = new Tally();
         bool fileCreated = false;
         settings.OutFile ??= Path.Combine(
             DefaultFolder,
@@ -60,87 +60,18 @@ internal sealed class RecordCommand : AsyncCommand<RecordCommand.Settings>
             Console.WriteLine($"Recording {settings.Port} to {settings.OutFile}");
             Console.WriteLine("Press Ctrl+C to stop recording.");
 
-            bool firstEvent = true;
-            long resetCount = 0;
-            ulong? lastMicros = null;
-            DateTimeOffset nextStatus = NextMinute(DateTimeOffset.UtcNow);
-
-            try
-            {
-                await foreach (var edgeEvent in serialSource.ReadAsync(cancellationToken))
-                {
-                    switch (edgeEvent)
-                    {
-                        case EdgeEvent.Reset reset:
-                            if (firstEvent)
-                            {
-                                firstEvent = false;
-                                Console.WriteLine("Port opened.");
-                                break;
-                            }
-
-                            resetCount++;
-                            Console.WriteLine($"{Clock()}  reset: {reset.Reason}");
-                            break;
-                        case EdgeEvent.Sample sample:
-                            sampleCount++;
-                            lastMicros = sample.Edge.Micros;
-                            break;
-                        case EdgeEvent.Info info:
-                            if (
-                                info.Line.StartsWith("# wwvb-edge-logger", StringComparison.Ordinal)
-                            )
-                            {
-                                Console.WriteLine(info.Line);
-                            }
-
-                            break;
-                    }
-
-                    // One status line per minute, on the PC clock, and the file flushed with it so a
-                    // crash costs at most a minute of capture.
-                    DateTimeOffset now = DateTimeOffset.UtcNow;
-                    if (now >= nextStatus)
-                    {
-                        Console.WriteLine(
-                            Status(
-                                now,
-                                sampleCount,
-                                resetCount,
-                                serialSource.MalformedLines,
-                                lastMicros
-                            )
-                        );
-                        await writer.FlushAsync(cancellationToken);
-                        nextStatus = NextMinute(now);
-                    }
-                }
-
-                Console.WriteLine("Port closed.");
-            }
-            catch (OperationCanceledException)
-            {
-                Console.WriteLine("Stopped.");
-            }
-            catch (Exception ex)
-                when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
-            {
-                await Console.Error.WriteLineAsync(
-                    $"Error occurred check that the port is available and not in use."
-                );
-                throw;
-            }
+            await RecordAsync(serialSource, writer, tally, cancellationToken);
 
             Console.WriteLine(
                 Status(
                     DateTimeOffset.UtcNow,
-                    sampleCount,
-                    resetCount,
+                    tally.Samples,
+                    tally.Resets,
                     serialSource.MalformedLines,
-                    lastMicros
+                    tally.LastMicros
                 )
             );
-            Console.WriteLine($"Wrote {settings.OutFile} with {sampleCount} samples.");
+            Console.WriteLine($"Wrote {settings.OutFile} with {tally.Samples} samples.");
             return 0;
         }
         catch (Exception ex)
@@ -152,7 +83,7 @@ internal sealed class RecordCommand : AsyncCommand<RecordCommand.Settings>
             )
         {
             await Console.Error.WriteLineAsync(ex.Message);
-            if (sampleCount == 0 && fileCreated)
+            if (tally.Samples == 0 && fileCreated)
             {
                 // Nothing was recorded (the port never opened, for example): leave no header-only file behind.
                 File.Delete(settings.OutFile);
@@ -162,11 +93,94 @@ internal sealed class RecordCommand : AsyncCommand<RecordCommand.Settings>
         }
     }
 
-    static string Clock() =>
-        DateTimeOffset.UtcNow.ToString(
-            "HH:mm:ss",
-            System.Globalization.CultureInfo.InvariantCulture
-        );
+    static async Task RecordAsync(
+        SerialEdgeSource serialSource,
+        TextWriter writer,
+        Tally tally,
+        CancellationToken cancellationToken
+    )
+    {
+        DateTimeOffset nextStatus = NextMinute(DateTimeOffset.UtcNow);
+        try
+        {
+            await foreach (var edgeEvent in serialSource.ReadAsync(cancellationToken))
+            {
+                tally.Count(edgeEvent);
+
+                // One status line per minute, on the PC clock, and the file flushed with it so a
+                // crash costs at most a minute of capture.
+                DateTimeOffset now = DateTimeOffset.UtcNow;
+                if (now >= nextStatus)
+                {
+                    Console.WriteLine(
+                        Status(
+                            now,
+                            tally.Samples,
+                            tally.Resets,
+                            serialSource.MalformedLines,
+                            tally.LastMicros
+                        )
+                    );
+                    await writer.FlushAsync(cancellationToken);
+                    nextStatus = NextMinute(now);
+                }
+            }
+
+            Console.WriteLine("Port closed.");
+        }
+        catch (OperationCanceledException)
+        {
+            Console.WriteLine("Stopped.");
+        }
+        catch (Exception ex)
+            when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            await Console.Error.WriteLineAsync(
+                $"Error occurred check that the port is available and not in use."
+            );
+            throw;
+        }
+    }
+
+    // Counts what the source sends and echoes the lines worth seeing. The first Reset is the
+    // source announcing the port opened, so it is not counted.
+    sealed class Tally
+    {
+        bool _portOpened;
+
+        public long Samples { get; private set; }
+        public long Resets { get; private set; }
+        public ulong? LastMicros { get; private set; }
+
+        public void Count(EdgeEvent edgeEvent)
+        {
+            switch (edgeEvent)
+            {
+                case EdgeEvent.Reset when !_portOpened:
+                    _portOpened = true;
+                    Console.WriteLine("Port opened.");
+                    break;
+                case EdgeEvent.Reset reset:
+                    Resets++;
+                    Console.WriteLine($"{Clock()}  reset: {reset.Reason}");
+                    break;
+                case EdgeEvent.Sample sample:
+                    Samples++;
+                    LastMicros = sample.Edge.Micros;
+                    break;
+                case EdgeEvent.Info info
+                    when info.Line.StartsWith("# wwvb-edge-logger", StringComparison.Ordinal):
+                    Console.WriteLine(info.Line);
+                    break;
+            }
+        }
+
+        static string Clock() =>
+            DateTimeOffset.UtcNow.ToString(
+                "HH:mm:ss",
+                System.Globalization.CultureInfo.InvariantCulture
+            );
+    }
 
     static string Status(
         DateTimeOffset now,

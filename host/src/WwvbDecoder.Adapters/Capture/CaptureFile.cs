@@ -5,7 +5,7 @@ namespace WwvbDecoder.Adapters;
 /// <summary>
 /// Handles the capture file.
 /// </summary>
-public sealed class CaptureFile
+public static class CaptureFile
 {
     /// <summary>
     /// The whole file in memory. Split on `\n' only and drop a final empty line if present.

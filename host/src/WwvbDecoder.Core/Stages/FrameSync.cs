@@ -23,93 +23,81 @@ public sealed class FrameSync : IStage<Symbol, FrameSyncEvent>
     {
         ulong gapMicros = _lastMicros is null ? 0 : input.StartMicros - _lastMicros.Value;
         _lastMicros = input.StartMicros;
+
+        return _synced ? PushSynced(input, gapMicros) : PushSearching(input, gapMicros);
+    }
+
+    /// <summary>
+    /// Returns to <see cref="FrameSyncEvent.Searching"/> and forgets the previous symbol and any partial frame.
+    /// </summary>
+    public void Reset()
+    {
+        _lastMicros = null;
+        _synced = false;
+        _frameStartMicros = 0;
+        _markerCount = 0;
+        _symbols.Clear();
+    }
+
+    private FrameSyncEvent[] PushSynced(Symbol input, ulong gapMicros)
+    {
         int expected = _symbols.Count;
 
-        if (_synced)
+        if (!IsGapValid(gapMicros))
         {
-            if (!IsGapValid(gapMicros))
-            {
-                _synced = false;
-                _markerCount = 0;
-                _symbols.Clear();
-                if (input.Kind == SymbolKind.Marker)
-                {
-                    _markerCount = 1;
-                }
-                return
-                [
-                    new FrameSyncEvent.SyncLost(
-                        $"gap {gapMicros / 1000} ms before second {expected}"
-                    ),
-                    new FrameSyncEvent.Searching(_markerCount),
-                ];
-            }
-
-            bool isMarkerExpected = WwvbFrameLayout.MarkerSeconds.Contains(_symbols.Count);
-            if (input.Kind is SymbolKind.One or SymbolKind.Zero && isMarkerExpected)
-            {
-                _synced = false;
-                _markerCount = 0;
-                _symbols.Clear();
-                return
-                [
-                    new FrameSyncEvent.SyncLost(
-                        $"expected marker at second {expected}, got {input.Kind}"
-                    ),
-                    new FrameSyncEvent.Searching(0),
-                ];
-            }
-
-            if (input.Kind is SymbolKind.Marker && !isMarkerExpected)
-            {
-                _synced = false;
-                _markerCount = 1;
-                _symbols.Clear();
-                return
-                [
-                    new FrameSyncEvent.SyncLost($"expected bit at second {expected}, got Marker"),
-                    new FrameSyncEvent.Searching(_markerCount),
-                ];
-            }
-
-            switch (_symbols.Count)
-            {
-                case 0:
-                    _frameStartMicros = input.StartMicros;
-                    _symbols.Add(input.Kind);
-                    return [new FrameSyncEvent.SlotFilled(_frameStartMicros, 0, input.Kind)];
-                case < WwvbFrameLayout.FrameSeconds - 1:
-                    _symbols.Add(input.Kind);
-                    return
-                    [
-                        new FrameSyncEvent.SlotFilled(
-                            _frameStartMicros,
-                            _symbols.Count - 1,
-                            input.Kind
-                        ),
-                    ];
-                case WwvbFrameLayout.FrameSeconds - 1:
-                {
-                    _symbols.Add(input.Kind);
-                    var frame = new Frame(
-                        _frameStartMicros,
-                        input.StartMicros + input.DurationMicros,
-                        [.. _symbols]
-                    );
-                    _symbols.Clear();
-                    return
-                    [
-                        new FrameSyncEvent.SlotFilled(
-                            _frameStartMicros,
-                            WwvbFrameLayout.FrameSeconds - 1,
-                            input.Kind
-                        ),
-                        new FrameSyncEvent.FrameComplete(frame),
-                    ];
-                }
-            }
+            return LoseSync(
+                $"gap {gapMicros / 1000} ms before second {expected}",
+                input.Kind == SymbolKind.Marker ? 1 : 0
+            );
         }
 
+        bool isMarkerExpected = WwvbFrameLayout.MarkerSeconds.Contains(expected);
+        if (input.Kind is SymbolKind.One or SymbolKind.Zero && isMarkerExpected)
+        {
+            return LoseSync($"expected marker at second {expected}, got {input.Kind}", 0);
+        }
+
+        if (input.Kind is SymbolKind.Marker && !isMarkerExpected)
+        {
+            return LoseSync($"expected bit at second {expected}, got Marker", 1);
+        }
+
+        return FillSlot(input);
+    }
+
+    private FrameSyncEvent[] LoseSync(string reason, int markerCount)
+    {
+        _synced = false;
+        _markerCount = markerCount;
+        _symbols.Clear();
+        return [new FrameSyncEvent.SyncLost(reason), new FrameSyncEvent.Searching(markerCount)];
+    }
+
+    private FrameSyncEvent[] FillSlot(Symbol input)
+    {
+        if (_symbols.Count == 0)
+        {
+            _frameStartMicros = input.StartMicros;
+        }
+
+        _symbols.Add(input.Kind);
+        var slot = new FrameSyncEvent.SlotFilled(_frameStartMicros, _symbols.Count - 1, input.Kind);
+        if (_symbols.Count < WwvbFrameLayout.FrameSeconds)
+        {
+            return [slot];
+        }
+
+        var frame = new Frame(
+            _frameStartMicros,
+            input.StartMicros + input.DurationMicros,
+            [.. _symbols]
+        );
+        _symbols.Clear();
+        return [slot, new FrameSyncEvent.FrameComplete(frame)];
+    }
+
+    private FrameSyncEvent[] PushSearching(Symbol input, ulong gapMicros)
+    {
         if (input.Kind != SymbolKind.Marker)
         {
             _markerCount = 0;
@@ -125,18 +113,6 @@ public sealed class FrameSync : IStage<Symbol, FrameSyncEvent>
         }
         _markerCount = 1;
         return [new FrameSyncEvent.Searching(_markerCount)];
-    }
-
-    /// <summary>
-    /// Returns to <see cref="FrameSyncEvent.Searching"/> and forgets the previous symbol and any partial frame.
-    /// </summary>
-    public void Reset()
-    {
-        _lastMicros = null;
-        _synced = false;
-        _frameStartMicros = 0;
-        _markerCount = 0;
-        _symbols.Clear();
     }
 
     private static bool IsGapValid(ulong gapMicros) => gapMicros is >= 500_000 and <= 1_500_000;

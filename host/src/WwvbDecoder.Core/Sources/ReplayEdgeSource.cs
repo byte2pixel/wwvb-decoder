@@ -121,40 +121,55 @@ public sealed class ReplayEdgeSource : IEdgeSource
                 yield return new EdgeEvent.Info(line);
                 continue;
             }
-            if (EdgeLineCodec.TryParse(line, out EdgeEvent? evt))
+            if (!EdgeLineCodec.TryParse(line, out EdgeEvent? evt))
             {
-                switch (evt)
-                {
-                    case EdgeEvent.Reset:
-                        _baseline = null;
-                        break;
-                    case EdgeEvent.Sample sample:
-                    {
-                        if (_baseline.HasValue && sample.Edge.Micros < _baseline)
-                        {
-                            yield return new EdgeEvent.Reset("timestamp went backwards");
-                        }
-                        else if (speed > 0.0 && _baseline.HasValue)
-                        {
-                            await Task.Delay(
-                                TimeSpan.FromMicroseconds(
-                                    (sample.Edge.Micros - _baseline.Value) / speed
-                                ),
-                                _timeProvider,
-                                ct
-                            );
-                        }
-                        _baseline = sample.Edge.Micros;
-                        break;
-                    }
-                }
-
-                yield return evt;
+                MalformedLines++;
                 continue;
             }
 
-            MalformedLines++;
+            if (await TrackAsync(evt, speed, ct) is { } backwards)
+            {
+                yield return backwards;
+            }
+            yield return evt;
         }
+    }
+
+    // Keeps _baseline in step with the stream and paces each sample against the one before it.
+    // Returns the Reset to yield ahead of a sample whose timestamp went backwards.
+    private async ValueTask<EdgeEvent.Reset?> TrackAsync(
+        EdgeEvent evt,
+        double speed,
+        CancellationToken ct
+    )
+    {
+        if (evt is not EdgeEvent.Sample sample)
+        {
+            if (evt is EdgeEvent.Reset)
+            {
+                _baseline = null;
+            }
+            return null;
+        }
+
+        EdgeEvent.Reset? backwards = null;
+        if (_baseline is { } baseline)
+        {
+            if (sample.Edge.Micros < baseline)
+            {
+                backwards = new EdgeEvent.Reset("timestamp went backwards");
+            }
+            else if (speed > 0.0)
+            {
+                await Task.Delay(
+                    TimeSpan.FromMicroseconds((sample.Edge.Micros - baseline) / speed),
+                    _timeProvider,
+                    ct
+                );
+            }
+        }
+        _baseline = sample.Edge.Micros;
+        return backwards;
     }
 
     /// <inheritdoc/>
