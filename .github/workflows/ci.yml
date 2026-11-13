@@ -19,6 +19,9 @@ jobs:
   host:
     runs-on: windows-latest
     timeout-minutes: 20
+    permissions:
+      contents: read
+      checks: write # test-reporter publishes a check run
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
@@ -29,11 +32,31 @@ jobs:
       - run: dotnet tool restore
       - run: dotnet csharpier check .
       - run: dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false
-      - run: dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false
+      - run: dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false --coverage --coverage-output-format cobertura --report-xunit-trx --results-directory ${{ github.workspace }}/host/TestResults
+      # Merges the per-project reports and fails below the thresholds, locally and here.
+      - run: dotnet reportgenerator "-reports:host/TestResults/*.cobertura.xml" "-targetdir:coverage/host" "-reporttypes:MarkdownSummaryGithub;Cobertura;TextSummary" "minimumCoverageThresholds:lineCoverage=90" "minimumCoverageThresholds:branchCoverage=88"
+      - if: ${{ !cancelled() }}
+        run: Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value (Get-Content -Raw coverage/host/SummaryGithub.md)
+      - if: ${{ !cancelled() }}
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          name: host tests
+          path: host/TestResults/*.trx
+          reporter: dotnet-trx
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: host-coverage
+          path: |
+            coverage/host
+            host/TestResults
 
   ui:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: read
+      checks: write # test-reporter publishes a check run
     defaults:
       run:
         working-directory: ui
@@ -47,8 +70,22 @@ jobs:
       - run: npm ci
       - run: npm run format:check
       - run: npm run lint
-      - run: npm test
+      - run: npm test # vitest with coverage; thresholds are in vite.config.ts
       - run: npm run build
+      - if: ${{ !cancelled() }}
+        uses: dorny/test-reporter@a43b3a5f7366b97d083190328d2c652e1a8b6aa2 # v3.0.0
+        with:
+          name: ui tests
+          path: ui/test-results/junit.xml
+          reporter: java-junit
+      - if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui-coverage
+          path: |
+            ui/coverage/lcov.info
+            ui/coverage/cobertura-coverage.xml
+            ui/test-results
 
   firmware:
     runs-on: ubuntu-latest

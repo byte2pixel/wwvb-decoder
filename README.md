@@ -61,6 +61,8 @@ dotnet test
 
 `./verify.ps1` runs every CI step locally and stops at the first failure; `-Only host`, `-Only ui`, or `-Only firmware` runs one part. Warnings are errors in every configuration, locally and in CI.
 
+Tests run with coverage. Host tests emit one Cobertura file per project into `host/TestResults/`, and ReportGenerator (pinned in `dotnet-tools.json`) merges them into `coverage/host/` and fails below the line and branch thresholds set in `verify.ps1` and `ci.yml`. UI tests emit `ui/coverage/` and fail below the thresholds in `ui/vite.config.ts`. Both thresholds are ratchets: set a few points under current coverage, raised as tests land, never lowered. CI publishes the test results as checks on the PR and uploads the reports as artifacts. Firmware has no host-runnable tests, so no coverage.
+
 | Language | Formatter | On commit | In CI |
 | --- | --- | --- | --- |
 | C# | CSharpier, pinned in `dotnet-tools.json` | Formats staged files | `dotnet csharpier check .` |

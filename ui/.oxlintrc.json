@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["react", "typescript", "oxc"],
+  "ignorePatterns": ["dist", "coverage", "test-results"],
   "categories": {
     "correctness": "error",
     "suspicious": "error",
