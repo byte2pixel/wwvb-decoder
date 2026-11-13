@@ -108,55 +108,13 @@ public sealed class DecoderPipeline(TimeProvider timeProvider)
                 switch (edgeEvent)
                 {
                     case EdgeEvent.Sample sample:
-                        EdgeReceived?.Invoke(sample.Edge);
-                        foreach (var pulse in PulseMeasurement.Push(sample.Edge))
-                        {
-                            PulseMeasured?.Invoke(pulse);
-                            foreach (var symbol in SymbolClassifier.Push(pulse))
-                            {
-                                SymbolClassified?.Invoke(symbol);
-                                foreach (var frameSyncEvent in FrameSync.Push(symbol))
-                                {
-                                    FrameSyncChanged?.Invoke(frameSyncEvent);
-                                    if (
-                                        frameSyncEvent is not FrameSyncEvent.FrameComplete completed
-                                    )
-                                    {
-                                        continue;
-                                    }
-
-                                    foreach (var decodedFrame in FieldDecoder.Push(completed.Frame))
-                                    {
-                                        FrameDecoded?.Invoke(decodedFrame);
-                                        foreach (
-                                            var validationResult in FrameValidator.Push(
-                                                decodedFrame
-                                            )
-                                        )
-                                        {
-                                            FrameValidated?.Invoke(validationResult);
-                                            var clockState = Clock.Push(validationResult);
-                                            foreach (var state in clockState)
-                                            {
-                                                ClockUpdated?.Invoke(state);
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                        OnEdge(sample.Edge);
                         break;
                     case EdgeEvent.Info info:
                         InfoReceived?.Invoke(info.Line);
                         break;
                     case EdgeEvent.Reset reset:
-                        PulseMeasurement.Reset();
-                        SymbolClassifier.Reset();
-                        FrameSync.Reset();
-                        FieldDecoder.Reset();
-                        FrameValidator.Reset();
-                        Clock.Reset();
-                        SourceReset?.Invoke(reset.Reason);
+                        OnReset(reset.Reason);
                         break;
                 }
             }
@@ -165,5 +123,77 @@ public sealed class DecoderPipeline(TimeProvider timeProvider)
         {
             Interlocked.Exchange(ref _running, 0);
         }
+    }
+
+    // One method per stage keeps the depth-first push order of the nested loops
+    // without the nesting: each stage raises its event, then feeds the next stage.
+    private void OnEdge(Edge edge)
+    {
+        EdgeReceived?.Invoke(edge);
+        foreach (var pulse in PulseMeasurement.Push(edge))
+        {
+            OnPulse(pulse);
+        }
+    }
+
+    private void OnPulse(Pulse pulse)
+    {
+        PulseMeasured?.Invoke(pulse);
+        foreach (var symbol in SymbolClassifier.Push(pulse))
+        {
+            OnSymbol(symbol);
+        }
+    }
+
+    private void OnSymbol(Symbol symbol)
+    {
+        SymbolClassified?.Invoke(symbol);
+        foreach (var frameSyncEvent in FrameSync.Push(symbol))
+        {
+            OnFrameSyncEvent(frameSyncEvent);
+        }
+    }
+
+    private void OnFrameSyncEvent(FrameSyncEvent frameSyncEvent)
+    {
+        FrameSyncChanged?.Invoke(frameSyncEvent);
+        if (frameSyncEvent is not FrameSyncEvent.FrameComplete completed)
+        {
+            return;
+        }
+
+        foreach (var decodedFrame in FieldDecoder.Push(completed.Frame))
+        {
+            OnDecodedFrame(decodedFrame);
+        }
+    }
+
+    private void OnDecodedFrame(DecodedFrame decodedFrame)
+    {
+        FrameDecoded?.Invoke(decodedFrame);
+        foreach (var validationResult in FrameValidator.Push(decodedFrame))
+        {
+            OnValidationResult(validationResult);
+        }
+    }
+
+    private void OnValidationResult(ValidationResult validationResult)
+    {
+        FrameValidated?.Invoke(validationResult);
+        foreach (var state in Clock.Push(validationResult))
+        {
+            ClockUpdated?.Invoke(state);
+        }
+    }
+
+    private void OnReset(string reason)
+    {
+        PulseMeasurement.Reset();
+        SymbolClassifier.Reset();
+        FrameSync.Reset();
+        FieldDecoder.Reset();
+        FrameValidator.Reset();
+        Clock.Reset();
+        SourceReset?.Invoke(reason);
     }
 }
