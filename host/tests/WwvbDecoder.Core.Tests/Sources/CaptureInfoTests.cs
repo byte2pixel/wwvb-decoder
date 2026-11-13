@@ -34,20 +34,20 @@ public class CaptureInfoTests
         Action act = () => CaptureInfo.Parse(lines);
 
         // Assert
-        act.ShouldThrow<FormatException>();
+        act.ShouldThrow<FormatException>().Message.ShouldContain("first line");
     }
 
     [Theory]
-    [InlineData("# capture v1", "# source x")]
-    [InlineData("# capture v1", "# recorded 2026-11-02T03:10:27Z")]
-    [InlineData("# capture v1")]
-    public void Parse_MissingRequiredLine_Throws(params string[] lines)
+    [InlineData("recorded", "# capture v1", "# source x")]
+    [InlineData("source", "# capture v1", "# recorded 2026-11-02T03:10:27Z")]
+    [InlineData("recorded", "# capture v1")]
+    public void Parse_MissingRequiredLine_Throws(string missing, params string[] lines)
     {
         // Act
         Action act = () => CaptureInfo.Parse(lines);
 
         // Assert
-        act.ShouldThrow<FormatException>();
+        act.ShouldThrow<FormatException>().Message.ShouldContain($"missing a '# {missing}");
     }
 
     [Theory]
