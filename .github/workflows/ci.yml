@@ -104,3 +104,43 @@ jobs:
       - run: cargo fmt --check
       - run: cargo build --release
       - run: cargo clippy --release -- -D warnings
+
+  sonarcloud:
+    # Uploads analysis, coverage, and test results to SonarQube Cloud. Not a required check.
+    # Needs the SONAR_TOKEN secret, so it skips pull requests from forks. Automatic Analysis
+    # must be off in the SonarQube Cloud project, or the two analyses conflict.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # full history, so new code is attributed correctly
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+          cache: true
+          cache-dependency-path: host/**/packages.lock.json
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: ui/.nvmrc
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: dotnet tool restore
+      - run: npm ci
+        working-directory: ui
+      - run: npm test # ui coverage as lcov
+        working-directory: ui
+      - run: >-
+          dotnet sonarscanner begin /k:"byte2pixel_wwvb-decoder" /o:"byte2pixel" /d:sonar.token="$env:SONAR_TOKEN"
+          /d:sonar.projectBaseDir="${{ github.workspace }}"
+          /d:sonar.cs.vscoveragexml.reportsPaths="host/TestResults/*.xml"
+          /d:sonar.cs.vstest.reportsPaths="host/TestResults/*.trx"
+          /d:sonar.javascript.lcov.reportPaths="ui/coverage/lcov.info"
+          /d:sonar.test.inclusions="ui/src/**/*.test.ts,ui/src/**/*.test.tsx"
+          /d:sonar.exclusions="**/node_modules/**,ui/dist/**,ui/coverage/**,ui/test-results/**,coverage/**,**/TestResults/**,firmware/target/**,**/bin/**,**/obj/**"
+      - run: dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false --no-incremental --disable-build-servers
+      - run: dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false --coverage --coverage-output-format xml --report-xunit-trx --results-directory ${{ github.workspace }}/host/TestResults
+      - run: dotnet sonarscanner end /d:sonar.token="$env:SONAR_TOKEN"
