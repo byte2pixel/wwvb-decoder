@@ -68,7 +68,7 @@ jobs:
           node-version-file: ui/.nvmrc
           cache: npm
           cache-dependency-path: ui/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts # no lifecycle scripts from dependencies
       - run: npm run format:check
       - run: npm run lint
       - run: npm test # vitest with coverage; thresholds are in vite.config.ts
@@ -102,8 +102,8 @@ jobs:
         with:
           workspaces: firmware
       - run: cargo fmt --check
-      - run: cargo build --release
-      - run: cargo clippy --release -- -D warnings
+      - run: cargo build --release --locked # Cargo.lock must already match
+      - run: cargo clippy --release --locked -- -D warnings
 
   sonarcloud:
     # Uploads analysis, coverage, and test results to SonarQube Cloud. Not a required check.
@@ -133,7 +133,7 @@ jobs:
           path: ~\.sonar\cache # the scanner's JRE and analyzer plugins
           key: ${{ runner.os }}-sonar
       - run: dotnet tool restore
-      - run: npm ci
+      - run: npm ci --ignore-scripts # no lifecycle scripts from dependencies
         working-directory: ui
       - run: npm test # ui coverage as lcov
         working-directory: ui
@@ -144,6 +144,7 @@ jobs:
           /d:sonar.cs.vstest.reportsPaths="host/TestResults/*.trx"
           /d:sonar.javascript.lcov.reportPaths="ui/coverage/lcov.info"
           /d:sonar.test.inclusions="ui/src/**/*.test.ts,ui/src/**/*.test.tsx"
+          /d:sonar.coverage.exclusions="verify.ps1,host/src/WwvbDecoder.Tools/**"
           /d:sonar.exclusions="**/node_modules/**,ui/dist/**,ui/coverage/**,ui/test-results/**,coverage/**,**/TestResults/**,firmware/target/**,**/bin/**,**/obj/**"
       - run: dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false --no-incremental --disable-build-servers
       - run: dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false --coverage --coverage-output-format xml --report-xunit-trx --results-directory ${{ github.workspace }}/host/TestResults

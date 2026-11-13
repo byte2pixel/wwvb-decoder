@@ -37,19 +37,12 @@ public sealed class SymbolClassifier : IStage<Pulse, Symbol>
             return [new Symbol(input.StartMicros, input.DurationMicros, SymbolKind.Error)];
         }
 
-        SymbolKind kind;
-        if (input.DurationMicros < ZeroOneThresholdMicros)
+        SymbolKind kind = input.DurationMicros switch
         {
-            kind = SymbolKind.Zero;
-        }
-        else if (input.DurationMicros < OneMarkerThresholdMicros)
-        {
-            kind = SymbolKind.One;
-        }
-        else
-        {
-            kind = SymbolKind.Marker;
-        }
+            var d when d < ZeroOneThresholdMicros => SymbolKind.Zero,
+            var d when d < OneMarkerThresholdMicros => SymbolKind.One,
+            _ => SymbolKind.Marker,
+        };
 
         return [new Symbol(input.StartMicros, input.DurationMicros, kind)];
     }

@@ -121,7 +121,7 @@ public sealed class PulseMeasurement : IStage<Edge, Pulse>
         }
 
         ulong duration = input.Micros - _openingEdgeMicros.Value;
-        Pulse pulse = new Pulse(_openingEdgeMicros.Value, duration);
+        Pulse pulse = new(_openingEdgeMicros.Value, duration);
         _openingEdgeMicros = null;
         _pendingPulse = pulse;
         return [];
