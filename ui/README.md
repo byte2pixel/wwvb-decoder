@@ -6,7 +6,7 @@ React + TypeScript, built with Vite. The host loads it inside WebView2.
 npm install
 npm run dev             # dev server with hot reload; the Debug host prefers it when it is running
 npm test                # vitest, once
-npm run lint            # oxlint
+npm run lint            # oxlint, warnings are errors; the pre-commit hook runs it on staged files
 npm run format          # prettier --write; the pre-commit hook does this for staged files
 npm run format:check    # prettier --check
 npm run build           # type-check every project, then static files in dist/ for the host to serve
