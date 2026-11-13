@@ -65,6 +65,7 @@ dotnet test
 | --- | --- | --- | --- |
 | C# | CSharpier, pinned in `dotnet-tools.json` | Formats staged files | `dotnet csharpier check .` |
 | TypeScript, CSS, JSON | Prettier, pinned in `ui/package.json` | Formats staged files | `npm run format:check` |
+| TypeScript | oxlint, pinned in `ui/package.json` | Lints staged files | `npm run lint` |
 | Rust | rustfmt, from the pinned toolchain | Formats staged files | `cargo fmt --check` |
 
 The pre-commit hook (`lefthook.yml`) formats only staged files and re-stages them; unstaged edits in the same file are left alone. `LEFTHOOK=0 git commit` skips it, and CI still checks. `.csharpierignore` and `ui/.prettierignore` skip files that tools rewrite (`*.csproj`, `Directory.Packages.props`, `*.slnx`, `package-lock.json`) and Markdown. C# analyzers run at `latest-recommended`; each host project commits a `packages.lock.json`, and CI restores in locked mode. `.git-blame-ignore-revs` lists bulk-format commits for `git blame` to skip.
