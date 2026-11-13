@@ -3,10 +3,13 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
+    <!-- xunit.v3 runs on Microsoft.Testing.Platform so its extensions (code coverage) see the command line. -->
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="Shouldly" />
+    <PackageReference Include="Microsoft.Testing.Extensions.CodeCoverage" />
     <Using Include="Xunit" />
     <Using Include="Shouldly" />
     <Using Include="WwvbDecoder.Core" />
