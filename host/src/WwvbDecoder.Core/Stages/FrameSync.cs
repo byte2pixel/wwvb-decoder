@@ -57,12 +57,9 @@ public sealed class FrameSync : IStage<Symbol, FrameSyncEvent>
             return LoseSync($"expected marker at second {expected}, got {input.Kind}", 0);
         }
 
-        if (input.Kind is SymbolKind.Marker && !isMarkerExpected)
-        {
-            return LoseSync($"expected bit at second {expected}, got Marker", 1);
-        }
-
-        return FillSlot(input);
+        return input.Kind is SymbolKind.Marker && !isMarkerExpected
+            ? LoseSync($"expected bit at second {expected}, got Marker", 1)
+            : FillSlot(input);
     }
 
     private FrameSyncEvent[] LoseSync(string reason, int markerCount)

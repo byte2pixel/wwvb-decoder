@@ -57,16 +57,13 @@ internal sealed class DecodeCaptureCommand : AsyncCommand<DecodeCaptureCommand.S
 
     public override ValidationResult Validate(CommandContext context, Settings settings)
     {
-        if (!File.Exists(settings.Path))
-        {
-            return ValidationResult.Error($"Input file '{settings.Path}' does not exist.");
-        }
-
-        return settings.Speed switch
-        {
-            < 0 => ValidationResult.Error("Speed must be a non-negative number."),
-            Double.NaN => ValidationResult.Error("Speed must be a valid number."),
-            _ => ValidationResult.Success(),
-        };
+        return !File.Exists(settings.Path)
+            ? ValidationResult.Error($"Input file '{settings.Path}' does not exist.")
+            : settings.Speed switch
+            {
+                < 0 => ValidationResult.Error("Speed must be a non-negative number."),
+                Double.NaN => ValidationResult.Error("Speed must be a valid number."),
+                _ => ValidationResult.Success(),
+            };
     }
 }
