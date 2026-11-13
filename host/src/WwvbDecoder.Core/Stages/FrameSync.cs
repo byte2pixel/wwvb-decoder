@@ -52,14 +52,18 @@ public sealed class FrameSync : IStage<Symbol, FrameSyncEvent>
         }
 
         bool isMarkerExpected = WwvbFrameLayout.MarkerSeconds.Contains(expected);
-        if (input.Kind is SymbolKind.One or SymbolKind.Zero && isMarkerExpected)
+        return (input.Kind, isMarkerExpected) switch
         {
-            return LoseSync($"expected marker at second {expected}, got {input.Kind}", 0);
-        }
-
-        return input.Kind is SymbolKind.Marker && !isMarkerExpected
-            ? LoseSync($"expected bit at second {expected}, got Marker", 1)
-            : FillSlot(input);
+            (SymbolKind.One or SymbolKind.Zero, true) => LoseSync(
+                $"expected marker at second {expected}, got {input.Kind}",
+                0
+            ),
+            (SymbolKind.Marker, false) => LoseSync(
+                $"expected bit at second {expected}, got Marker",
+                1
+            ),
+            _ => FillSlot(input),
+        };
     }
 
     private FrameSyncEvent[] LoseSync(string reason, int markerCount)

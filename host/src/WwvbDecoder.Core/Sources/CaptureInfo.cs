@@ -76,14 +76,11 @@ public sealed record CaptureInfo(
             }
         }
 
-        if (recorded == null)
-        {
-            throw new FormatException(
-                "The capture file is missing a '# recorded <ISO-8601 UTC>' line."
-            );
-        }
         return new CaptureInfo(
-            recorded.Value,
+            recorded
+                ?? throw new FormatException(
+                    "The capture file is missing a '# recorded <ISO-8601 UTC>' line."
+                ),
             source
                 ?? throw new FormatException(
                     "The capture file is missing a '# source <source>' line."
