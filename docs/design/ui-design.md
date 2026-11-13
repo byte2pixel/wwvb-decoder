@@ -81,7 +81,8 @@ shadcn/ui components expect a fixed set of CSS variables, so the tokens are decl
 | `text-3` | `--muted-foreground` |
 | `accent`, `on-accent` | `--signal` and `--on-signal`; also `--primary`, `--primary-foreground`, and `--ring` |
 | `bad` | `--bad`; also `--destructive` |
-| `bar`, `text-2`, `zero`, `marker`, `good`, `warn` | `--bar`, `--text-2`, `--zero` and `--zero-surface`, `--marker` and `--marker-surface`, `--good`, `--warn` |
+| `text-2` | `--foreground-soft`, so the utility reads `text-foreground-soft` |
+| `bar`, `zero`, `marker`, `good`, `warn` | `--bar`, `--zero` and `--zero-surface`, `--marker` and `--marker-surface`, `--good`, `--warn` |
 
 - Light values go in `:root` and dark values under `.dark`, as shadcn generates them, so its components work unchanged. `<html>` carries `class="dark"` by default and the theme button toggles it.
 - Each variable is mapped into Tailwind in the `@theme inline` block (`--color-signal: var(--signal)`), which gives utilities such as `bg-signal` and `text-good`.

@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": ["react", "typescript", "oxc", "jsx-a11y"],
   "ignorePatterns": ["dist", "coverage", "test-results"],
   "categories": {
     "correctness": "error",
@@ -12,5 +12,11 @@
     "react/only-export-components": ["error", { "allowConstantExport": true }],
     "react/react-in-jsx-scope": "off",
     "typescript/no-explicit-any": "error"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/components/ui/**"],
+      "rules": { "react/only-export-components": "off" }
+    }
+  ]
 }

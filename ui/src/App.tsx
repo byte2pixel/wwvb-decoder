@@ -3,6 +3,7 @@ import "./App.css";
 import { createBridge, findWebView } from "./protocol/bridge.ts";
 import { appendMessage, emptyLog } from "./protocol/log.ts";
 import type { SourceStatus } from "./protocol/messages.ts";
+import { Button } from "./components/ui/button.tsx";
 
 const bridge = createBridge(findWebView());
 
@@ -40,13 +41,13 @@ export default function App() {
           value={noise}
           onChange={(e) => setNoise(Number(e.target.value))}
         />
-        <button
+        <Button
           onClick={() =>
             bridge.send({ command: "selectSource", source: "synthetic", noise })
           }
         >
           Start
-        </button>
+        </Button>
         <button onClick={() => bridge.send({ command: "stop" })}>Stop</button>
         <div className="status">
           {status

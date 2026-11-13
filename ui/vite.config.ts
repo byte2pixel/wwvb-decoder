@@ -1,9 +1,12 @@
+import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
+import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { "@": path.resolve(import.meta.dirname, "./src") } },
   server: {
     // The WPF host probes this exact port in Debug; fail rather than drift to another.
     port: 5173,
@@ -16,7 +19,7 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       include: ["src/**"],
-      exclude: ["src/**/*.test.*", "src/main.tsx"],
+      exclude: ["src/**/*.test.*", "src/components/ui/**", "src/main.tsx"],
       reporter: ["text", "lcov", "cobertura"],
       reportsDirectory: "coverage",
       // A ratchet, a few points under what the suite covers today; raise it as tests land.
