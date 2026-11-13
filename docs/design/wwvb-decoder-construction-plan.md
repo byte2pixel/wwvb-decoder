@@ -4,7 +4,7 @@
 
 **Generated**: 2026-10-31. Reviewed the same day by an independent agent against a cold-start, dependency, technical-accuracy, and ADR-conformance checklist; all critical and major findings are folded in.
 **Mode**: git + GitHub CLI available (`origin` = `github.com/byte2pixel/wwvb-decoder`, private, default branch `main`). Every step is one branch and one PR. Solo project: self-merge after the step's verification passes.
-**Talk**: Thursday, Dec 10, 2026. Hard deadline. Cut order if behind: Step 14 entirely; then the stage 4 to 7 views in Step 13 reduced to text tables (the source controls in Step 13 are never cut); then the histogram in Step 12. Never cut Steps 10 or 11: replay is what makes the demo independent of RF.
+**Talk**: Thursday, Dec 10, 2026. Hard deadline. Cut order if behind: Step 14 entirely; then Step 16 (the focus views stay enlarged panels, with no motion pass); then the stage 4 to 7 panels in Step 13 reduced to text tables (the source controls in Step 13 are never cut); then the pulse-width panel in Step 12b. Never cut Steps 10 or 11: replay is what makes the demo independent of RF.
 
 ## How to use this plan
 
@@ -39,6 +39,7 @@ These are already decided and recorded. Steps implement them; they do not reopen
 - ADR-0004: `IEdgeSource` with serial, replay, and synthetic implementations.
 - ADR-0005: seven stages, each a class with a typed input and output.
 - ADR-0006: validation by markers, unused bits, ranges, and frame-to-frame consistency.
+- ADR-0007: Tailwind and shadcn/ui for controls, hand-drawn views with no chart library, Zustand, bundled fonts.
 
 **Decided in this plan** (Steps 1 to 3 write these up in detail; later steps follow them):
 
@@ -54,6 +55,7 @@ These are already decided and recorded. Steps implement them; they do not reopen
 - **WebView2 message protocol** (Step 3): host to page is a JSON envelope `{ "type": string, "seq": number, "payload": object }` with one `type` per stage output plus status types; edges are batched. Page to host is `{ "command": string, ...args }`, including `hello`. `System.Text.Json` with camelCase on both sides. Example JSON per message type lives in `docs/design/message-examples/` and both test suites assert against those files.
 - **Frame encoding convention.** The frame transmitted during a minute encodes the UTC time at that frame's second 0 (the minute in progress). Confirmed against the WWVB time-code description ("the time code is always transmitted in the minute immediately after the moment it represents"; the on-time point is the leading edge of the second-0 marker). Step 2 cites the NIST source in the contracts document.
 - **PC-clock offset.** Stage 2 releases the second-59 pulse at the next entering edge, so a frame completes 60 s after the instant it encodes. `OffsetFromPc` is `(FrameUtc + 60 s) - TimeProvider.GetUtcNow()` taken when the frame completes.
+- **Visualizer layout** (decided 2026-11-12, specified in `docs/design/ui-design.md`). An overview ordered by time scale (signal, frame, decoded frames, time) under a rail of the seven stages, and a focus view per stage on keys `1` to `7`. Stages 1 to 4 share one time axis. The page never decodes: values, verdicts, and clock status come from the host, and the frame layout reaches the page in a `frameLayout` message. The whole page scales with the window from a 1280 by 720 baseline.
 
 ## Dependency graph
 
@@ -70,10 +72,12 @@ flowchart TD
   S9[Step 9: Rust edge-logger firmware]
   S10[Step 10: Serial source, capture recorder, Tools record]
   S11[Step 11: Replay source, capture catalog, Tools decode]
-  S12[Step 12: Visualizer part 1: signal views]
-  S13[Step 13: Visualizer part 2: controls, frame, validation, clock]
+  S12a[Step 12a: UI foundation]
+  S12b[Step 12b: Signal views and focus mode]
+  S13[Step 13: Source controls, frame, decoded frames, time]
   S14[Step 14: Desk-top transmitter]
   S15[Step 15: Demo hardening]
+  S16[Step 16: Focus views and motion]
 
   S1 --> S3
   S2 --> S3
@@ -87,12 +91,14 @@ flowchart TD
   S9 -. hardware exit criterion .-> S10
   S7 --> S11
   S10 --> S11
-  S8 --> S12 --> S13
+  S8 --> S12a --> S12b --> S13
   S11 --> S13
   S4 --> S14
   S9 --> S14
   S13 --> S15
+  S13 --> S16
   S14 -. optional .-> S15
+  S16 -. optional .-> S15
 ```
 
 Parallel groups:
@@ -102,7 +108,8 @@ Parallel groups:
 | A | 1, 2 | Different documents |
 | B | 5, 6, 7 and 9 | C# stages vs Rust firmware |
 | C | 8 and 10, then 8 and 11 | Host bridge vs Adapters/Tools. Both 8 and 10 add projects to `host/WwvbDecoder.slnx` and jobs to `.github/workflows/ci.yml`; expect a trivial merge conflict in those two files and resolve by keeping both additions |
-| D | 12, 14 | React vs Rust |
+| D | 12a, 12b, 13 and 14 | React vs Rust |
+| E | 15, 16 | Host and publishing vs page polish. One developer, so interleaved, not simultaneous |
 
 ## Schedule
 
@@ -128,9 +135,12 @@ This schedule is tight for evenings and weekends; the cut order in the header ap
 | 10 | Nov 3 to Nov 6 | Recorder; first terminal-logged overnight capture by Nov 2, recorder-made capture by Nov 6 |
 | 11 | Nov 10 to Nov 13 | Replay |
 | 8 | Nov 11 to Nov 16 | WebView2 shell |
-| 12, 13 | Nov 16 to Nov 30 | React visualizer |
+| 12a | Nov 13 to Nov 16 | UI foundation: tokens, shell, store, simulator |
+| 12b | Nov 16 to Nov 23 | Signal views and focus mode |
+| 13 | Nov 23 to Nov 30 | Source controls, frame, decoded frames, time |
 | 14 | Nov 23 to Dec 1 | Desk-top transmitter (Thanksgiving Nov 26) |
 | 15 | Dec 1 to Dec 4 | Window test and dry run |
+| 16 | Dec 1 to Dec 6 | Focus views and motion, alongside Step 15 |
 | On-site | Dec 7 to Dec 11 | Test in the actual room; talk Thu Dec 10 |
 
 ---
@@ -532,7 +542,7 @@ Revert the PR.
 
 ### Context brief
 
-`host/src/WwvbDecoder.Host/MainWindow.xaml.cs` already creates the WebView2 control, prefers the Vite dev server at port 5173 in Debug, and otherwise maps `wwwroot` to `https://app.local`. `ui/` is a stock Vite React 19 + TypeScript 7 template with oxlint and no tests; `ui/tsconfig.app.json` has `"types": ["vite/client"]` and includes all of `src`, so test files that import `node:fs` must be excluded from it. This step adds the message bridge on both sides per `docs/design/webview2-messages.md`, wires the composition root, and replaces the template page with a minimal protocol page that proves every message type flows. Charts come in Steps 12 and 13. The example files in `docs/design/message-examples/` are the contract both test suites assert against.
+`host/src/WwvbDecoder.Host/MainWindow.xaml.cs` already creates the WebView2 control, prefers the Vite dev server at port 5173 in Debug, and otherwise maps `wwwroot` to `https://app.local`. `ui/` is a stock Vite React 19 + TypeScript 7 template with oxlint and no tests; `ui/tsconfig.app.json` has `"types": ["vite/client"]` and includes all of `src`, so test files that import `node:fs` must be excluded from it. This step adds the message bridge on both sides per `docs/design/webview2-messages.md`, wires the composition root, and replaces the template page with a minimal protocol page that proves every message type flows. Charts come in Steps 12a, 12b, and 13. The example files in `docs/design/message-examples/` are the contract both test suites assert against.
 
 Serial and replay sources arrive in Steps 10 and 11; this step wires only `SyntheticEdgeSource` and makes `selectSource` for `serial` and `replay` answer with a `sourceStatus` of `state: "error"` and detail `"not available yet"`.
 
@@ -723,45 +733,54 @@ Revert the PR.
 
 ---
 
-## Step 12: Visualizer part 1: signal views
+## Step 12a: UI foundation
 
 **Depends on**: Step 8
 **Parallel with**: Step 14
 **Model tier**: default
-**Window**: Nov 16 to Nov 23
+**Window**: Nov 13 to Nov 16
 
 ### Context brief
 
-The page (`ui/`) has a typed bridge, a protocol log, vitest with a separate test tsconfig, and a `"test": "vitest run"` script from Step 8. This step adds the first three visualizations from the plan's stage table: the raw edge log (stage 1), a strip chart of the carrier envelope (stage 2), and a pulse-width histogram with three clusters (stage 3). Keep the UI readable from the back of a conference room: large fonts, high contrast, dark background. Pick one small charting approach and stick to it: hand-drawn `<canvas>` for the strip chart (it is a scrolling square wave; libraries add weight for no gain) and a simple SVG bar chart for the histogram. No new heavy dependencies.
+The page (`ui/`) has a typed bridge, a protocol log, vitest with a separate test tsconfig, and plain CSS from Step 8. This step lays the foundation the rest of the visualizer is built on and draws no stage views yet. Read `docs/design/ui-design.md` (layout, tokens, page structure) and ADR-0007 (libraries) first. At the end the screen is the finished shell: app bar, pipeline rail with live readouts, five panels in their no-data states, and status bar, in both themes, running in the host and in a plain browser.
 
 ### Tasks
 
-1. Test setup: add `jsdom` and `@testing-library/react` as dev dependencies; set `test.environment = "jsdom"` in `vite.config.ts`; mock `HTMLCanvasElement.prototype.getContext` in a `src/test-setup.ts` registered via `test.setupFiles`.
-2. `src/state/`: a reducer or small store that consumes bridge messages into ring buffers: last 2,000 edges, last 300 pulses, last 600 symbols, plus latest `sourceStatus`.
-3. `src/views/EdgeLog.tsx`: monospace scrolling list of the last 50 edge lines rendered as the serial protocol would show them (`H 12345678`).
-4. `src/views/StripChart.tsx`: canvas, 10 s window scrolling left, square wave from edges with the reduced-carrier level drawn low; each completed pulse annotated under the trace with its duration and classified symbol (0, 1, M, or a red error mark).
-5. `src/views/Histogram.tsx`: durations 0 to 1,000 ms in 20 ms bins from the last 600 symbols, bars colored by classification, the two thresholds drawn as vertical lines. Noise smears the clusters; that is the point.
-6. `src/App.tsx`: layout with a header (source selector from Step 8, status), a main area holding these three views, and a collapsible protocol log. Responsive to 1280 by 720 and 1920 by 1080.
-7. Component tests: the store trims buffers; the histogram bins a known set of durations into the right bars; the strip chart component mounts and resizes without throwing.
-8. Visual check against synthetic at noise 0 and noise 0.4, and against a replay capture once Step 13 wires replay into the host.
+1. Tailwind CSS v4 through `@tailwindcss/vite`. Define the tokens from `ui-design.md` in `src/index.css` under the variable names its table gives: light values in `:root`, dark values under `.dark`, and `class="dark"` on `<html>` by default, which the theme button toggles. Set the root font size to `min(100vw / 80, 100vh / 45)`. Delete `App.css`.
+2. Fonts: `@fontsource-variable/inter` and `@fontsource-variable/jetbrains-mono`, imported in `src/main.tsx`. No font is fetched from the network.
+3. shadcn/ui: add a `@/` path alias in the tsconfig files and `vite.config.ts`, run the CLI's init with `--base base` for Base UI primitives, and add only the controls this step uses: button, toggle group, slider, tooltip, sheet. They land in `src/components/ui/`. Exclude that folder from coverage in `vite.config.ts` and in `sonar.coverage.exclusions`; give it an oxlint override only where a generated file needs one.
+4. Lint: add the `jsx-a11y` plugin to `.oxlintrc.json`.
+5. Test setup: add `jsdom`, `@testing-library/react`, and `@testing-library/user-event`; set `test.environment = "jsdom"`; register `src/test-setup.ts` in `test.setupFiles`.
+6. `src/state/`: a Zustand store over pure reducers, one per message type: ring buffers (2,000 edges, 300 pulses, 600 symbols, 20 validation results, 50 info lines), the latest message of each type, and the counters. The Step 8 log reducer moves in unchanged.
+7. `src/time/sourceClock.ts`: the source clock from `ui-design.md`, with the time function injected so tests drive it.
+8. `src/sim/`: a simulator bridge with the same interface as `createBridge`, used when `findWebView()` finds nothing. It plays a recorded message stream and answers `hello`, `selectSource`, and `stop`. Record the stream in the host's dev tools through a development-only hook that collects received envelopes: a synthetic run of at least three minutes at noise 0, one envelope per line, under `src/sim/fixtures/`. Every line must parse with `hostMessageSchema`. Load the simulator and its fixture with a dynamic import in development builds only, so neither is in the production bundle.
+9. `src/shell/`: `AppBar` (the synthetic controls from Step 8; Live and Replay disabled until Step 13; the theme button), `PipelineRail` (seven buttons with readout and health from the store, as the table in `ui-design.md`), `Panel` (header, stage chips, state line, error boundary), `StatusBar`. `App.tsx` lays out the five panels, each in its no-data state. The protocol log moves into a drawer opened from the status bar.
+10. Tests: every reducer; buffer trimming; the rail readout and health for each stage from scripted messages; the source clock (advancing, a correction without a jump, reset, speed); the fixture parses; a panel whose child throws shows its error state while the others stay mounted.
+11. `ui/README.md`: the stack, the simulator, how to add a shadcn component, how to record a fixture.
 
 ### Files
 
-- `ui/src/state/**`, `ui/src/views/EdgeLog.tsx`, `ui/src/views/StripChart.tsx`, `ui/src/views/Histogram.tsx`, `ui/src/App.tsx`, `ui/src/App.css`
-- `ui/src/test-setup.ts` (new), `ui/vite.config.ts`, `ui/src/**/*.test.tsx`, `ui/package.json`, `ui/package-lock.json`
+- `ui/package.json`, `ui/package-lock.json`, `ui/vite.config.ts`, `ui/tsconfig*.json`, `ui/components.json` (new), `ui/.oxlintrc.json`, `ui/README.md`
+- `ui/src/index.css`, `ui/src/main.tsx`, `ui/src/App.tsx`, `ui/src/App.css` (deleted), `ui/src/test-setup.ts` (new)
+- `ui/src/components/ui/**`, `ui/src/lib/**`, `ui/src/state/**`, `ui/src/time/**`, `ui/src/sim/**`, `ui/src/shell/**`, `ui/src/**/*.test.ts`, `ui/src/**/*.test.tsx`
+- `ui/src/protocol/log.ts` and its test (moved under `state/`), `ui/src/protocol/bridge.ts` (the recording hook)
+- `.github/workflows/ci.yml` (the Sonar coverage exclusion only)
 
 ### Verification
 
 ```powershell
 Push-Location ui; npm run lint; npm test; npm run build; Pop-Location
-# Manual: host with synthetic source; three clean clusters at noise 0; smeared at 0.4.
+# Manual, browser: `npm run dev`, open http://localhost:5173; the simulator drives all seven rail readouts.
+# Manual, host: F5 with the dev server running, pick Synthetic; the same readouts from the real pipeline. Switch theme. Resize the window and watch the page scale.
+# Manual, offline: `npm run build`, run the host without the dev server and with the network disconnected; fonts and styles still load.
 ```
 
 ### Exit criteria
 
-- All three views update live from the synthetic source at 1x.
-- No dropped frames in the strip chart at 1x.
-- Bundle size under 500 kB gzipped (`npm run build` prints it).
+- The shell runs in the host and in a plain browser, in both themes, and scales with the window.
+- All seven rail readouts update live from the synthetic source.
+- The built page loads with the network disconnected.
+- Bundle under 500 kB gzipped, scripts and styles (`npm run build` prints it).
 
 ### Rollback
 
@@ -769,58 +788,106 @@ Revert the PR; the protocol page from Step 8 remains.
 
 ---
 
-## Step 13: Visualizer part 2: source controls, frame grid, fields, validation, clock
+## Step 12b: Signal views and focus mode
 
-**Depends on**: Steps 11, 12
+**Depends on**: Step 12a
+**Parallel with**: Step 14
+**Model tier**: default
+**Window**: Nov 16 to Nov 23
+
+### Context brief
+
+The shell, store, source clock, and simulator exist from Step 12a. This step fills the two signal panels and adds focus mode, all specified in `docs/design/ui-design.md`. The signal panel is the hardest view in the project: a canvas with four lanes on one time axis, scrolling smoothly on the source clock. Keep the rule from ADR-0007: a pure function decides what to draw and is tested, and the component that paints is thin.
+
+### Tasks
+
+1. `src/views/signal/`: `model.ts`, a pure function from the edge, pulse, symbol, and frame-sync buffers, the present from the source clock, the window, the size, and the tokens to a draw list for the four lanes (carrier, pulse, symbol, second); and `SignalView.tsx`, a canvas that paints the list on every animation frame, sized by a `ResizeObserver` and `devicePixelRatio`. The window is 12 s at 1×, and 60 s without labels above it. The newest pulse and symbol read `pending`.
+2. `src/views/pulse-width/`: `model.ts` bins the last 600 symbol durations into 25 ms bins from 0 to 1,000 ms, with a class and a height per bin; `PulseWidthView.tsx` draws the bars, the two thresholds, the valid-range limits, the error zones, and the last-pulse line in DOM or SVG. Noise smears the clusters; that is the point.
+3. `src/views/edge-log/EdgeLog.tsx`: the last 50 edges as the serial protocol writes them (`H 12345678`), for the stage 1 focus view.
+4. Focus mode: `src/shell/FocusLayout.tsx` and a `focus` field in the store. The keyboard map from `ui-design.md`: `1` to `7`, `Esc` or `0`, the arrow keys with Page Up and Page Down, `T`, `L`, and `?`, all ignored while an input has focus. The rail highlights the focused stage. Baseline focus views for stages 1 to 3 as in the `ui-design.md` table; stages 4 to 7 show their no-data panel enlarged until Step 13.
+5. Tests: the signal model (a square wave from edges with the reduced-carrier level low, a pending newest pulse, a glitch that appears in the carrier lane only, labels hidden at 60 s, the second lane from `slotFilled`); the binning, with a duration on each class boundary; the keyboard map, including the ignored-in-input rule; the canvas component mounts, resizes, and paints through a recording fake context without throwing.
+6. Visual check in the host against synthetic at noise 0 and noise 0.4, and in the browser against the simulator.
+
+### Files
+
+- `ui/src/views/signal/**`, `ui/src/views/pulse-width/**`, `ui/src/views/edge-log/**`
+- `ui/src/shell/FocusLayout.tsx`, `ui/src/shell/PipelineRail.tsx`, `ui/src/App.tsx`, `ui/src/state/**`, `ui/src/test-setup.ts`, tests
+
+### Verification
+
+```powershell
+Push-Location ui; npm run lint; npm test; npm run build; Pop-Location
+# Manual: host with synthetic source; three clean clusters at noise 0; smeared at 0.4, with red symbols in the signal panel.
+# Manual: keys 1, 2, 3, Esc, and the arrow keys.
+```
+
+### Exit criteria
+
+- Both panels update live from the synthetic source at 1×.
+- The signal panel scrolls without visible stutter at 1× (check the frame rate in the WebView2 dev tools).
+- Bundle under 500 kB gzipped, scripts and styles.
+
+### Rollback
+
+Revert the PR; the shell from Step 12a remains.
+
+---
+
+## Step 13: Source controls, frame, decoded frames, time
+
+**Depends on**: Steps 11, 12b
 **Parallel with**: Step 14
 **Model tier**: default
 **Window**: Nov 23 to Nov 30
 
 ### Context brief
 
-Finish the visualizer with the source controls the demo depends on (serial port picker, capture picker with replay speed, synthetic noise knob, polarity toggle) and the stage 4 to 7 views. The host's `SourceController` (Step 8) must now construct `SerialEdgeSource` (Adapters, Step 10) and `ReplayEdgeSource` (Core, Step 11) and answer `listPorts` and `listCaptures` via `SerialPorts` and `CaptureCatalog`; the Host project needs a reference to Adapters. Messages are specified in `docs/design/webview2-messages.md`. If time runs short, Tasks 1, 2, and 7 are mandatory; Tasks 3 to 6 may be reduced to text tables.
+Finish the overview with the source controls the demo depends on (serial port picker, capture picker with replay speed, synthetic noise knob, polarity toggle) and the three remaining panels: frame, decoded frames, and time, all specified in `docs/design/ui-design.md`. The host's `SourceController` (Step 8) must now construct `SerialEdgeSource` (Adapters, Step 10) and `ReplayEdgeSource` (Core, Step 11); `listPorts` and `listCaptures` already answer through `HostEnvironment`. The frame panel needs the frame layout, which the host sends in a new `frameLayout` message so that it is not written down a third time. Messages are specified in `docs/design/webview2-messages.md`. If time runs short, Tasks 1 to 3 are mandatory; Tasks 4 to 7 may be reduced to text tables.
 
 ### Tasks
 
-1. Host: add a `ProjectReference` to `WwvbDecoder.Adapters` in `WwvbDecoder.Host.csproj`; extend `SourceController` for serial and replay; implement `listPorts` and `listCaptures` (default directory `captures/` found by walking up from the exe to the repo root in Debug, next to the exe in Release, overridable with a `--captures <dir>` argument); apply `setReplaySpeed`, `setNoise`, `setReducedCarrierLevel` live.
-2. UI `src/views/SourceControls.tsx`: source tabs (Serial, Replay, Synthetic), port dropdown refreshed by `listPorts`, capture list with recorded date and length, speed buttons 1x / 10x / 60x, noise slider, polarity toggle, stop.
-3. UI `src/views/FrameGrid.tsx`: 60 cells in a 6 by 10 grid, filled from `frameSync` `slotFilled` events, colored by symbol, markers outlined, field groups labeled underneath (minute, hour, day, UT1, year, flags), cells flash on `syncLost`, grid clears on the next frame start.
-4. UI `src/views/Fields.tsx`: decoded values from `decodedFrame` with raw bits next to each value; cells in `errorSeconds` highlighted.
-5. UI `src/views/Validation.tsx`: last 20 frames as accepted/rejected rows with the headline failure and all failures on hover; counters.
-6. UI `src/views/Clock.tsx`: big UTC and local time extrapolated from `frameUtc` plus the seconds since the frame start (derived from the latest edge timestamp relative to `frameStartMicros`, so replay at speed 10 runs the clock at 10x), status badge, time since last sync, offset from the PC clock. Local time from `dst` using the US Central rule, labeled as an approximation (the DST bits say "begins today" or "ends today" without the 02:00 switch time).
-7. Layout: a stage strip that matches the seven-stage story and a presenter keyboard shortcut (`1` to `7`) that enlarges one stage's view for the slide walkthrough.
-8. Tests: grid placement from a scripted `frameSync` sequence; clock extrapolation math; validation row rendering; host-side `SourceController` tests with a fake `IEdgeSource` factory.
+1. Host: extend `SourceController` to build `SerialEdgeSource` and `ReplayEdgeSource`; confirm the captures directory rule (`captures/` found by walking up from the exe to the repo root in Debug, next to the exe in Release, overridable with a `--captures <dir>` argument); apply `setReplaySpeed`, `setNoise`, `setReducedCarrierLevel` live. Replay pacing: either `ReplayEdgeSource` batches its delays so 60× is reachable, or the fastest button is relabeled to the speed it reaches (see the Step 11 audit note on `Task.Delay`); record which in the audit trail.
+2. `frameLayout` message: a section in `webview2-messages.md`, an example file, a Host payload built from `WwvbFrameLayout` and posted after `captures` in the reply to `hello`, the zod schema, and both test suites. The shape proposed in `ui-design.md` is the starting point.
+3. UI source controls in `src/shell/AppBar.tsx`: the three-way source control (Live, Replay, Synthetic); a port list refreshed by `listPorts`; a capture list with recorded date and length, and speed buttons 1×, 10×, 60×; the noise slider; a signal settings popover with the reduced-carrier level; Stop. Add the shadcn select and popover.
+4. UI `src/views/frame/`: `model.ts` and `FrameView.tsx`. Three rows of 20 cells filled from `frameSync` `slotFilled` events, with the cell states, bit weights, and field brackets from `ui-design.md`, the brackets derived from `frameLayout`. The header shows synced with a count, searching, or the sync-lost reason for 5 s. A `slotFilled` with a new `frameStartMicros` clears the cells first.
+5. UI `src/views/frames-table/`: one row per `validation` message, newest first, with the columns from `ui-design.md`: a count, the 60-tick symbol strip, the decoded values as received, and the result. All failures with their detail in a tooltip.
+6. UI `src/views/time/`: clock digits from `frameUtc` plus the source time elapsed since `frameStartMicros`, read from the source clock, so replay at 10× runs the clock at 10×; the four statuses with the current one highlighted; the four rows from `ui-design.md`. Under replay the offset row is the recorded offset from the latest `# wall` line. Local time from `dst` using the US Central rule, marked approximate on a "begins today" or "ends today" day (the bits do not carry the 02:00 switch time).
+7. Baseline focus views for stages 4 to 7 as in the `ui-design.md` table.
+8. Tests: the frame model from a scripted `frameSync` sequence, including searching, sync lost, and the clear on a new frame; brackets derived from the `frameLayout` example; table rows from the validation example, accepted and rejected; the clock extrapolation at 1× and 10×; the recorded offset from a `# wall` line; local time for each `dst` value; host-side `SourceController` tests with a fake `IEdgeSource` factory.
+9. Record a second simulator fixture: a noisy synthetic run that includes a rejected frame and a sync loss.
 
 ### Files
 
-- `host/src/WwvbDecoder.Host/WwvbDecoder.Host.csproj`, `Services/SourceController.cs`, `Bridge/CommandHandler.cs`
-- `host/tests/WwvbDecoder.Host.Tests/**`
-- `ui/src/views/SourceControls.tsx`, `FrameGrid.tsx`, `Fields.tsx`, `Validation.tsx`, `Clock.tsx`, `ui/src/App.tsx`, `ui/src/state/**`, tests
+- `host/src/WwvbDecoder.Host/Services/SourceController.cs`, `Bridge/Messages.cs`, `Bridge/MessageJson.cs`, `Bridge/WebMessageBridge.cs`
+- `host/src/WwvbDecoder.Core/**` (replay pacing only, if Task 1 changes it), `host/tests/**`
+- `docs/design/webview2-messages.md`, a new example file in `docs/design/message-examples/`
+- `ui/src/protocol/messages.ts`, `ui/src/shell/AppBar.tsx`, `ui/src/views/frame/**`, `ui/src/views/frames-table/**`, `ui/src/views/time/**`, `ui/src/App.tsx`, `ui/src/state/**`, `ui/src/sim/fixtures/**`, `ui/src/components/ui/**`, tests
 
 ### Verification
 
 ```powershell
 dotnet test host/WwvbDecoder.slnx -c Release -p:BuildUi=false
 Push-Location ui; npm run lint; npm test; npm run build; Pop-Location
-# Manual: replay a real capture at 10x, watch the grid fill, fields decode, frames accept, clock lock.
-# Manual: switch to synthetic at noise 0.4 and watch rejections with reasons.
+# Manual: replay a real capture at 10×; watch the frame fill, rows arrive in the table as accepted, and the clock lock.
+# Manual: switch to synthetic at noise 0.4 and watch rejected rows with their reasons, and the clock go to holding.
 ```
 
 ### Exit criteria
 
 - All three sources are selectable from the page and switch without restarting the host.
 - A real capture reaches `locked` in replay and the clock matches the capture's `# wall` lines to within a second.
+- The frame panel draws its fields from `frameLayout`; no TypeScript file lists field seconds or weights.
 
 ### Rollback
 
-Revert the PR; part 1 views remain.
+Revert the PR; the shell and the signal views remain.
 
 ---
 
 ## Step 14: Desk-top WWVB transmitter (second Pico)
 
 **Depends on**: Steps 4, 9
-**Parallel with**: Steps 12, 13
+**Parallel with**: Steps 12a, 12b, 13
 **Model tier**: strongest
 **Window**: Nov 23 to Dec 1 (Thanksgiving Nov 26). First step to cut if behind schedule.
 
@@ -881,7 +948,7 @@ Everything works on the development machine. This step makes it survive a confer
 2. Startup robustness: Release build never probes the dev server (already compile-gated; verify); if the WebView2 runtime is missing, show a WPF message with the download link instead of crashing; if the last-used serial port is gone, start on the most recent capture in replay and say so in `sourceStatus`.
 3. Polarity warning: if frame sync has reported more than 20 markers in 60 s without ever reaching second 1, send a `sourceStatus` detail suggesting the polarity toggle; the page shows it as a banner.
 4. Remember last source, port, capture, speed, polarity in `%LocalAppData%\WwvbDecoder\settings.json`.
-5. Presenter mode: `F11` fullscreen, the `1` to `7` stage shortcuts from Step 13, and a `D` shortcut that toggles a "noise demo" preset (synthetic, noise 0.4).
+5. Presenter mode: `F11` fullscreen, the stage keys from Step 12b, and a `D` shortcut that toggles a "noise demo" preset (synthetic, noise 0.4). During the on-site week, choose the dark or light theme and check the scale on the room's projector.
 6. `docs/presentation/demo-runbook.md`: the ordered checklist for the day (check the NIST WWVB outage page, start the live receiver 10 minutes before, antenna at the west window on the 5 m extension pointed north-south, fallback order: live, desk-top transmitter, replay), the three things to show (clean decode, charger-induced rejections, source switch), and the recovery actions for each failure.
 7. Dry run at home with the published exe on the presentation laptop, then at the office window during the on-site week; record the results in the runbook.
 
@@ -912,13 +979,58 @@ Revert the PR; the Debug workflow still works for the talk as a last resort.
 
 ---
 
+## Step 16: Focus views and motion
+
+**Depends on**: Step 13
+**Parallel with**: Step 15
+**Model tier**: default
+**Window**: Dec 1 to Dec 6. Second step to cut if behind schedule, after Step 14.
+
+### Context brief
+
+The overview is complete and every stage has a baseline focus view: its panel enlarged. This step replaces those with the full focus views in the `docs/design/ui-design.md` table, which present each stage as input, rule, and output for the walkthrough, and adds the motion pass. The tasks are independent and in the order the talk needs them, so the step can stop after any one.
+
+### Tasks
+
+1. Stage 5: the last complete frame with each field's value from `decodedFrame`, the weights of its set bits listed under it, and the decoded record handed to stage 6. The page lists weights; the sum it shows is the host's value.
+2. Stage 6: the ten checks as a list for the selected frame, each passed or failed with its detail. Selecting a row in the table selects the frame.
+3. Stage 3: the last pulse landing in its class on the threshold axis.
+4. Stage 7: the four statuses as a state diagram, with the counters that move it.
+5. Stage 4: the searching and synced states as a diagram, with the last sync-lost reasons.
+6. Stages 1 and 2: informational lines beside the edge log. If the glitch counts are wanted, add them to a message first (the optional addition in `ui-design.md`), with its example file and both test suites; otherwise leave them out.
+7. Motion: the overview-to-focus transition with the View Transitions API; the frame-complete sequence on the rail; everything instant under `prefers-reduced-motion`.
+8. Tests: each view's model from the example messages; the reduced-motion path.
+
+### Files
+
+- `ui/src/views/**`, `ui/src/shell/**`, `ui/src/state/**`, tests
+- For Task 6's optional message: the host bridge, `docs/design/webview2-messages.md`, and a new example file
+
+### Verification
+
+```powershell
+Push-Location ui; npm run lint; npm test; npm run build; Pop-Location
+# Manual: walk stages 1 to 7 with a presenter remote, on the simulator's noisy fixture and on a replay.
+```
+
+### Exit criteria
+
+- Each finished focus view can be read from the back of a room at 1280 by 720.
+- The walkthrough runs from stage 1 to stage 7 with a presenter remote.
+
+### Rollback
+
+Revert the PR; the baseline focus views remain.
+
+---
+
 ## Invariants (check after every step)
 
 1. `dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false` and `dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false` pass. From Step 4, warnings are errors in every configuration, so passing means no warnings.
 2. `npm run lint`, `npm test` (from Step 8), and `npm run build` pass in `ui/`.
 3. `cargo build --release` and `cargo clippy --release -- -D warnings` pass in `firmware/` whenever `firmware/` changed.
 4. `WwvbDecoder.Core.csproj` references no I/O, UI, or platform packages, and no `System.IO.Ports` type appears under `host/src/WwvbDecoder.Core/`. From Step 4, `host/Directory.Build.props` and `host/src/Directory.Build.props` hold no `PackageReference`.
-5. The frame layout is written down in exactly two places: `WwvbFrameLayout` (C#) and, from Step 14, the `wwvb-frame` crate (Rust), both tested against the same 2026-12-10T19:30:00Z vector.
+5. The frame layout is written down in exactly two places: `WwvbFrameLayout` (C#) and, from Step 14, the `wwvb-frame` crate (Rust), both tested against the same 2026-12-10T19:30:00Z vector. From Step 13 the page gets it from the host in the `frameLayout` message; no TypeScript file lists field seconds or weights.
 6. Every message type in `docs/design/webview2-messages.md` has an example file, and both test suites still pass against it.
 7. All text files use LF (`git ls-files --eol | Select-String 'w/crlf'` prints nothing).
 8. The ADRs still describe what the code does. If a step contradicts one, amend or supersede the ADR in the same PR.
@@ -949,7 +1061,9 @@ Every mutation is one commit touching only this file, merged before the affected
 | 9 | done | [#3](https://github.com/byte2pixel/wwvb-decoder/pull/3) | 2026-11-03 | Receiver #1 locked in daylight and rain: `H` starts each pulse, widths ~210/505/800 ms. Edge task runs on an interrupt executor. `serial-protocol.md` amended: the first line starts every DTR session (renamed to `# session` in #4, plan updated in #6). Task 7 overnight capture deferred to its own PR, recorded with the `# session` firmware. The "CI" exit criterion was checked locally (`cargo build`, `clippy -D warnings`, `fmt --check`) because CI arrives with Step 4 |
 | 10 | done | [#16](https://github.com/byte2pixel/wwvb-decoder/pull/16) | 2026-11-09 | 510 tests, 85 new, all in Adapters. Finished three days after its window. Implementing it amended the contracts: `SerialEdgeSource` opens the port per enumeration of `ReadAsync` and closes it when the enumeration ends, `DisposeAsync` also disposes an injected `TextReader`, and `ReadLineAsync` means a carriage return never reaches the codec on the serial path, while `CaptureFile.Open` keeps one for replay. The serial tests use a `StringReader`, not a `StreamReader` over a `MemoryStream`. Tools parses its own arguments, with no `System.CommandLine`. Outside the step's Files list: that contract change, a global `Using` for Core in `host/tests/Directory.Build.props`, and the two new `.csproj.DotSettings` files. Hardware: a 10-minute desk capture and an 8 h 45 min overnight capture (62,991 edges, no resets, no gaps, one 81 µs glitch with `# dropped 1`) are committed with receiver #1 only; receiver #2 was not used. Checking the captures found that `record` deleted an existing `--out` file; fixed in this PR |
 | 11 | done | [#17](https://github.com/byte2pixel/wwvb-decoder/pull/17) | 2026-11-10 | 566 tests, 56 new (Core: `CaptureInfo`, `ReplayEdgeSource`, the three-minute fixture through the pipeline; Adapters: `CaptureCatalog`). Started 2026-11-08, before its window. Beyond the task text: Tools moved to `Spectre.Console.Cli` with one class per command, so `decode` is a branch, `decode port <PORT>` and `decode capture <FILE> [--speed]`, not `--port` and `--capture` options; the stage 7 line adds `recordedOffset` from the `# wall` samples because `OffsetFromPc` means nothing under replay. The fixture is a real excerpt of the overnight capture, not synthetic. Tools has no tests; `decode` is verified by the runs recorded in `captures/README.md`. Overnight decode: 524 of 524 frames accepted, locked from the second frame, no sync loss; the 10:28 glitch cost one unpaired edge and nothing else. Observed: `Task.Delay` on Windows waits at least about 15 ms, so a paced replay cannot run faster than about 30x; Step 13's 60x button needs the source to batch delays or will run at 30x |
-| 12 | pending | | | |
-| 13 | pending | | | |
+| 12a | pending | | | Split from Step 12 on 2026-11-12, when the visualizer was redesigned (ADR-0007, `ui-design.md`). New work: Tailwind, shadcn/ui, the tokens, the shell with the pipeline rail, the store, the source clock, and the simulator |
+| 12b | pending | | | The rest of Step 12, redrawn on 2026-11-12: the edge log and strip chart became one signal panel with four lanes, the histogram uses 25 ms bins so the class boundaries fall on bin edges, and focus mode moved here from Step 13 |
+| 13 | pending | | | Rewritten on 2026-11-12: the grid is 3 rows of 20, the fields and validation views became one decoded-frames table, and a `frameLayout` message was added so the layout is not copied into TypeScript |
 | 14 | pending | | | |
 | 15 | pending | | | |
+| 16 | pending | | | Inserted on 2026-11-12: the full focus views and the motion pass. Second in the cut order, after Step 14 |
