@@ -68,7 +68,7 @@ jobs:
           node-version-file: ui/.nvmrc
           cache: npm
           cache-dependency-path: ui/package-lock.json
-      - run: npm ci
+      - run: npm ci --ignore-scripts # no lifecycle scripts from dependencies
       - run: npm run format:check
       - run: npm run lint
       - run: npm test # vitest with coverage; thresholds are in vite.config.ts
@@ -102,8 +102,8 @@ jobs:
         with:
           workspaces: firmware
       - run: cargo fmt --check
-      - run: cargo build --release
-      - run: cargo clippy --release -- -D warnings
+      - run: cargo build --release --locked # Cargo.lock must already match
+      - run: cargo clippy --release --locked -- -D warnings
 
   sonarcloud:
     # Uploads analysis, coverage, and test results to SonarQube Cloud. Not a required check.
@@ -133,7 +133,7 @@ jobs:
           path: ~\.sonar\cache # the scanner's JRE and analyzer plugins
           key: ${{ runner.os }}-sonar
       - run: dotnet tool restore
-      - run: npm ci
+      - run: npm ci --ignore-scripts # no lifecycle scripts from dependencies
         working-directory: ui
       - run: npm test # ui coverage as lcov
         working-directory: ui
