@@ -1,5 +1,7 @@
 # wwvb-decoder
 
+[![CI](https://github.com/byte2pixel/wwvb-decoder/actions/workflows/ci.yml/badge.svg)](https://github.com/byte2pixel/wwvb-decoder/actions/workflows/ci.yml)
+
 Receive NIST's WWVB 60 kHz time signal, decode it in software, and show every step of the decode live.
 
 Built for a knowledge-sharing talk: the same layered thinking as HART (physical layer → bits → framing → fields → validation), on a radio signal instead of a 4–20 mA loop.
