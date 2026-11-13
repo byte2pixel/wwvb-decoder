@@ -1,6 +1,8 @@
 # wwvb-decoder
 
 [![CI](https://github.com/byte2pixel/wwvb-decoder/actions/workflows/ci.yml/badge.svg)](https://github.com/byte2pixel/wwvb-decoder/actions/workflows/ci.yml)
+[![Quality gate](https://sonarcloud.io/api/project_badges/measure?project=byte2pixel_wwvb-decoder&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=byte2pixel_wwvb-decoder)
+[![Coverage](https://sonarcloud.io/api/project_badges/measure?project=byte2pixel_wwvb-decoder&metric=coverage)](https://sonarcloud.io/component_measures?id=byte2pixel_wwvb-decoder&metric=coverage)
 
 Receive NIST's WWVB 60 kHz time signal, decode it in software, and show every step of the decode live.
 
@@ -62,6 +64,8 @@ dotnet test
 `./verify.ps1` runs every CI step locally and stops at the first failure; `-Only host`, `-Only ui`, or `-Only firmware` runs one part. Warnings are errors in every configuration, locally and in CI.
 
 Tests run with coverage. Host tests emit one Cobertura file per project into `host/TestResults/`, and ReportGenerator (pinned in `dotnet-tools.json`) merges them into `coverage/host/` and fails below the line and branch thresholds set in `verify.ps1` and `ci.yml`. UI tests emit `ui/coverage/` and fail below the thresholds in `ui/vite.config.ts`. Both thresholds are ratchets: set a few points under current coverage, raised as tests land, never lowered. CI publishes the test results as checks on the PR and uploads the reports as artifacts. Firmware has no host-runnable tests, so no coverage.
+
+Sonar rules run in every C# build through the `SonarAnalyzer.CSharp` package, so a finding fails locally and in CI. The `sonarcloud` CI job also uploads the analysis, both coverage reports, and the host test results to [SonarQube Cloud](https://sonarcloud.io/project/overview?id=byte2pixel_wwvb-decoder), which comments on pull requests; it is not a required check and skips pull requests from forks.
 
 | Language | Formatter | On commit | In CI |
 | --- | --- | --- | --- |
