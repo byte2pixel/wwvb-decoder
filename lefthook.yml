@@ -1,8 +1,9 @@
 # Git hooks for the whole repo. Lefthook is a devDependency of ui/, so `npm ci` (or
 # `npm install`) in ui/ installs these hooks; its postinstall finds the repo root.
 #
-# Each job formats only the staged files it matches and re-stages them. CI runs the
-# same three formatters in check mode, so a skipped hook (--no-verify) still fails there.
+# Each formatter job formats only the staged files it matches and re-stages them; the
+# oxlint job only checks. CI runs the same formatters in check mode and the same lint,
+# so a skipped hook (--no-verify) still fails there.
 # Skip once with: LEFTHOOK=0 git commit ...
 
 pre-commit:
@@ -18,6 +19,11 @@ pre-commit:
       glob: "*.{ts,tsx,js,mjs,cjs,json,css,html}"
       run: npx prettier --write --ignore-unknown {staged_files}
       stage_fixed: true
+
+    - name: oxlint
+      root: "ui/"
+      glob: "*.{ts,tsx}"
+      run: npx oxlint --deny-warnings {staged_files}
 
     - name: rustfmt
       root: "firmware/"
