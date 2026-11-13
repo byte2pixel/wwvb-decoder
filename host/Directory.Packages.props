@@ -2,6 +2,10 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
+  <ItemGroup Label="Analyzers">
+    <!-- The same Sonar rules as SonarCloud, so a finding fails the build locally and in CI. -->
+    <GlobalPackageReference Include="SonarAnalyzer.CSharp" Version="10.36.0.15337" />
+  </ItemGroup>
   <ItemGroup Label="Production">
     <PackageVersion Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <PackageVersion Include="Spectre.Console.Cli" Version="0.57.2" />
