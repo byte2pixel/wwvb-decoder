@@ -1,22 +1,18 @@
-import { useEffect, useReducer, useState } from "react";
+import { useEffect, useState } from "react";
 import "./App.css";
 import { createBridge, findWebView } from "./protocol/bridge.ts";
-import { appendMessage, emptyLog } from "./protocol/log.ts";
-import type { SourceStatus } from "./protocol/messages.ts";
 import { Button } from "./components/ui/button.tsx";
+import { useAppStore } from "./state/store.ts";
 
 const bridge = createBridge(findWebView());
 
 export default function App() {
-  const [log, dispatch] = useReducer(appendMessage, emptyLog);
+  const log = useAppStore((state) => state.log);
+  const status = useAppStore((state) => state.sourceStatus);
   const [noise, setNoise] = useState(0);
-  const [status, setStatus] = useState<SourceStatus | null>(null);
 
   useEffect(() => {
-    const off = bridge.onMessage((message) => {
-      dispatch(message);
-      if (message.type === "sourceStatus") setStatus(message.payload);
-    });
+    const off = bridge.onMessage(useAppStore.getState().dispatch);
     bridge.send({ command: "hello", protocol: 1 });
     return off;
   }, []);
