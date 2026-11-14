@@ -41,6 +41,8 @@ export interface AppState {
   lastSeq: number | null;
   lostMessages: number;
   log: ProtocolLog;
+  /** The latest loss of frame sync. The store clears it 5 s later. */
+  syncLoss: Readonly<{ reason: string; seq: number }> | null;
 }
 
 export const initialState: AppState = {
@@ -59,6 +61,7 @@ export const initialState: AppState = {
   lastSeq: null,
   lostMessages: 0,
   log: emptyLog,
+  syncLoss: null,
 };
 
 export const reduce = (state: AppState, message: HostMessage): AppState => {
@@ -123,6 +126,10 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
       return {
         ...state,
         frameSync: message.payload,
+        syncLoss:
+          message.payload.kind === "syncLost"
+            ? { reason: message.payload.reason, seq: message.seq }
+            : state.syncLoss,
       };
     case "sourceStatus":
       if (message.payload.detail.startsWith("reset:")) {
@@ -152,3 +159,11 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
       return state;
   }
 }
+
+export const expireSyncLoss = (state: AppState, seq: number): AppState =>
+  state.syncLoss?.seq === seq
+    ? {
+        ...state,
+        syncLoss: null,
+      }
+    : state;

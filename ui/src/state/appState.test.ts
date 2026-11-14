@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { initialState, reduce, type AppState } from "./appState";
+import {
+  expireSyncLoss,
+  initialState,
+  reduce,
+  type AppState,
+} from "./appState";
 import type {
   CaptureEntry,
   ClockState,
@@ -303,8 +308,16 @@ describe("reduce", () => {
         seq: 5,
         payload: { kind: "searching", consecutiveMarkers: 1 },
       },
+      {
+        type: "frameSync",
+        seq: 6,
+        payload: {
+          kind: "syncLost",
+          reason: "expected marker at second 9, got Zero",
+        },
+      },
     ];
-    const loopReset = reset(6);
+    const loopReset = reset(7);
 
     const state = [...before, loopReset].reduce(reduce, initialState);
 
@@ -319,7 +332,7 @@ describe("reduce", () => {
         },
       ],
       sourceStatus: loopReset.payload,
-      lastSeq: 6,
+      lastSeq: 7,
       log: state.log,
     });
   });
@@ -397,5 +410,70 @@ describe("reduce", () => {
     expect(state.log.entries).toEqual([info(1), reset(2)]);
     expect(state.log.counts.info).toBe(1);
     expect(state.log.counts.sourceStatus).toBe(1);
+  });
+
+  it("records a sync loss with its reason and sequence number", () => {
+    const state = reduce(initialState, {
+      type: "frameSync",
+      seq: 7,
+      payload: {
+        kind: "syncLost",
+        reason: "expected marker at second 9, got Zero",
+      },
+    });
+
+    expect(initialState.syncLoss).toBeNull();
+    expect(state.frameSync?.kind).toBe("syncLost");
+    expect(state.syncLoss).toEqual({
+      reason: "expected marker at second 9, got Zero",
+      seq: 7,
+    });
+  });
+
+  it("keeps the sync loss when the next event arrives", () => {
+    const state = reduce(initialState, {
+      type: "frameSync",
+      seq: 7,
+      payload: {
+        kind: "syncLost",
+        reason: "expected marker at second 9, got Zero",
+      },
+    });
+
+    const nextState = reduce(state, {
+      type: "frameSync",
+      seq: 8,
+      payload: {
+        kind: "searching",
+        consecutiveMarkers: 0,
+      },
+    });
+
+    expect(nextState.syncLoss).toEqual({
+      reason: "expected marker at second 9, got Zero",
+      seq: 7,
+    });
+  });
+});
+
+describe("expireSyncLoss", () => {
+  it("forgets the sync loss when its time is up", () => {
+    const state = {
+      ...initialState,
+      syncLoss: { reason: "expected marker at second 9, got Zero", seq: 7 },
+    };
+
+    const nextState = expireSyncLoss(state, 7);
+
+    expect(nextState.syncLoss).toBeNull();
+  });
+
+  it("leaves a newer sync loss alone", () => {
+    const state = {
+      ...initialState,
+      syncLoss: { reason: "gap 2300 ms before second 14", seq: 20 },
+    };
+
+    expect(expireSyncLoss(state, 7).syncLoss?.seq).toBe(20);
   });
 });

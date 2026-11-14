@@ -111,15 +111,15 @@ Seven buttons in a row, joined by a line. Each shows the stage number, its name,
 
 | Stage | Message | Readout | Health |
 | --- | --- | --- | --- |
-| 1 Edges | `edges` | The last edge as the serial line writes it, `L 2617209411` | Good while edges arrive; bad when `sourceStatus` is `error` |
+| 1 Edges | `edges` | The last edge as the serial line writes it, `L 2617209411` | Good once an edge has arrived; bad when `sourceStatus` is `error` |
 | 2 Pulses | `pulse` | Last duration, `502 ms` | Good |
 | 3 Symbols | `symbol` | Last kind, `one` | Warn if any of the last 60 symbols is `error` |
-| 4 Frame sync | `frameSync` | `37 of 60`, or `searching` | Good when synced; warn while searching; bad for 5 s after `syncLost` |
+| 4 Frame sync | `frameSync` | `37 of 60`, or `searching` | Good when synced; warn while searching; bad for 5 s after `syncLost` (see [Sync loss](#sync-loss)) |
 | 5 Decode | `decodedFrame` | `19:32 day 344` | Warn if `errorSeconds` is not empty |
 | 6 Validate | `validation` | `accepted` or `rejected` | Good or bad |
-| 7 Clock | `clock` | The status | Good when `locked`; warn when `acquiring` or `holding` |
+| 7 Clock | `clock` | The status | Good when `locked`; warn when `acquiring` or `holding`; `text-3` when `noSignal` |
 
-Before a source starts, every readout is a dash and every dot is `text-3`.
+Before a source starts, every readout is a dash and every dot is `text-3`. A source reset returns the rail to that state. `stop` does not: the readouts and dots keep their last values, and the status bar shows that the source stopped.
 
 ## Panels
 
@@ -255,6 +255,16 @@ Edges arrive in batches every 100 ms and only when the carrier changes, so the p
 - At replay speed 0, as fast as possible, there is no usable present: the signal panel stops scrolling and shows a note.
 
 The signal cursor, the cell being received, and the clock digits all read this module.
+
+### Sync loss
+
+The host sends `searching` in the same push as `syncLost`, so the latest `frameSync` event shows a loss only for an instant. The store keeps the loss on its own:
+
+- The reducer records the reason and the message's `seq` when `syncLost` arrives. A source reset clears it.
+- The store clears it 5 s later by the wall clock. The 5 s is reading time, so it is the same at every replay speed.
+- The timer clears only the loss it was started for, so a second loss inside the 5 s is shown for its own 5 s.
+
+The rail's stage 4 health and the frame panel's header both read this one field.
 
 ## Protocol additions
 
