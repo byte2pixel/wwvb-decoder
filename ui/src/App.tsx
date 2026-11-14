@@ -1,12 +1,10 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { createBridge, findWebView } from "./protocol/bridge";
+import { type Bridge } from "./protocol/bridge";
 import { Button } from "./components/ui/button";
 import { useAppStore } from "./state/store";
 
-const bridge = createBridge(findWebView());
-
-export default function App() {
+export default function App({ bridge }: Readonly<{ bridge: Bridge }>) {
   const log = useAppStore((state) => state.log);
   const status = useAppStore((state) => state.sourceStatus);
   const [noise, setNoise] = useState(0);
@@ -15,7 +13,7 @@ export default function App() {
     const off = bridge.onMessage(useAppStore.getState().dispatch);
     bridge.send({ command: "hello", protocol: 1 });
     return off;
-  }, []);
+  }, [bridge]);
 
   return (
     <div className="app">
