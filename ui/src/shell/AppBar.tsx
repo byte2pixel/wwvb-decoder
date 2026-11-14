@@ -16,7 +16,7 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
 
   return (
     <header className="flex h-11.5 flex-none items-center gap-3 border-b bg-bar px-3">
-      <h1 className="text-sm font-semibold">WWVB decoder</h1>
+      <h1 className="text-sm font-semibold whitespace-nowrap">WWVB decoder</h1>
       <ToggleGroup
         aria-label="Source"
         value={["synthetic"]}
@@ -36,17 +36,18 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
       <span id={noiseId} className="text-xs text-muted-foreground">
         Noise
       </span>
-      <Slider
-        aria-labelledby={noiseId}
-        className="w-32"
-        min={0}
-        max={1}
-        step={0.05}
-        value={[noise]}
-        onValueChange={(value) =>
-          setNoise(typeof value === "number" ? value : value[0])
-        }
-      />
+      <div className="w-32">
+        <Slider
+          aria-labelledby={noiseId}
+          min={0}
+          max={1}
+          step={0.05}
+          value={[noise]}
+          onValueChange={(value) =>
+            setNoise(typeof value === "number" ? value : value[0])
+          }
+        />
+      </div>
       <span className="w-8 font-mono text-xs">{noise.toFixed(2)}</span>
       <Button
         size="sm"

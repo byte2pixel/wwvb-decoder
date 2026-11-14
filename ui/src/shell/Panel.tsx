@@ -1,5 +1,5 @@
 import { Component, useId, type ReactNode } from "react";
-
+import { cn } from "cn";
 interface BoundaryState {
   error: Error | null;
 }
@@ -35,6 +35,8 @@ interface PanelProps {
   /** One line of state at the right of the header. */
   state?: ReactNode;
   children: ReactNode;
+  /** Extra classes for the panel element. */
+  className?: string;
 }
 
 /** One titled surface of the screen. See "Panels" in docs/design/ui-design.md. */
@@ -43,13 +45,17 @@ export function Panel({
   stages,
   state,
   children,
+  className,
 }: Readonly<PanelProps>) {
   const titleId = useId();
 
   return (
     <section
       aria-labelledby={titleId}
-      className="flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card text-card-foreground"
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card text-card-foreground",
+        className,
+      )}
     >
       <header className="flex h-8 flex-none items-center gap-2.5 border-b px-3">
         <h2 id={titleId} className="text-[0.8125rem] font-semibold">

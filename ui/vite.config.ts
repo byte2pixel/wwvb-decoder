@@ -12,6 +12,9 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
   },
+  build: {
+    chunkSizeWarningLimit: 1000,
+  },
   test: {
     // The file extension picks the environment. Pure logic (*.test.ts) runs in Node; jsdom
     // would swap globals such as URL under it. Component tests (*.test.tsx) get a DOM.

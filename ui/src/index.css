@@ -55,6 +55,7 @@ body,
 }
 
 :root {
+  color-scheme: light;
   --radius: 0.625rem;
   --background: #eef1f5;
   --foreground: #111827;
@@ -89,6 +90,7 @@ body,
 }
 
 .dark {
+  color-scheme: dark;
   --background: #0b0e13;
   --foreground: #e8ecf2;
   --card: #12161d;

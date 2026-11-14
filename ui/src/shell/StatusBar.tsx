@@ -40,7 +40,9 @@ export function StatusBar() {
         <span className="font-mono text-warn">{lostMessages} lost</span>
       )}
       <Sheet>
-        <SheetTrigger render={<Button variant="ghost" size="xs" />}>
+        <SheetTrigger
+          render={<Button variant="ghost" size="xs" className="h-5" />}
+        >
           Log
         </SheetTrigger>
         <SheetContent side="bottom" className="max-h-[60vh]">

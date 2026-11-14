@@ -72,4 +72,16 @@ describe("Panel", () => {
 
     consoleError.mockRestore();
   });
+
+  it("takes extra classes for its place in the page grid", () => {
+    render(
+      <Panel title="Time" stages={[7]} className="row-span-2">
+        clock
+      </Panel>,
+    );
+
+    expect(screen.getByRole("region", { name: "Time" })).toHaveClass(
+      "row-span-2",
+    );
+  });
 });
