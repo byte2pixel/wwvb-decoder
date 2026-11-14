@@ -846,7 +846,12 @@ Finish the overview with the source controls the demo depends on (serial port pi
 
 ### Tasks
 
-1. Host: extend `SourceController` to build `SerialEdgeSource` and `ReplayEdgeSource`; confirm the captures directory rule (`captures/` found by walking up from the exe to the repo root in Debug, next to the exe in Release, overridable with a `--captures <dir>` argument); apply `setReplaySpeed`, `setNoise`, `setReducedCarrierLevel` live. Replay pacing: either `ReplayEdgeSource` batches its delays so 60× is reachable, or the fastest button is relabeled to the speed it reaches (see the Step 11 audit note on `Task.Delay`); record which in the audit trail.
+1. Host: extend `SourceController` to build `SerialEdgeSource` and `ReplayEdgeSource`; confirm the captures directory rule (`captures/` found by walking up from the exe to the repo root in Debug, next to the exe in Release, overridable with a `--captures <dir>` argument); apply `setReplaySpeed`, `setNoise`, `setReducedCarrierLevel` live. Then fix the pacing of the two paced sources, `ReplayEdgeSource` and `SyntheticEdgeSource`:
+   - **Measured (2026-11-13).** `decode capture` on `three-minutes.edges.txt` at `--speed 10` took 23.3 s. The capture spans 189.5 s, so the nominal time is 18.95 s, and an unpaced run takes 0.2 s. The 379 delays were about 10.8 ms late each, and the stream ran 22% slow. The 1× case was not measured; the same lateness per edge would make it about 2% slow, or 1.3 s per minute.
+   - **Consequence.** A paced stream runs slower than the speed it was asked for, at every speed, and the shortfall grows with the speed. Anything that assumes the nominal speed drifts away from the data. The page's source clock (Step 12a) is built to tolerate this, so the views do not depend on the fix.
+   - **Root cause.** Both sources wait for the gap between an edge and the one before it. `Task.Delay` on Windows fires late, by up to a timer tick of about 15 ms, and nothing takes that lateness back, so it accumulates. This is also the cause of the 30× ceiling in the Step 11 audit note: above 30× the average gap is shorter than a tick.
+   - **Fix.** Pace against a schedule. On the first edge after a start, a reset, or a speed change, record the wall time and the edge's timestamp. Each later edge is due at that wall time plus its timestamp difference divided by the speed. Wait only for the time remaining, and not at all when the edge is already due, so lateness is taken back on the next edge and several edges can leave in one tick. Update the pacing rules in `pipeline-contracts.md` (both sources) to match.
+   - **Check.** Repeat the measurement; the 10× run should take about 19 s. If 60× is still not reached, relabel the fastest button to the speed it reaches. Record the result in the audit trail.
 2. `frameLayout` message: a section in `webview2-messages.md`, an example file, a Host payload built from `WwvbFrameLayout` and posted after `captures` in the reply to `hello`, the zod schema, and both test suites. The shape proposed in `ui-design.md` is the starting point.
 3. UI source controls in `src/shell/AppBar.tsx`: the three-way source control (Live, Replay, Synthetic); a port list refreshed by `listPorts`; a capture list with recorded date and length, and speed buttons 1×, 10×, 60×; the noise slider; a signal settings popover with the reduced-carrier level; Stop. Add the shadcn select and popover.
 4. UI `src/views/frame/`: `model.ts` and `FrameView.tsx`. Three rows of 20 cells filled from `frameSync` `slotFilled` events, with the cell states, bit weights, and field brackets from `ui-design.md`, the brackets derived from `frameLayout`. The header shows synced with a count, searching, or the sync-lost reason for 5 s. A `slotFilled` with a new `frameStartMicros` clears the cells first.
@@ -859,8 +864,8 @@ Finish the overview with the source controls the demo depends on (serial port pi
 ### Files
 
 - `host/src/WwvbDecoder.Host/Services/SourceController.cs`, `Bridge/Messages.cs`, `Bridge/MessageJson.cs`, `Bridge/WebMessageBridge.cs`
-- `host/src/WwvbDecoder.Core/**` (replay pacing only, if Task 1 changes it), `host/tests/**`
-- `docs/design/webview2-messages.md`, a new example file in `docs/design/message-examples/`
+- `host/src/WwvbDecoder.Core/**` (the pacing in `ReplayEdgeSource` and `SyntheticEdgeSource` only), `host/tests/**`
+- `docs/design/webview2-messages.md`, a new example file in `docs/design/message-examples/`, `docs/design/pipeline-contracts.md` (the two pacing rules)
 - `ui/src/protocol/messages.ts`, `ui/src/shell/AppBar.tsx`, `ui/src/views/frame/**`, `ui/src/views/frames-table/**`, `ui/src/views/time/**`, `ui/src/App.tsx`, `ui/src/state/**`, `ui/src/sim/fixtures/**`, `ui/src/components/ui/**`, tests
 
 ### Verification
@@ -870,6 +875,7 @@ dotnet test host/WwvbDecoder.slnx -c Release -p:BuildUi=false
 Push-Location ui; npm run lint; npm test; npm run build; Pop-Location
 # Manual: replay a real capture at 10×; watch the frame fill, rows arrive in the table as accepted, and the clock lock.
 # Manual: switch to synthetic at noise 0.4 and watch rejected rows with their reasons, and the clock go to holding.
+# Pacing: time `decode capture host/tests/WwvbDecoder.Core.Tests/Fixtures/three-minutes.edges.txt --speed 10`; about 19 s, where it took 23.3 s before the fix.
 ```
 
 ### Exit criteria
@@ -1063,7 +1069,7 @@ Every mutation is one commit touching only this file, merged before the affected
 | 11 | done | [#17](https://github.com/byte2pixel/wwvb-decoder/pull/17) | 2026-11-10 | 566 tests, 56 new (Core: `CaptureInfo`, `ReplayEdgeSource`, the three-minute fixture through the pipeline; Adapters: `CaptureCatalog`). Started 2026-11-08, before its window. Beyond the task text: Tools moved to `Spectre.Console.Cli` with one class per command, so `decode` is a branch, `decode port <PORT>` and `decode capture <FILE> [--speed]`, not `--port` and `--capture` options; the stage 7 line adds `recordedOffset` from the `# wall` samples because `OffsetFromPc` means nothing under replay. The fixture is a real excerpt of the overnight capture, not synthetic. Tools has no tests; `decode` is verified by the runs recorded in `captures/README.md`. Overnight decode: 524 of 524 frames accepted, locked from the second frame, no sync loss; the 10:28 glitch cost one unpaired edge and nothing else. Observed: `Task.Delay` on Windows waits at least about 15 ms, so a paced replay cannot run faster than about 30x; Step 13's 60x button needs the source to batch delays or will run at 30x |
 | 12a | pending | | | Split from Step 12 on 2026-11-12, when the visualizer was redesigned (ADR-0007, `ui-design.md`). New work: Tailwind, shadcn/ui, the tokens, the shell with the pipeline rail, the store, the source clock, and the simulator |
 | 12b | pending | | | The rest of Step 12, redrawn on 2026-11-12: the edge log and strip chart became one signal panel with four lanes, the histogram uses 25 ms bins so the class boundaries fall on bin edges, and focus mode moved here from Step 13 |
-| 13 | pending | | | Rewritten on 2026-11-12: the grid is 3 rows of 20, the fields and validation views became one decoded-frames table, and a `frameLayout` message was added so the layout is not copied into TypeScript |
+| 13 | pending | | | Rewritten on 2026-11-12: the grid is 3 rows of 20, the fields and validation views became one decoded-frames table, and a `frameLayout` message was added so the layout is not copied into TypeScript. Task 1's pacing item was rewritten on 2026-11-13 after a measurement: the paced sources run slower than their nominal speed because each delay is taken from the previous edge, so the fix is pacing against a schedule and no longer a choice between batching and relabeling |
 | 14 | pending | | | |
 | 15 | pending | | | |
 | 16 | pending | | | Inserted on 2026-11-12: the full focus views and the motion pass. Second in the cut order, after Step 14 |
