@@ -245,9 +245,13 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
 
 Edges arrive in batches every 100 ms and only when the carrier changes, so the present has to be estimated between them. One module does this for every view:
 
-- It maps `performance.now()` to source microseconds, anchored on the newest edge and advancing at the source's speed (1 for live and synthetic, the replay speed for replay).
-- It never runs backwards. A correction is spread over about 250 ms instead of applied as a jump.
-- A source reset discards the anchor.
+- It maps `performance.now()` to source microseconds, anchored on the first edge and advancing at the source's speed (1 for live and synthetic, the replay speed for replay).
+- Every later batch corrects it with the timestamp of its newest edge:
+  - An edge later than the estimate proves the clock is behind. The whole difference is made up.
+  - An edge earlier than the estimate is the normal case, because edges arrive late. A tenth of the difference is taken back. This keeps the clock with a stream that runs slower than its nominal speed, which a paced source can (see Step 13, Task 1 in the construction plan), and with a Pico whose crystal runs slower than the PC's.
+- It never jumps and never runs backwards. A correction changes how fast the clock runs over the next 250 ms. An edge that arrives during a correction is compared with where the clock is heading, so the rest of the correction is kept.
+- It keeps running when edges stop, so a flat carrier still scrolls.
+- The page discards the anchor when the source resets or stops.
 - At replay speed 0, as fast as possible, there is no usable present: the signal panel stops scrolling and shows a note.
 
 The signal cursor, the cell being received, and the clock digits all read this module.
