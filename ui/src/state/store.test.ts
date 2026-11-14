@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { HostMessage } from "../protocol/messages.ts";
+import type { HostMessage } from "@/protocol/messages.ts";
 import { initialState } from "./appState.ts";
 import { useAppStore } from "./store.ts";
 

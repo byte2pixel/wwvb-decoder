@@ -1,4 +1,4 @@
-import { hostMessageSchema, type HostMessage } from "@/protocol/messages";
+import { hostMessageSchema, type HostMessage } from "@/protocol/messages.ts";
 
 export interface ProtocolLog {
   entries: HostMessage[]; // newest last, at most 200
