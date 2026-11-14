@@ -15,7 +15,7 @@ export interface StageView {
   health: Health;
 }
 
-const noData = "—";
+export const noData = "—";
 
 const levelChar = (level: PinLevel) => (level === "high" ? "H" : "L");
 

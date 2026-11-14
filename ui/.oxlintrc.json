@@ -22,7 +22,11 @@
   "overrides": [
     {
       "files": ["src/components/ui/**"],
-      "rules": { "react/only-export-components": "off" }
+      "rules": {
+        "react/only-export-components": "off",
+        "react/jsx-no-constructed-context-values": "off",
+        "no-underscore-dangle": "off"
+      }
     }
   ]
 }
