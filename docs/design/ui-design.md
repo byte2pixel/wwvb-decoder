@@ -109,6 +109,8 @@ Text contrast is at least 4.5 to 1 on its surface, in both themes. A state is ne
 
 Seven buttons in a row, joined by a line. Each shows the stage number, its name, the latest output, and a health dot. Clicking one, or pressing its number, opens that stage's focus view.
 
+The dot is a glyph as well as a color, so it does not depend on hue: a ring for no data, a check for good, a triangle for warn, and a cross for bad. Each carries its meaning as a text alternative: `no data`, `good`, `warning`, `fault`.
+
 | Stage | Message | Readout | Health |
 | --- | --- | --- | --- |
 | 1 Edges | `edges` | The last edge as the serial line writes it, `L 2617209411` | Good once an edge has arrived; bad when `sourceStatus` is `error` |

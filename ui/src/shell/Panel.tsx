@@ -1,13 +1,49 @@
-import { useId, type ReactNode } from "react";
+import { Component, useId, type ReactNode } from "react";
+
+interface BoundaryState {
+  error: Error | null;
+}
+
+/** Catches an error thrown while rendering its children, so one broken view does not take the screen down. */
+class PanelBoundary extends Component<
+  Readonly<{ children: ReactNode }>,
+  BoundaryState
+> {
+  state: BoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): BoundaryState {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <p role="alert" className="p-3 text-xs text-bad">
+          This view failed: {this.state.error.message}
+        </p>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface PanelProps {
   /** Shown in the header. It is also the region's accessible name. */
   title: string;
+  /** The pipeline stages this panel shows, one chip each. */
+  stages: readonly number[];
+  /** One line of state at the right of the header. */
+  state?: ReactNode;
   children: ReactNode;
 }
 
 /** One titled surface of the screen. See "Panels" in docs/design/ui-design.md. */
-export function Panel({ title, children }: PanelProps) {
+export function Panel({
+  title,
+  stages,
+  state,
+  children,
+}: Readonly<PanelProps>) {
   const titleId = useId();
 
   return (
@@ -19,8 +55,25 @@ export function Panel({ title, children }: PanelProps) {
         <h2 id={titleId} className="text-[0.8125rem] font-semibold">
           {title}
         </h2>
+        <ul aria-label="Stages" className="flex gap-1">
+          {stages.map((stage) => (
+            <li
+              key={stage}
+              className="rounded-sm bg-secondary px-1.5 font-mono text-[0.65625rem] leading-4 text-muted-foreground"
+            >
+              {stage}
+            </li>
+          ))}
+        </ul>
+        {state && (
+          <p className="ml-auto truncate text-xs text-muted-foreground">
+            {state}
+          </p>
+        )}
       </header>
-      <div className="min-h-0 flex-1">{children}</div>
+      <div className="min-h-0 flex-1">
+        <PanelBoundary>{children}</PanelBoundary>
+      </div>
     </section>
   );
 }
