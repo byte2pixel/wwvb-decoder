@@ -14,8 +14,8 @@
     "typescript/no-explicit-any": "error",
     "import/extensions": [
       "error",
-      "always",
-      { "ignorePackages": true, "checkTypeImports": true }
+      "never",
+      { "css": "always", "jsonl": "always", "checkTypeImports": true }
     ],
     "import/no-unassigned-import": "off"
   },

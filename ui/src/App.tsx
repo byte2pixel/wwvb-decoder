@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import "./App.css";
-import { createBridge, findWebView } from "./protocol/bridge.ts";
-import { Button } from "./components/ui/button.tsx";
-import { useAppStore } from "./state/store.ts";
+import { createBridge, findWebView } from "./protocol/bridge";
+import { Button } from "./components/ui/button";
+import { useAppStore } from "./state/store";
 
 const bridge = createBridge(findWebView());
 

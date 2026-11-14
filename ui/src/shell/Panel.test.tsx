@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { Panel } from "./Panel.tsx";
+import { Panel } from "./Panel";
 
 describe("Panel", () => {
   it("is a region named by its title and shows its children", () => {

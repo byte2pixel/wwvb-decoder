@@ -9,9 +9,9 @@ import type {
   SourceStatus,
   ValidationResult,
   Symbol as WwvbSymbol,
-} from "@/protocol/messages.ts";
-import type { ProtocolLog } from "./log.ts";
-import { appendMessage, emptyLog } from "./log.ts";
+} from "@/protocol/messages";
+import type { ProtocolLog } from "./log";
+import { appendMessage, emptyLog } from "./log";
 
 const maxEdges = 2_000;
 const maxPulses = 300;

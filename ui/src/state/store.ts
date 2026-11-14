@@ -1,6 +1,6 @@
 import { create } from "zustand";
-import type { HostMessage } from "@/protocol/messages.ts";
-import { initialState, reduce, type AppState } from "./appState.ts";
+import type { HostMessage } from "@/protocol/messages";
+import { initialState, reduce, type AppState } from "./appState";
 
 interface AppStore extends AppState {
   /** Feeds one host message through the reducer. */

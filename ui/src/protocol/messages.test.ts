@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { commandSchema, hostMessageSchema } from "./messages.ts";
+import { commandSchema, hostMessageSchema } from "./messages";
 import { join } from "node:path";
 
 const examplesDir = fileURLToPath(

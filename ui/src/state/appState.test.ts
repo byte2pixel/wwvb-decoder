@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initialState, reduce, type AppState } from "./appState.ts";
+import { initialState, reduce, type AppState } from "./appState";
 import type {
   CaptureEntry,
   ClockState,
@@ -9,7 +9,7 @@ import type {
   HostMessage,
   SourceStatus,
   ValidationResult,
-} from "@/protocol/messages.ts";
+} from "@/protocol/messages";
 
 const info = (seq: number): HostMessage => ({
   type: "info",

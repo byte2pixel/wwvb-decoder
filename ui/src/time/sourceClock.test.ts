@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createSourceClock } from "./sourceClock.ts";
+import { createSourceClock } from "./sourceClock";
 
 const fakeWall = (startMs = 1_000) => {
   let ms = startMs;
