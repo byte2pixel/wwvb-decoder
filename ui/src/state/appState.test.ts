@@ -454,6 +454,117 @@ describe("reduce", () => {
       seq: 7,
     });
   });
+
+  it("records each filled slot with the start of the symbol placed in it", () => {
+    const messages: HostMessage[] = [
+      {
+        type: "symbol",
+        seq: 1,
+        payload: {
+          startMicros: 62_000_412,
+          durationMicros: 200_000,
+          kind: "zero",
+        },
+      },
+      {
+        type: "frameSync",
+        seq: 2,
+        payload: {
+          kind: "slotFilled",
+          frameStartMicros: 61_000_000,
+          second: 1,
+          symbol: "zero",
+        },
+      },
+    ];
+
+    const state = messages.reduce(reduce, initialState);
+
+    expect(state.slots).toEqual([
+      {
+        startMicros: 62_000_412,
+        frameStartMicros: 61_000_000,
+        second: 1,
+        symbol: "zero",
+      },
+    ]);
+  });
+
+  it("records no slot when no symbol has arrived to place", () => {
+    // A page that reloads mid-stream can get a slot whose symbol it never saw.
+    const state = reduce(initialState, {
+      type: "frameSync",
+      seq: 1,
+      payload: {
+        kind: "slotFilled",
+        frameStartMicros: 61_000_000,
+        second: 1,
+        symbol: "zero",
+      },
+    });
+
+    expect(state.slots).toEqual([]);
+  });
+
+  it("keeps only the newest 120 filled slots", () => {
+    const messages = Array.from({ length: 122 }, (_, i) => i).flatMap(
+      (i): HostMessage[] => [
+        {
+          type: "symbol",
+          seq: 2 * i + 1,
+          payload: {
+            startMicros: i * 1_000_000,
+            durationMicros: 200_000,
+            kind: "zero",
+          },
+        },
+        {
+          type: "frameSync",
+          seq: 2 * i + 2,
+          payload: {
+            kind: "slotFilled",
+            frameStartMicros: Math.floor(i / 60) * 60_000_000,
+            second: i % 60,
+            symbol: "zero",
+          },
+        },
+      ],
+    );
+
+    const state = messages.reduce(reduce, initialState);
+
+    expect(state.slots).toHaveLength(120);
+    expect(state.slots[0].startMicros).toBe(2_000_000);
+    expect(state.slots.at(-1)?.startMicros).toBe(121_000_000);
+  });
+
+  it("records no slot for the other frame sync events", () => {
+    const messages: HostMessage[] = [
+      {
+        type: "symbol",
+        seq: 1,
+        payload: {
+          startMicros: 62_000_412,
+          durationMicros: 800_000,
+          kind: "marker",
+        },
+      },
+      {
+        type: "frameSync",
+        seq: 2,
+        payload: { kind: "searching", consecutiveMarkers: 1 },
+      },
+      {
+        type: "frameSync",
+        seq: 3,
+        payload: { kind: "syncLost", reason: "expected marker at second 9" },
+      },
+    ];
+
+    const state = messages.reduce(reduce, initialState);
+
+    expect(state.slots).toEqual([]);
+  });
 });
 
 describe("expireSyncLoss", () => {

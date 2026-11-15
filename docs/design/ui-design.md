@@ -238,7 +238,7 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
                               \---->  canvas views       (read buffers every animation frame)
 ```
 
-- **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 20 validation results, 50 info lines), the latest message of each type for the rail, and the counters.
+- **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 120 filled slots, 20 validation results, 50 info lines), the latest message of each type for the rail, and the counters. A filled slot is a `slotFilled` event together with the start time of the symbol that arrived just before it, which is the symbol it placed. The signal panel's second lane and the frame panel both read that buffer.
 - **Rendering.** Components subscribe to small slices, so a new edge batch does not re-render the tables. The canvas views do not go through React at all.
 - **View models.** Each custom view has a pure function from buffers, size, and tokens to a list of things to draw, and a thin component that paints the list. Tests cover the function.
 - **Simulator.** When `window.chrome.webview` is absent, a simulator bridge plays a recorded message stream at a chosen speed and answers commands with canned status. The recording is taken from the real host, so the simulator cannot drift from the protocol.
