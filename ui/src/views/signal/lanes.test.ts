@@ -6,6 +6,7 @@ import type {
   Symbol as WwvbSymbol,
   SymbolKind,
 } from "@/protocol/messages";
+import type { FilledSlot } from "@/state/appState";
 import { signalLanes, type SignalInput } from "./lanes";
 
 const edge = (micros: number, level: PinLevel): Edge => ({ micros, level });
@@ -22,6 +23,14 @@ const symbol = (
   kind: SymbolKind,
 ): WwvbSymbol => ({ startMicros, durationMicros, kind });
 
+/** A filled slot for the symbol that starts at startMicros. The lane reads only the start and the second. */
+const slot = (startMicros: number, second: number): FilledSlot => ({
+  startMicros,
+  frameStartMicros: 2_000_000,
+  second,
+  symbol: "zero",
+});
+
 /** A marker second, then a zero, as the synthetic source sends them: high is reduced carrier. */
 const markerThenZero = [
   edge(1_000_000, "high"),
@@ -34,6 +43,7 @@ const input = (over: Partial<SignalInput> = {}): SignalInput => ({
   edges: [],
   pulses: [],
   symbols: [],
+  slots: [],
   nowMicros: null,
   windowMicros: 12_000_000,
   reducedLevel: "high",
@@ -315,5 +325,100 @@ describe("symbol lane", () => {
       { startMicros: 1_000_000, endMicros: 13_000_000, durationMs: null },
     ]);
     expect(lanes.symbols).toEqual([{ startMicros: 500_000, kind: "pending" }]);
+  });
+});
+
+describe("second lane", () => {
+  it("labels each symbol with the second it filled", () => {
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(2_000_000, 800_000), pulse(3_000_000, 200_000)],
+        symbols: [
+          symbol(2_000_000, 800_000, "marker"),
+          symbol(3_000_000, 200_000, "zero"),
+        ],
+        slots: [slot(2_000_000, 0), slot(3_000_000, 1)],
+        nowMicros: 4_000_000,
+      }),
+    );
+
+    expect(lanes.seconds).toEqual([
+      { startMicros: 2_000_000, second: 0 },
+      { startMicros: 3_000_000, second: 1 },
+    ]);
+  });
+
+  it("has no second for a symbol that arrived while frame sync was searching", () => {
+    // Two markers in a row start a frame: the first is seen while searching, the second fills second 0.
+    const lanes = signalLanes(
+      input({
+        pulses: [
+          pulse(1_000_000, 800_000),
+          pulse(2_000_000, 800_000),
+          pulse(3_000_000, 200_000),
+        ],
+        symbols: [
+          symbol(1_000_000, 800_000, "marker"),
+          symbol(2_000_000, 800_000, "marker"),
+          symbol(3_000_000, 200_000, "zero"),
+        ],
+        slots: [slot(2_000_000, 0), slot(3_000_000, 1)],
+        nowMicros: 4_000_000,
+      }),
+    );
+
+    expect(lanes.seconds).toEqual([
+      { startMicros: 1_000_000, second: null },
+      { startMicros: 2_000_000, second: 0 },
+      { startMicros: 3_000_000, second: 1 },
+    ]);
+  });
+
+  it("says nothing for the newest symbol until its slot arrives", () => {
+    // A symbol's slotFilled arrives a few milliseconds after it; a dash must not flash meanwhile.
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(1_000_000, 800_000), pulse(2_000_000, 800_000)],
+        symbols: [
+          symbol(1_000_000, 800_000, "marker"),
+          symbol(2_000_000, 800_000, "marker"),
+        ],
+        nowMicros: 3_000_000,
+      }),
+    );
+
+    expect(lanes.seconds).toEqual([{ startMicros: 1_000_000, second: null }]);
+  });
+
+  it("has no entry for a pending chip", () => {
+    const lanes = signalLanes(
+      input({
+        edges: markerThenZero,
+        pulses: [pulse(1_000_000, 800_000)],
+        symbols: [symbol(1_000_000, 800_000, "marker")],
+        slots: [slot(1_000_000, 0)],
+        nowMicros: 2_500_000,
+      }),
+    );
+
+    expect(lanes.symbols).toHaveLength(2);
+    expect(lanes.seconds).toEqual([{ startMicros: 1_000_000, second: 0 }]);
+  });
+
+  it("keeps a label's own start when the window cuts its bar", () => {
+    // 12 s back from 13.5 s is 1.5 s: inside the marker pulse, past the first one.
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(0, 500_000), pulse(1_000_000, 800_000)],
+        symbols: [
+          symbol(0, 500_000, "one"),
+          symbol(1_000_000, 800_000, "marker"),
+        ],
+        slots: [slot(0, 58), slot(1_000_000, 59)],
+        nowMicros: 13_500_000,
+      }),
+    );
+
+    expect(lanes.seconds).toEqual([{ startMicros: 1_000_000, second: 59 }]);
   });
 });

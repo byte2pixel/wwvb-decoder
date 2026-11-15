@@ -138,8 +138,11 @@ Four lanes over the same time axis, with a line at every second.
 | Symbol | 3 | A chip per pulse: `0`, `1`, `M`, or a red `×` |
 | Second | 4 | The second the symbol filled, `:17`. A dash while searching |
 
-- The newest second is drawn up to a cursor at the estimated present (see [Source clock](#source-clock)). Stage 2 holds a pulse until the next edge confirms it, so the newest pulse and symbol read `pending`.
-- A `slotFilled` event labels the symbol that arrived just before it.
+- The newest second is drawn up to a cursor at the estimated present (see [Source clock](#source-clock)). Nothing is drawn to the right of the cursor, even when an edge has arrived ahead of the estimate. When there is no present, because the source stopped or was reset, the window ends at the newest edge and the last picture stays on screen.
+- Stage 2 reports a pulse only when a later edge confirms it, about a second after the pulse starts. Until then the pulse lane draws every reduced-carrier interval that starts after the last measured pulse as a bar that reads `pending`, growing to the cursor while the carrier is still reduced. A dip that stage 2 drops as a glitch is such a bar for about a second; after that it shows in the carrier lane only.
+- The symbol lane has one chip for each bar. A chip reads `pending` until the symbol with the same start time arrives.
+- A `slotFilled` event labels the symbol that arrived just before it. A symbol that filled no second, because frame sync was searching, gets a dash. The newest symbol gets nothing until its `slotFilled` arrives or a newer symbol does: the two messages arrive a few milliseconds apart, and a dash must not flash between them.
+- A bar that the window's left edge cuts keeps its measured duration, and its chip and second label slide out with it.
 - The window is 12 s at 1× speed. Above 1× it is 60 s and the pulse and second labels are hidden, because they would be unreadable.
 - Drawn on a canvas, once per animation frame, straight from the store's buffers.
 
