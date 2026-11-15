@@ -121,4 +121,78 @@ describe("SignalView", () => {
       lineWidth: 1,
     });
   });
+
+  it("sizes the canvas in device pixels and scales the drawing to match", () => {
+    vi.stubGlobal("devicePixelRatio", 2);
+    const { canvas, frame } = mount();
+    reportSize(612, 50);
+
+    expect(canvas.width).toBe(1224);
+    expect(canvas.height).toBe(100);
+    // The drawing stays in CSS pixels; the transform is what doubles it.
+    expect(frame().slice(0, 2)).toEqual([
+      { op: "transform", matrix: [2, 0, 0, 2, 0, 0] },
+      { op: "clear", x: 0, y: 0, w: 612, h: 50 },
+    ]);
+  });
+
+  it("keeps the scale the canvas was sized for until the next resize", () => {
+    vi.stubGlobal("devicePixelRatio", 2);
+    const { frame } = mount();
+    reportSize(612, 50);
+
+    // The window moves to another display, and no resize follows.
+    vi.stubGlobal("devicePixelRatio", 1);
+
+    expect(frame()[0]).toEqual({ op: "transform", matrix: [2, 0, 0, 2, 0, 0] });
+  });
+
+  it("follows a resize, and the rem that changes with it", () => {
+    const { frame } = mount();
+    reportSize(1212, 100);
+    expect(frame().at(-1)).toMatchObject({ path: ["M 1200 0", "L 1200 100"] });
+
+    document.documentElement.style.fontSize = "32px";
+    reportSize(624, 50);
+
+    // The gap right of the cursor is in rems: 12 px before, 24 px now.
+    expect(frame().at(-1)).toMatchObject({ path: ["M 600 0", "L 600 50"] });
+  });
+
+  it("reads the colors again when the theme changes", async () => {
+    const { frame } = mount();
+    reportSize(1212, 100);
+    expect(frame().at(-1)).toMatchObject({ strokeStyle: "signal" });
+
+    document.documentElement.classList.add("dark");
+    // A MutationObserver reports in a microtask.
+    await Promise.resolve();
+
+    expect(frame().at(-1)).toMatchObject({ strokeStyle: "dark-signal" });
+  });
+
+  it("stops painting and stops watching the page when it unmounts", () => {
+    const stopWatchingTheme = vi.spyOn(
+      MutationObserver.prototype,
+      "disconnect",
+    );
+    const { canvas, frame, unmount } = mount();
+    reportSize(1212, 100);
+
+    unmount();
+
+    expect(frame()).toEqual([]);
+    // A size reported now no longer reaches the canvas.
+    reportSize(10, 10);
+    expect(canvas.width).toBe(1212);
+    expect(stopWatchingTheme).toHaveBeenCalledOnce();
+  });
+
+  it("renders without a context, as in jsdom, and starts no loop", () => {
+    const requestFrame = vi.spyOn(globalThis, "requestAnimationFrame");
+
+    render(<SignalView clock={clockAt(12_000_000)} />);
+
+    expect(requestFrame).not.toHaveBeenCalled();
+  });
 });

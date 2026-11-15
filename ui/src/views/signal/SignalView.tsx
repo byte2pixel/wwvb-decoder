@@ -23,17 +23,32 @@ export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
 
     let width = 0;
     let height = 0;
-    const style = readSignalStyle(canvas);
+    let scale = 1;
+    let style = readSignalStyle(canvas);
 
     const sizes = new ResizeObserver((entries) => {
       const box = entries[0].contentRect;
       width = box.width;
       height = box.height;
+      scale = window.devicePixelRatio;
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      // rem changes with the resize, so read the style again.
+      style = readSignalStyle(canvas);
     });
     sizes.observe(canvas);
 
+    const theme = new MutationObserver(() => {
+      style = readSignalStyle(canvas);
+    });
+    theme.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+
     let frame = 0;
     const paint = (): void => {
+      ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.clearRect(0, 0, width, height);
       const { edges, pulses, symbols, slots } = useAppStore.getState();
       const { windowMicros, labels } = timeWindowFor(clock.speed());
@@ -62,6 +77,7 @@ export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
     return () => {
       cancelAnimationFrame(frame);
       sizes.disconnect();
+      theme.disconnect();
     };
   }, [clock]);
 
