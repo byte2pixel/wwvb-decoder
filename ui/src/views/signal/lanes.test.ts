@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { Edge, PinLevel, Pulse } from "@/protocol/messages";
+import type {
+  Edge,
+  PinLevel,
+  Pulse,
+  Symbol as WwvbSymbol,
+  SymbolKind,
+} from "@/protocol/messages";
 import { signalLanes, type SignalInput } from "./lanes";
 
 const edge = (micros: number, level: PinLevel): Edge => ({ micros, level });
@@ -9,6 +15,12 @@ const pulse = (startMicros: number, durationMicros: number): Pulse => ({
   durationMicros,
   endMicros: startMicros + durationMicros,
 });
+
+const symbol = (
+  startMicros: number,
+  durationMicros: number,
+  kind: SymbolKind,
+): WwvbSymbol => ({ startMicros, durationMicros, kind });
 
 /** A marker second, then a zero, as the synthetic source sends them: high is reduced carrier. */
 const markerThenZero = [
@@ -21,6 +33,7 @@ const markerThenZero = [
 const input = (over: Partial<SignalInput> = {}): SignalInput => ({
   edges: [],
   pulses: [],
+  symbols: [],
   nowMicros: null,
   windowMicros: 12_000_000,
   reducedLevel: "high",
@@ -223,5 +236,84 @@ describe("pulse lane", () => {
       { startMicros: 1_000_000, endMicros: 1_800_000, durationMs: 800 },
       { startMicros: 2_000_000, endMicros: 2_200_000, durationMs: 200 },
     ]);
+  });
+});
+
+describe("symbol lane", () => {
+  it("has a chip at the start of each classified pulse", () => {
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(1_000_000, 800_000), pulse(2_000_000, 200_000)],
+        symbols: [
+          symbol(1_000_000, 800_000, "marker"),
+          symbol(2_000_000, 200_000, "zero"),
+        ],
+        nowMicros: 3_000_000,
+      }),
+    );
+
+    expect(lanes.symbols).toEqual([
+      { startMicros: 1_000_000, kind: "marker" },
+      { startMicros: 2_000_000, kind: "zero" },
+    ]);
+  });
+
+  it("reads pending where the pulse lane does", () => {
+    const lanes = signalLanes(
+      input({
+        edges: markerThenZero,
+        pulses: [pulse(1_000_000, 800_000)],
+        symbols: [symbol(1_000_000, 800_000, "marker")],
+        nowMicros: 2_500_000,
+      }),
+    );
+
+    expect(lanes.symbols).toEqual([
+      { startMicros: 1_000_000, kind: "marker" },
+      { startMicros: 2_000_000, kind: "pending" },
+    ]);
+  });
+
+  it("reads pending for a measured pulse until its symbol arrives", () => {
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(1_000_000, 800_000), pulse(2_000_000, 200_000)],
+        symbols: [symbol(1_000_000, 800_000, "marker")],
+        nowMicros: 3_000_000,
+      }),
+    );
+
+    expect(lanes.symbols).toEqual([
+      { startMicros: 1_000_000, kind: "marker" },
+      { startMicros: 2_000_000, kind: "pending" },
+    ]);
+  });
+
+  it("keeps a chip's own start when the window cuts its bar", () => {
+    // 12 s back from 13.5 s is 1.5 s: inside the marker pulse, past the first one.
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(0, 500_000), pulse(1_000_000, 800_000)],
+        symbols: [
+          symbol(0, 500_000, "one"),
+          symbol(1_000_000, 800_000, "marker"),
+        ],
+        nowMicros: 13_500_000,
+      }),
+    );
+
+    expect(lanes.symbols).toEqual([{ startMicros: 1_000_000, kind: "marker" }]);
+  });
+
+  it("keeps a pending chip's own start when the window cuts its bar", () => {
+    // A carrier stuck at the reduced level: one edge, then nothing for 12.5 s.
+    const lanes = signalLanes(
+      input({ edges: [edge(500_000, "high")], nowMicros: 13_000_000 }),
+    );
+
+    expect(lanes.pulses).toEqual([
+      { startMicros: 1_000_000, endMicros: 13_000_000, durationMs: null },
+    ]);
+    expect(lanes.symbols).toEqual([{ startMicros: 500_000, kind: "pending" }]);
   });
 });

@@ -1,4 +1,10 @@
-import type { Edge, PinLevel, Pulse } from "@/protocol/messages";
+import type {
+  Edge,
+  PinLevel,
+  Pulse,
+  Symbol as WwvbSymbol,
+  SymbolKind,
+} from "@/protocol/messages";
 
 /**
  * Input for generating signal lanes.
@@ -6,6 +12,7 @@ import type { Edge, PinLevel, Pulse } from "@/protocol/messages";
 export interface SignalInput {
   edges: ReadonlyArray<Edge>;
   pulses: ReadonlyArray<Pulse>;
+  symbols: ReadonlyArray<WwvbSymbol>;
   /** The present from the source clock, in source microseconds. */
   nowMicros: number | null;
   /** How much time the lanes show, ending at the present. */
@@ -33,19 +40,30 @@ export interface PulseBar {
   durationMs: number | null;
 }
 
+/** The chip representing a symbol in the symbol lane. */
+export interface SymbolChip {
+  /** not clipped to the window */
+  startMicros: number;
+  kind: SymbolKind | "pending";
+}
+
 export interface SignalLanes {
   /** The timespan the lanes cover. */
   window: { startMicros: number; endMicros: number } | null;
   carrier: CarrierSegment[];
   pulses: PulseBar[];
+  symbols: SymbolChip[];
 }
 
 export function signalLanes(input: SignalInput): SignalLanes {
-  const { edges, pulses, nowMicros, windowMicros, reducedLevel } = input;
+  const { edges, pulses, symbols, nowMicros, windowMicros, reducedLevel } =
+    input;
   const carrier: CarrierSegment[] = [];
   const bars: PulseBar[] = [];
+  const chips: SymbolChip[] = [];
   const windowEnd = nowMicros ?? edges.at(-1)?.micros;
-  if (windowEnd === undefined) return { window: null, carrier, pulses: bars };
+  if (windowEnd === undefined)
+    return { window: null, carrier, pulses: bars, symbols: chips };
   const windowStart = windowEnd - windowMicros;
 
   /** The part of a span that is inside the window, or null when none of it is. */
@@ -55,6 +73,7 @@ export function signalLanes(input: SignalInput): SignalLanes {
     return endMicros > startMicros ? { startMicros, endMicros } : null;
   };
 
+  const kinds = new Map(symbols.map((s) => [s.startMicros, s.kind]));
   pulses.forEach((pulse) => {
     const span = clip(pulse.startMicros, pulse.endMicros);
     if (!span) return;
@@ -62,6 +81,8 @@ export function signalLanes(input: SignalInput): SignalLanes {
       ...span,
       durationMs: Math.round(pulse.durationMicros / 1000),
     });
+    const kind = kinds.get(pulse.startMicros) ?? "pending";
+    chips.push({ startMicros: pulse.startMicros, kind });
   });
 
   // Stage 2 reports a pulse only once a later edge confirms it. Until then the
@@ -75,11 +96,13 @@ export function signalLanes(input: SignalInput): SignalLanes {
     carrier.push({ ...span, reduced });
     if (reduced && edge.micros >= measuredUntil) {
       bars.push({ ...span, durationMs: null });
+      chips.push({ startMicros: edge.micros, kind: "pending" });
     }
   });
   return {
     window: { startMicros: windowStart, endMicros: windowEnd },
     carrier,
     pulses: bars,
+    symbols: chips,
   };
 }
