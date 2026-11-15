@@ -186,6 +186,21 @@ describe("pulses", () => {
     expect(pulses[0].bar).toMatchObject({ x: 100, w: 80 });
     expect(pulses[0].label).toBeNull();
   });
+
+  it("lets a bar the window cuts run off the left edge, its label with it", () => {
+    // The window starts at 0 and the pulse half a second before it.
+    const { pulses } = drawSignal(
+      lanes({
+        pulses: [
+          { startMicros: -500_000, endMicros: 300_000, durationMs: 800 },
+        ],
+      }),
+      view(),
+    );
+
+    expect(pulses[0].bar).toMatchObject({ x: -50, w: 80 });
+    expect(pulses[0].label).toMatchObject({ x: -50, text: "800 ms" });
+  });
 });
 
 describe("symbols", () => {

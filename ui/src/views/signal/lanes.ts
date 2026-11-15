@@ -38,7 +38,9 @@ export interface CarrierSegment {
  * A bar in the pulse lane.
  */
 export interface PulseBar {
+  /** The start is the pulse's own, not clipped. */
   startMicros: number;
+  /** The end is clipped to the window's end. */
   endMicros: number;
   /** The measured duration, or null while stage 2 has not measured the pulse. */
   durationMs: number | null;
@@ -123,7 +125,8 @@ export function signalLanes(input: SignalInput): SignalLanes {
     const span = clip(pulse.startMicros, pulse.endMicros);
     if (!span) return;
     bars.push({
-      ...span,
+      startMicros: pulse.startMicros,
+      endMicros: span.endMicros,
       durationMs: Math.round(pulse.durationMicros / 1000),
     });
     const kind = kinds.get(pulse.startMicros) ?? "pending";
@@ -146,7 +149,11 @@ export function signalLanes(input: SignalInput): SignalLanes {
     const reduced = edge.level === reducedLevel;
     carrier.push({ ...span, reduced });
     if (reduced && edge.micros >= measuredUntil) {
-      bars.push({ ...span, durationMs: null });
+      bars.push({
+        startMicros: edge.micros,
+        endMicros: span.endMicros,
+        durationMs: null,
+      });
       chips.push({ startMicros: edge.micros, kind: "pending" });
     }
   });

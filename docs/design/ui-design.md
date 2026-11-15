@@ -143,7 +143,7 @@ Four lanes over the same time axis, with a line at every second.
 - A pending bar is drawn as an outline, not filled. One too narrow to carry the word gets no label, so a glitch does not flash `pending`.
 - The symbol lane has one chip for each bar. A chip reads `pending` until the symbol with the same start time arrives. A pending chip is an outline too, and with the labels hidden it shrinks to an ellipsis.
 - A `slotFilled` event labels the symbol that arrived just before it. A symbol that filled no second, because frame sync was searching, gets a dash. The newest symbol gets nothing until its `slotFilled` arrives or a newer symbol does: the two messages arrive a few milliseconds apart, and a dash must not flash between them.
-- A bar that the window's left edge cuts keeps its measured duration, and its chip and second label slide out with it.
+- A bar that the window's left edge cuts slides out under the edge. Its duration, its chip, and its second label leave with it, and the duration stays the measured one.
 - The lines at every second take their phase from the frame in progress: the frame start of the newest filled slot. Before frame sync has placed anything they take it from the newest measured pulse, since a pulse starts at the top of a second. Before the first pulse there are no lines.
 - The window is 12 s at 1× speed. Above 1× it is 60 s and the pulse and second labels are hidden, because they would be unreadable.
 - The header's state line names the window, `12 s window` or `60 s window`, because the time axis carries no numbers.

@@ -144,7 +144,7 @@ describe("pulse lane", () => {
     ]);
   });
 
-  it("cuts a bar at the window's left edge and keeps its duration", () => {
+  it("keeps a bar's own start and its duration when the window cuts it", () => {
     // 12 s back from 13.5 s is 1.5 s: inside the marker pulse.
     const lanes = signalLanes(
       input({
@@ -158,7 +158,7 @@ describe("pulse lane", () => {
     );
 
     expect(lanes.pulses).toEqual([
-      { startMicros: 1_500_000, endMicros: 1_800_000, durationMs: 800 },
+      { startMicros: 1_000_000, endMicros: 1_800_000, durationMs: 800 },
       { startMicros: 2_000_000, endMicros: 2_200_612, durationMs: 201 },
     ]);
   });
@@ -315,14 +315,14 @@ describe("symbol lane", () => {
     expect(lanes.symbols).toEqual([{ startMicros: 1_000_000, kind: "marker" }]);
   });
 
-  it("keeps a pending chip's own start when the window cuts its bar", () => {
+  it("keeps a pending bar's own start, and its chip's, when the window cuts it", () => {
     // A carrier stuck at the reduced level: one edge, then nothing for 12.5 s.
     const lanes = signalLanes(
       input({ edges: [edge(500_000, "high")], nowMicros: 13_000_000 }),
     );
 
     expect(lanes.pulses).toEqual([
-      { startMicros: 1_000_000, endMicros: 13_000_000, durationMs: null },
+      { startMicros: 500_000, endMicros: 13_000_000, durationMs: null },
     ]);
     expect(lanes.symbols).toEqual([{ startMicros: 500_000, kind: "pending" }]);
   });
