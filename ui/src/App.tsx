@@ -6,6 +6,9 @@ import { AppBar } from "./shell/AppBar";
 import { PipelineRail } from "./shell/PipelineRail";
 import { StatusBar } from "./shell/StatusBar";
 import { Panel } from "./shell/Panel";
+import type { SourceClock } from "./time/sourceClock";
+import { SignalView } from "./views/signal/SignalView";
+import { timeWindowFor } from "./views/signal/timeWindow";
 
 /** What a panel shows before it has anything to draw. */
 function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
@@ -16,12 +19,18 @@ function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
-export default function App({ bridge }: Readonly<{ bridge: Bridge }>) {
+export default function App({
+  bridge,
+  clock,
+}: Readonly<{ bridge: Bridge; clock: SourceClock }>) {
   useEffect(() => {
     const off = bridge.onMessage(useAppStore.getState().dispatch);
     bridge.send({ command: "hello", protocol: 1 });
     return off;
   }, [bridge]);
+
+  const { windowMicros } = timeWindowFor(clock.speed());
+  const windowSeconds = windowMicros / 1_000_000;
 
   return (
     <TooltipProvider>
@@ -29,8 +38,12 @@ export default function App({ bridge }: Readonly<{ bridge: Bridge }>) {
         <AppBar bridge={bridge} />
         <PipelineRail />
         <main className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_21.5rem] grid-rows-[11.625rem_14.625rem_minmax(0,1fr)] gap-3 p-3">
-          <Panel title="Signal" stages={[1, 2, 3, 4]}>
-            <Placeholder>Pick a source and press Start</Placeholder>
+          <Panel
+            title="Signal"
+            stages={[1, 2, 3, 4]}
+            state={`${windowSeconds} s window`}
+          >
+            <SignalView clock={clock} />
           </Panel>
           <Panel title="Pulse width" stages={[3]}>
             <Placeholder>No pulses yet</Placeholder>

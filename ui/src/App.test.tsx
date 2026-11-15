@@ -1,9 +1,10 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bridge } from "@/protocol/bridge";
 import type { Command, HostMessage } from "@/protocol/messages";
 import { initialState } from "@/state/appState";
 import { useAppStore } from "@/state/store";
+import { createSourceClock } from "@/time/sourceClock";
 import App from "./App";
 
 function fakeBridge() {
@@ -26,6 +27,9 @@ function fakeBridge() {
   };
 }
 
+/** A clock no edge has synced: it has a speed and no present. */
+const idleClock = () => createSourceClock(() => 0);
+
 describe("App", () => {
   // The store is one module-level object shared by every test.
   beforeEach(() => {
@@ -33,7 +37,7 @@ describe("App", () => {
   });
 
   it("lays out the bar, the rail, five panels, and the status bar", () => {
-    render(<App bridge={fakeBridge().bridge} />);
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
 
     expect(
       screen.getByRole("heading", { level: 1, name: "WWVB decoder" }),
@@ -55,7 +59,7 @@ describe("App", () => {
   });
 
   it("shows the panels in their no-data states", () => {
-    render(<App bridge={fakeBridge().bridge} />);
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
 
     expect(
       screen.getByRole("region", { name: "Decoded frames" }),
@@ -67,7 +71,7 @@ describe("App", () => {
 
   it("says hello to the host and feeds its messages to the store", () => {
     const { bridge, emit } = fakeBridge();
-    render(<App bridge={bridge} />);
+    render(<App bridge={bridge} clock={idleClock()} />);
 
     expect(bridge.send).toHaveBeenCalledWith({ command: "hello", protocol: 1 });
 
@@ -84,10 +88,30 @@ describe("App", () => {
 
   it("stops listening to the bridge when it unmounts", () => {
     const { bridge, isSubscribed } = fakeBridge();
-    const { unmount } = render(<App bridge={bridge} />);
+    const { unmount } = render(<App bridge={bridge} clock={idleClock()} />);
 
     expect(isSubscribed()).toBe(true);
     unmount();
     expect(isSubscribed()).toBe(false);
+  });
+
+  it("shows the signal view, and names its window in the panel's header", () => {
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
+
+    const signal = screen.getByRole("region", { name: "Signal" });
+    expect(within(signal).getByText(/drawn in four lanes/).tagName).toBe(
+      "CANVAS",
+    );
+    expect(signal).toHaveTextContent("12 s window");
+  });
+
+  it("names the 60 s window when the source runs faster than 1x", () => {
+    const clock = idleClock();
+    clock.setSpeed(10);
+    render(<App bridge={fakeBridge().bridge} clock={clock} />);
+
+    expect(screen.getByRole("region", { name: "Signal" })).toHaveTextContent(
+      "60 s window",
+    );
   });
 });

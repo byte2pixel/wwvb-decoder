@@ -146,6 +146,7 @@ Four lanes over the same time axis, with a line at every second.
 - A bar that the window's left edge cuts keeps its measured duration, and its chip and second label slide out with it.
 - The lines at every second take their phase from the frame in progress: the frame start of the newest filled slot. Before frame sync has placed anything they take it from the newest measured pulse, since a pulse starts at the top of a second. Before the first pulse there are no lines.
 - The window is 12 s at 1× speed. Above 1× it is 60 s and the pulse and second labels are hidden, because they would be unreadable.
+- The header's state line names the window, `12 s window` or `60 s window`, because the time axis carries no numbers.
 - Drawn on a canvas, once per animation frame, straight from the store's buffers.
 
 ### Pulse width

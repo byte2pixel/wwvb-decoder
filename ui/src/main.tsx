@@ -30,6 +30,6 @@ if (import.meta.env.DEV) {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <App bridge={bridge} />
+    <App bridge={bridge} clock={clock} />
   </StrictMode>,
 );
