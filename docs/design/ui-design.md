@@ -155,8 +155,11 @@ A histogram of the last 600 symbol durations from 0 to 1,000 ms.
 
 - Bins are 25 ms wide, so the class boundaries at 100, 350, 650, and 900 ms fall on bin edges.
 - Bars are colored by class: zero dim accent, one accent, marker neutral, error `bad`.
-- The two decision thresholds are solid lines; the valid range limits are dashed, with the error zones tinted.
-- A dashed line marks the last pulse, and the header line reads `Last pulse 502 ms classified as 1`.
+- A bar's class is the host's: the `kind` of the newest symbol in its bin. The page does not classify a duration. Only the bin from 900 ms can hold two classes, because the host still accepts exactly 900 ms as a marker.
+- A duration of 1,000 ms or more is counted in the last bin, so a long error still shows.
+- A bar's height is its count against the fullest bin.
+- The two decision thresholds are solid lines; the valid range limits are dashed, with the error zones tinted. They are drawn from constants that repeat the defaults of the host's `SymbolClassifier`, because no message carries them.
+- A dashed line marks the last pulse, and the header line reads `Last pulse 502 ms classified as 1`. The class is written `0`, `1`, `M`, or `error`. Before the first pulse the line reads `No pulses yet`.
 
 ### Frame
 
