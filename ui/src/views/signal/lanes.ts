@@ -7,6 +7,8 @@ import type {
 } from "@/protocol/messages";
 import type { FilledSlot } from "@/state/appState";
 
+const SECOND_MICROS = 1_000_000;
+
 /**
  * Input for generating signal lanes.
  */
@@ -64,6 +66,8 @@ export interface SignalLanes {
   pulses: PulseBar[];
   symbols: SymbolChip[];
   seconds: SecondLabel[];
+  /** The vertical lines marking each second. */
+  ticks: number[];
 }
 
 export function signalLanes(input: SignalInput): SignalLanes {
@@ -80,7 +84,9 @@ export function signalLanes(input: SignalInput): SignalLanes {
   const bars: PulseBar[] = [];
   const chips: SymbolChip[] = [];
   const labels: SecondLabel[] = [];
+  const ticks: number[] = [];
   const windowEnd = nowMicros ?? edges.at(-1)?.micros;
+  const phase = slots.at(-1)?.frameStartMicros ?? pulses.at(-1)?.startMicros;
   if (windowEnd === undefined) {
     return {
       window: null,
@@ -88,9 +94,17 @@ export function signalLanes(input: SignalInput): SignalLanes {
       pulses: bars,
       symbols: chips,
       seconds: labels,
+      ticks,
     };
   }
   const windowStart = windowEnd - windowMicros;
+  if (phase !== undefined) {
+    const first =
+      phase + Math.ceil((windowStart - phase) / SECOND_MICROS) * SECOND_MICROS;
+    for (let t = first; t <= windowEnd; t += SECOND_MICROS) {
+      ticks.push(t);
+    }
+  }
 
   /** The part of a span that is inside the window, or null when none of it is. */
   const clip = (start: number, end: number) => {
@@ -139,5 +153,6 @@ export function signalLanes(input: SignalInput): SignalLanes {
     pulses: bars,
     symbols: chips,
     seconds: labels,
+    ticks,
   };
 }

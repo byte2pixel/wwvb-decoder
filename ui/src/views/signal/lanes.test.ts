@@ -422,3 +422,53 @@ describe("second lane", () => {
     expect(lanes.seconds).toEqual([{ startMicros: 1_000_000, second: 59 }]);
   });
 });
+
+describe("second lines", () => {
+  it("has a line at every second of the frame, whatever the pulses' own starts", () => {
+    // The slot builder's frame starts at 2 s; the pulse is 300 µs late.
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(4_000_300, 200_000)],
+        symbols: [symbol(4_000_300, 200_000, "zero")],
+        slots: [slot(4_000_300, 2)],
+        nowMicros: 5_500_000,
+        windowMicros: 3_000_000,
+      }),
+    );
+
+    expect(lanes.ticks).toEqual([3_000_000, 4_000_000, 5_000_000]);
+  });
+
+  it("takes the seconds from the newest pulse while frame sync is searching", () => {
+    // The window is 9.5 s to 12.5 s, so the lines run back from the pulse as well as on from it.
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(10_000_250, 800_000), pulse(11_000_400, 200_000)],
+        nowMicros: 12_500_000,
+        windowMicros: 3_000_000,
+      }),
+    );
+
+    expect(lanes.ticks).toEqual([10_000_400, 11_000_400, 12_000_400]);
+  });
+
+  it("has no lines before anything marks a second", () => {
+    const lanes = signalLanes(
+      input({ edges: [edge(0, "high")], nowMicros: 300_000 }),
+    );
+
+    expect(lanes.ticks).toEqual([]);
+  });
+
+  it("has a line on each edge of the window when a second falls there", () => {
+    const lanes = signalLanes(
+      input({
+        pulses: [pulse(2_000_000, 200_000)],
+        nowMicros: 5_000_000,
+        windowMicros: 3_000_000,
+      }),
+    );
+
+    expect(lanes.ticks).toEqual([2_000_000, 3_000_000, 4_000_000, 5_000_000]);
+  });
+});
