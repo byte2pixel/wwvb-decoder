@@ -157,9 +157,11 @@ A histogram of the last 600 symbol durations from 0 to 1,000 ms.
 - Bars are colored by class: zero dim accent, one accent, marker neutral, error `bad`.
 - A bar's class is the host's: the `kind` of the newest symbol in its bin. The page does not classify a duration. Only the bin from 900 ms can hold two classes, because the host still accepts exactly 900 ms as a marker.
 - A duration of 1,000 ms or more is counted in the last bin, so a long error still shows.
-- A bar's height is its count against the fullest bin.
-- The two decision thresholds are solid lines; the valid range limits are dashed, with the error zones tinted. They are drawn from constants that repeat the defaults of the host's `SymbolClassifier`, because no message carries them.
-- A dashed line marks the last pulse, and the header line reads `Last pulse 502 ms classified as 1`. The class is written `0`, `1`, `M`, or `error`. Before the first pulse the line reads `No pulses yet`.
+- A bar's height is its count against the fullest bin, and never less than 0.125 rem, so a single pulse still shows beside a full bin.
+- The two decision thresholds are solid lines; the valid range limits are dashed, with the error zones tinted. They are drawn from constants that repeat the defaults of the host's `SymbolClassifier`, because no message carries them. The axis names the four in milliseconds.
+- A dashed line marks the last pulse, and the header line reads `Last pulse 502 ms classified as 1`. The class is written `0`, `1`, `M`, or `error`. Before the first pulse the line reads `No pulses yet`. The line of a pulse of 1,000 ms or more sits at the right edge.
+- Each bar and each error zone has a `title`, such as `200 to 225 ms: 14`, which a pointer shows as a tooltip.
+- Drawn in DOM. Every position is a percentage of the plot, so the view measures nothing and scales with its panel.
 
 ### Frame
 

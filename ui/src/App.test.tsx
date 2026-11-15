@@ -114,4 +114,24 @@ describe("App", () => {
       "60 s window",
     );
   });
+
+  it("shows the pulse-width view, and the last pulse in the panel's header", () => {
+    const { bridge, emit } = fakeBridge();
+    render(<App bridge={bridge} clock={idleClock()} />);
+
+    const panel = screen.getByRole("region", { name: "Pulse width" });
+    expect(panel).toHaveTextContent("No pulses yet");
+    expect(
+      within(panel).getByRole("list", { name: "Bins" }),
+    ).toBeInTheDocument();
+
+    emit({
+      type: "symbol",
+      seq: 1,
+      payload: { startMicros: 0, durationMicros: 502_000, kind: "one" },
+    });
+
+    expect(panel).toHaveTextContent("Last pulse 502 ms classified as 1");
+    expect(within(panel).getByTitle("500 to 525 ms: 1")).toBeInTheDocument();
+  });
 });

@@ -1,7 +1,16 @@
 import type { SymbolKind, Symbol as WwvbSymbol } from "@/protocol/messages";
 
-const BIN_COUNT = 40;
-const BIN_MICROS = 25_000; // 25 ms in microseconds
+/** The width of each histogram bin in milliseconds. */
+export const BIN_MS = 25;
+/**
+ * The total range of the histogram in milliseconds.
+ * A longer pulse will fall into the last bin.
+ */
+export const RANGE_MS = 1_000;
+/** The number of bins in the histogram. */
+const BIN_COUNT = RANGE_MS / BIN_MS;
+/** The bin width in microseconds. */
+const BIN_MICROS = BIN_MS * 1_000;
 
 /** One 25 ms bar of the histogram. */
 export interface HistogramBin {
@@ -33,7 +42,7 @@ export function pulseWidthHistogram(
   const bins: HistogramBin[] = Array.from(
     { length: BIN_COUNT },
     (_, index) => ({
-      fromMs: index * (BIN_MICROS / 1000),
+      fromMs: index * BIN_MS,
       count: 0,
       kind: null,
       height: 0,

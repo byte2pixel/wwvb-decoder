@@ -9,6 +9,10 @@ import { Panel } from "./shell/Panel";
 import type { SourceClock } from "./time/sourceClock";
 import { SignalView } from "./views/signal/SignalView";
 import { timeWindowFor } from "./views/signal/timeWindow";
+import {
+  LastPulseLine,
+  PulseWidthView,
+} from "./views/pulse-width/PulseWidthView";
 
 /** What a panel shows before it has anything to draw. */
 function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
@@ -45,8 +49,8 @@ export default function App({
           >
             <SignalView clock={clock} />
           </Panel>
-          <Panel title="Pulse width" stages={[3]}>
-            <Placeholder>No pulses yet</Placeholder>
+          <Panel title="Pulse width" stages={[3]} state={<LastPulseLine />}>
+            <PulseWidthView />
           </Panel>
           <Panel title="Frame" stages={[4]}>
             <Placeholder>No symbols placed yet</Placeholder>
