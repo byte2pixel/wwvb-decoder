@@ -11,12 +11,15 @@ export type Painted =
       fillStyle: string;
       textAlign: string;
       textBaseline: string;
-    };
+    }
+  | { op: "clear"; x: number; y: number; w: number; h: number }
+  | { op: "transform"; matrix: number[] };
 
 /**
- * A stand-in for a canvas context, for tests. It keeps the current path and the styles as a
- * canvas does, and records what each stroke, fill, and text call would paint. It has only the
- * calls the signal painter uses.
+ * A stand-in for a canvas context, for tests.
+ * It keeps the current path and the styles as a canvas does, and records what each
+ * stroke, fill, and text call would paint, and each clear and change of transform.
+ * It has only the calls the signal painter uses.
  */
 export function recordingContext() {
   const painted: Painted[] = [];
@@ -56,6 +59,12 @@ export function recordingContext() {
     },
     fill(): void {
       painted.push({ op: "fill", path: [...path], fillStyle: ctx.fillStyle });
+    },
+    clearRect(x: number, y: number, w: number, h: number): void {
+      painted.push({ op: "clear", x, y, w, h });
+    },
+    setTransform(...matrix: number[]): void {
+      painted.push({ op: "transform", matrix });
     },
     fillText(text: string, x: number, y: number): void {
       painted.push({

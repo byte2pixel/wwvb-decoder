@@ -35,9 +35,12 @@ const bar: Rect = {
   radius: 2,
 };
 
-/** One short line per painted thing: a text's string, or the op and where its path starts. */
+/** One short line per painted thing: a text's string, the op and where its path starts, or the op alone. */
 const summary = (painted: Painted[]): string[] =>
-  painted.map((p) => (p.op === "text" ? p.text : `${p.op} ${p.path[0]}`));
+  painted.map((p) => {
+    if (p.op === "text") return p.text;
+    return "path" in p ? `${p.op} ${p.path[0]}` : p.op;
+  });
 
 describe("paintSignal", () => {
   it("strokes each tick as a line of its own", () => {
