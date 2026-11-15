@@ -1,6 +1,6 @@
-import { render } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Edge } from "@/protocol/messages";
+import type { Edge, SourceStatus } from "@/protocol/messages";
 import { initialState } from "@/state/appState";
 import { useAppStore } from "@/state/store";
 import type { SourceClock } from "@/time/sourceClock";
@@ -21,6 +21,14 @@ const edges: Edge[] = [
   { micros: 1_000_000, level: "high" },
   { micros: 1_800_000, level: "low" },
 ];
+
+/** A source's status message in the given state. */
+const status = (state: SourceStatus["state"]): SourceStatus => ({
+  source: "synthetic",
+  name: "Synthetic",
+  state,
+  detail: "",
+});
 
 /**
  * jsdom lays nothing out, so the test plays the browser: reportSize tells the view's
@@ -194,5 +202,40 @@ describe("SignalView", () => {
     render(<SignalView clock={clockAt(12_000_000)} />);
 
     expect(requestFrame).not.toHaveBeenCalled();
+  });
+
+  it("names the lanes beside the canvas, each as tall as its lane", () => {
+    render(<SignalView clock={clockAt(12_000_000)} />);
+
+    const names = within(
+      screen.getByRole("list", { name: "Lanes" }),
+    ).getAllByRole("listitem");
+
+    expect(names.map((name) => name.textContent)).toEqual([
+      "Carrier",
+      "Pulse",
+      "Symbol",
+      "Second",
+    ]);
+    // The carrier's lane is twice as tall as the others, on the canvas and here.
+    expect(names.map((name) => name.style.flexGrow)).toEqual([
+      "2",
+      "1",
+      "1",
+      "1",
+    ]);
+  });
+
+  it("asks for a source until one runs, and not over a picture a source left", () => {
+    render(<SignalView clock={clockAt(12_000_000)} />);
+    const hint = () => screen.queryByText("Pick a source and press Start");
+    expect(hint()).toBeInTheDocument();
+
+    act(() => useAppStore.setState({ sourceStatus: status("running") }));
+    expect(hint()).not.toBeInTheDocument();
+
+    // The source stops and its last picture stays, so nothing is written over it.
+    act(() => useAppStore.setState({ edges, sourceStatus: status("stopped") }));
+    expect(hint()).not.toBeInTheDocument();
   });
 });

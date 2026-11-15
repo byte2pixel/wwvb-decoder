@@ -3,18 +3,28 @@ import type { SourceClock } from "@/time/sourceClock";
 import { useAppStore } from "@/state/store";
 import { timeWindowFor } from "./timeWindow";
 import { signalLanes } from "./lanes";
-import { drawSignal, type LaneName } from "./model";
+import { drawSignal, LANE_WEIGHTS, type LaneName } from "./model";
 import { readSignalStyle } from "./style";
 import { paintSignal } from "./paint";
 import type { PinLevel } from "@/protocol/messages";
 
 const LANES: readonly LaneName[] = ["carrier", "pulse", "symbol", "second"];
+const LANE_NAMES: Record<LaneName, string> = {
+  carrier: "Carrier",
+  pulse: "Pulse",
+  symbol: "Symbol",
+  second: "Second",
+};
 /** The host's default. Step 13's signal settings will make it a choice. */
 const REDUCED_LEVEL: PinLevel = "high";
 
 /** The signal panel's canvas: four lanes over one time axis, painted on every animation frame. */
 export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const idle = useAppStore(
+    (state) =>
+      state.sourceStatus?.state !== "running" && state.edges.length === 0,
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -82,8 +92,34 @@ export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
   }, [clock]);
 
   return (
-    <canvas ref={canvasRef} className="block h-full w-full font-mono">
-      The signal over the last seconds, drawn in four lanes.
-    </canvas>
+    <div className="flex h-full">
+      <ul
+        aria-label="Lanes"
+        className="flex flex-none flex-col border-r text-[0.65625rem] text-muted-foreground"
+      >
+        {LANES.map((lane) => (
+          <li
+            key={lane}
+            style={{ flexGrow: LANE_WEIGHTS[lane] }}
+            className="flex min-h-0 basis-0 items-center px-2 justify-end"
+          >
+            {LANE_NAMES[lane]}
+          </li>
+        ))}
+      </ul>
+      <div className="relative min-w-0 flex-1">
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 block h-full w-full font-mono"
+        >
+          The signal over the last seconds, drawn in four lanes.
+        </canvas>
+        {idle && (
+          <p className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">
+            Pick a source and press Start
+          </p>
+        )}
+      </div>
+    </div>
   );
 }
