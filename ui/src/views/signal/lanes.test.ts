@@ -472,3 +472,20 @@ describe("second lines", () => {
     expect(lanes.ticks).toEqual([2_000_000, 3_000_000, 4_000_000, 5_000_000]);
   });
 });
+
+describe("cursor", () => {
+  it("is at the present", () => {
+    const lanes = signalLanes(
+      input({ edges: markerThenZero, nowMicros: 2_500_000 }),
+    );
+
+    expect(lanes.cursorMicros).toBe(2_500_000);
+  });
+
+  it("is absent from a still picture, which has no present", () => {
+    expect(
+      signalLanes(input({ edges: markerThenZero })).cursorMicros,
+    ).toBeNull();
+    expect(signalLanes(input()).cursorMicros).toBeNull();
+  });
+});

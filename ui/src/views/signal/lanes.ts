@@ -68,6 +68,8 @@ export interface SignalLanes {
   seconds: SecondLabel[];
   /** The vertical lines marking each second. */
   ticks: number[];
+  /** The present, where the cursor is drawn. Null in a still picture. */
+  cursorMicros: number | null;
 }
 
 export function signalLanes(input: SignalInput): SignalLanes {
@@ -95,6 +97,7 @@ export function signalLanes(input: SignalInput): SignalLanes {
       symbols: chips,
       seconds: labels,
       ticks,
+      cursorMicros: null,
     };
   }
   const windowStart = windowEnd - windowMicros;
@@ -154,5 +157,6 @@ export function signalLanes(input: SignalInput): SignalLanes {
     symbols: chips,
     seconds: labels,
     ticks,
+    cursorMicros: nowMicros,
   };
 }
