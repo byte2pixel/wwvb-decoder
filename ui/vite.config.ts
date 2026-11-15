@@ -51,8 +51,7 @@ export default defineConfig({
       ],
       reporter: ["text", "lcov", "cobertura"],
       reportsDirectory: "coverage",
-      // A ratchet, a few points under what the suite covers today; raise it as tests land.
-      thresholds: { lines: 65, statements: 65, branches: 40, functions: 40 },
+      thresholds: { lines: 95, statements: 95, branches: 90, functions: 95 },
     },
   },
 });
