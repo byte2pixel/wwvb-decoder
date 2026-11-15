@@ -1,4 +1,4 @@
-import type { HostMessage } from "./messages";
+import type { HostMessage } from "@/protocol/messages";
 import { appendMessage, emptyLog } from "./log";
 import { describe, expect, it } from "vitest";
 

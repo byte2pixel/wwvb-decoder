@@ -81,7 +81,8 @@ shadcn/ui components expect a fixed set of CSS variables, so the tokens are decl
 | `text-3` | `--muted-foreground` |
 | `accent`, `on-accent` | `--signal` and `--on-signal`; also `--primary`, `--primary-foreground`, and `--ring` |
 | `bad` | `--bad`; also `--destructive` |
-| `bar`, `text-2`, `zero`, `marker`, `good`, `warn` | `--bar`, `--text-2`, `--zero` and `--zero-surface`, `--marker` and `--marker-surface`, `--good`, `--warn` |
+| `text-2` | `--foreground-soft`, so the utility reads `text-foreground-soft` |
+| `bar`, `zero`, `marker`, `good`, `warn` | `--bar`, `--zero` and `--zero-surface`, `--marker` and `--marker-surface`, `--good`, `--warn` |
 
 - Light values go in `:root` and dark values under `.dark`, as shadcn generates them, so its components work unchanged. `<html>` carries `class="dark"` by default and the theme button toggles it.
 - Each variable is mapped into Tailwind in the `@theme inline` block (`--color-signal: var(--signal)`), which gives utilities such as `bg-signal` and `text-good`.
@@ -108,17 +109,19 @@ Text contrast is at least 4.5 to 1 on its surface, in both themes. A state is ne
 
 Seven buttons in a row, joined by a line. Each shows the stage number, its name, the latest output, and a health dot. Clicking one, or pressing its number, opens that stage's focus view.
 
+The dot is a glyph as well as a color, so it does not depend on hue: a ring for no data, a check for good, a triangle for warn, and a cross for bad. Each carries its meaning as a text alternative: `no data`, `good`, `warning`, `fault`.
+
 | Stage | Message | Readout | Health |
 | --- | --- | --- | --- |
-| 1 Edges | `edges` | The last edge as the serial line writes it, `L 2617209411` | Good while edges arrive; bad when `sourceStatus` is `error` |
+| 1 Edges | `edges` | The last edge as the serial line writes it, `L 2617209411` | Good once an edge has arrived; bad when `sourceStatus` is `error` |
 | 2 Pulses | `pulse` | Last duration, `502 ms` | Good |
 | 3 Symbols | `symbol` | Last kind, `one` | Warn if any of the last 60 symbols is `error` |
-| 4 Frame sync | `frameSync` | `37 of 60`, or `searching` | Good when synced; warn while searching; bad for 5 s after `syncLost` |
+| 4 Frame sync | `frameSync` | `37 of 60`, or `searching` | Good when synced; warn while searching; bad for 5 s after `syncLost` (see [Sync loss](#sync-loss)) |
 | 5 Decode | `decodedFrame` | `19:32 day 344` | Warn if `errorSeconds` is not empty |
 | 6 Validate | `validation` | `accepted` or `rejected` | Good or bad |
-| 7 Clock | `clock` | The status | Good when `locked`; warn when `acquiring` or `holding` |
+| 7 Clock | `clock` | The status | Good when `locked`; warn when `acquiring` or `holding`; `text-3` when `noSignal` |
 
-Before a source starts, every readout is a dash and every dot is `text-3`.
+Before a source starts, every readout is a dash and every dot is `text-3`. A source reset returns the rail to that state. `stop` does not: the readouts and dots keep their last values, and the status bar shows that the source stopped.
 
 ## Panels
 
@@ -244,12 +247,26 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
 
 Edges arrive in batches every 100 ms and only when the carrier changes, so the present has to be estimated between them. One module does this for every view:
 
-- It maps `performance.now()` to source microseconds, anchored on the newest edge and advancing at the source's speed (1 for live and synthetic, the replay speed for replay).
-- It never runs backwards. A correction is spread over about 250 ms instead of applied as a jump.
-- A source reset discards the anchor.
+- It maps `performance.now()` to source microseconds, anchored on the first edge and advancing at the source's speed (1 for live and synthetic, the replay speed for replay).
+- Every later batch corrects it with the timestamp of its newest edge:
+  - An edge later than the estimate proves the clock is behind. The whole difference is made up.
+  - An edge earlier than the estimate is the normal case, because edges arrive late. A tenth of the difference is taken back. This keeps the clock with a stream that runs slower than its nominal speed, which a paced source can (see Step 13, Task 1 in the construction plan), and with a Pico whose crystal runs slower than the PC's.
+- It never jumps and never runs backwards. A correction changes how fast the clock runs over the next 250 ms. An edge that arrives during a correction is compared with where the clock is heading, so the rest of the correction is kept.
+- It keeps running when edges stop, so a flat carrier still scrolls.
+- The page discards the anchor when the source resets or stops.
 - At replay speed 0, as fast as possible, there is no usable present: the signal panel stops scrolling and shows a note.
 
 The signal cursor, the cell being received, and the clock digits all read this module.
+
+### Sync loss
+
+The host sends `searching` in the same push as `syncLost`, so the latest `frameSync` event shows a loss only for an instant. The store keeps the loss on its own:
+
+- The reducer records the reason and the message's `seq` when `syncLost` arrives. A source reset clears it.
+- The store clears it 5 s later by the wall clock. The 5 s is reading time, so it is the same at every replay speed.
+- The timer clears only the loss it was started for, so a second loss inside the 5 s is shown for its own 5 s.
+
+The rail's stage 4 health and the frame panel's header both read this one field.
 
 ## Protocol additions
 

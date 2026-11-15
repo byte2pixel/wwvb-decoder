@@ -1,83 +1,59 @@
-import { useEffect, useReducer, useState } from "react";
-import "./App.css";
-import { createBridge, findWebView } from "./protocol/bridge.ts";
-import { appendMessage, emptyLog } from "./protocol/log.ts";
-import type { SourceStatus } from "./protocol/messages.ts";
+import { useEffect, type ReactNode } from "react";
+import { type Bridge } from "./protocol/bridge";
+import { useAppStore } from "./state/store";
+import { TooltipProvider } from "./components/ui/tooltip";
+import { AppBar } from "./shell/AppBar";
+import { PipelineRail } from "./shell/PipelineRail";
+import { StatusBar } from "./shell/StatusBar";
+import { Panel } from "./shell/Panel";
 
-const bridge = createBridge(findWebView());
+/** What a panel shows before it has anything to draw. */
+function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
+  return (
+    <p className="flex h-full items-center justify-center text-xs text-muted-foreground">
+      {children}
+    </p>
+  );
+}
 
-export default function App() {
-  const [log, dispatch] = useReducer(appendMessage, emptyLog);
-  const [noise, setNoise] = useState(0);
-  const [status, setStatus] = useState<SourceStatus | null>(null);
-
+export default function App({ bridge }: Readonly<{ bridge: Bridge }>) {
   useEffect(() => {
-    const off = bridge.onMessage((message) => {
-      dispatch(message);
-      if (message.type === "sourceStatus") setStatus(message.payload);
-    });
+    const off = bridge.onMessage(useAppStore.getState().dispatch);
     bridge.send({ command: "hello", protocol: 1 });
     return off;
-  }, []);
+  }, [bridge]);
 
   return (
-    <div className="app">
-      <header className="header">
-        <select value="synthetic" onChange={() => {}}>
-          <option value="synthetic">synthetic</option>
-          <option value="serial" disabled>
-            serial
-          </option>
-          <option value="replay" disabled>
-            replay
-          </option>
-        </select>
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.05"
-          value={noise}
-          onChange={(e) => setNoise(Number(e.target.value))}
-        />
-        <button
-          onClick={() =>
-            bridge.send({ command: "selectSource", source: "synthetic", noise })
-          }
-        >
-          Start
-        </button>
-        <button onClick={() => bridge.send({ command: "stop" })}>Stop</button>
-        <div className="status">
-          {status
-            ? `${status.name} ${status.state} ${status.detail}`
-            : "no host"}
-        </div>
-      </header>
-      <main className="main">
-        <section className="counts">
-          {/* one div per type */}
-          {Object.entries(log.counts).map(([type, count]) => (
-            <div key={type}>
-              <span>{type}</span>
-              <span>{count}</span>
-            </div>
-          ))}
-        </section>
-        <section className="entries">
-          {/* newest first */}
-          {log.entries
-            .slice()
-            .reverse()
-            .map((entry) => (
-              <div className="entry" key={entry.seq}>
-                <pre>{entry.type}</pre>
-                <pre>{entry.seq}</pre>
-                <pre>{JSON.stringify(entry.payload)}</pre>
-              </div>
-            ))}
-        </section>
-      </main>
-    </div>
+    <TooltipProvider>
+      <div className="flex h-full flex-col">
+        <AppBar bridge={bridge} />
+        <PipelineRail />
+        <main className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_21.5rem] grid-rows-[11.625rem_14.625rem_minmax(0,1fr)] gap-3 p-3">
+          <Panel title="Signal" stages={[1, 2, 3, 4]}>
+            <Placeholder>Pick a source and press Start</Placeholder>
+          </Panel>
+          <Panel title="Pulse width" stages={[3]}>
+            <Placeholder>No pulses yet</Placeholder>
+          </Panel>
+          <Panel title="Frame" stages={[4]}>
+            <Placeholder>No symbols placed yet</Placeholder>
+          </Panel>
+          <Panel
+            title="Time"
+            stages={[7]}
+            state="No signal"
+            className="row-span-2"
+          >
+            <p className="flex h-full items-center justify-center font-mono text-[3.75rem] font-semibold text-muted-foreground">
+              --:--:--
+            </p>
+          </Panel>
+          <Panel title="Decoded frames" stages={[5, 6]}>
+            <Placeholder>No frames yet</Placeholder>
+          </Panel>
+        </main>
+        <StatusBar />
+      </div>
+    </TooltipProvider>
   );
 }

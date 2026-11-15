@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createBridge, type MessageEventLike, type WebView } from "./bridge.ts";
+import { createBridge, type MessageEventLike, type WebView } from "./bridge";
 
 function fakeWebView() {
   const listeners = new Set<(event: MessageEventLike) => void>();

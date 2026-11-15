@@ -4,5 +4,8 @@
     { "path": "./tsconfig.app.json" },
     { "path": "./tsconfig.node.json" },
     { "path": "./tsconfig.test.json" }
-  ]
+  ],
+  // For the shadcn CLI only: it reads this file and does not follow references.
+  // tsc ignores options in a solution file; the compiler's alias is in tsconfig.app.json.
+  "compilerOptions": { "paths": { "@/*": ["./src/*"] } }
 }

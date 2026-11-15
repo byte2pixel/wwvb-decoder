@@ -1,8 +1,4 @@
-import {
-  hostMessageSchema,
-  type Command,
-  type HostMessage,
-} from "./messages.ts";
+import { hostMessageSchema, type Command, type HostMessage } from "./messages";
 import { z } from "zod";
 
 declare global {
