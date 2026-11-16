@@ -2,9 +2,9 @@ import type { AppState } from "@/state/appState";
 import type {
   ClockStatus,
   FrameSyncEvent,
-  PinLevel,
   Symbol as WwvbSymbol,
 } from "@/protocol/messages";
+import { edgeLine } from "@/protocol/edgeLine";
 
 /** The dot's meaning. `idle` is the text-3 dot: nothing to judge yet. */
 export type Health = "idle" | "good" | "warn" | "bad";
@@ -16,8 +16,6 @@ export interface StageView {
 }
 
 export const noData = "—";
-
-const levelChar = (level: PinLevel) => (level === "high" ? "H" : "L");
 
 const edgeHealth = (state: AppState): Health => {
   if (state.sourceStatus?.state === "error") {
@@ -34,7 +32,7 @@ export function edgesStage(state: AppState): StageView {
   }
 
   return {
-    readout: `${levelChar(lastEdge.level)} ${lastEdge.micros}`,
+    readout: edgeLine(lastEdge),
     health,
   };
 }
@@ -116,18 +114,64 @@ export function frameSyncStage(state: AppState): StageView {
 }
 
 export interface Stage {
-  /** 1 to 7. Also the key that opens the stage's focus view in Step 12b. */
+  /** 1 to 7. Also the key that opens the stage's focus view. */
   number: number;
   name: string;
+  /** The host's type for the stage, as C# writes it. */
+  type: string;
+  /** The stage's rule in one sentence, for its focus view. The numbers repeat the host's defaults. */
+  rule: string;
   view: (state: AppState) => StageView;
 }
 
 export const stages: readonly Stage[] = [
-  { number: 1, name: "Edges", view: edgesStage },
-  { number: 2, name: "Pulses", view: pulsesStage },
-  { number: 3, name: "Symbols", view: symbolsStage },
-  { number: 4, name: "Frame sync", view: frameSyncStage },
-  { number: 5, name: "Decode", view: decodeStage },
-  { number: 6, name: "Validate", view: validateStage },
-  { number: 7, name: "Clock", view: clockStage },
+  {
+    number: 1,
+    name: "Edges",
+    type: "IEdgeSource",
+    rule: "Every change of the receiver's output pin arrives as its new level and a time in microseconds.",
+    view: edgesStage,
+  },
+  {
+    number: 2,
+    name: "Pulses",
+    type: "IStage<Edge, Pulse>",
+    rule: "A pulse is the time the carrier stays reduced; a pulse under 50 ms is dropped and a gap under 50 ms is bridged.",
+    view: pulsesStage,
+  },
+  {
+    number: 3,
+    name: "Symbols",
+    type: "IStage<Pulse, Symbol>",
+    rule: "A pulse from 100 ms is a 0, from 350 ms a 1, from 650 ms a marker, and outside 100 to 900 ms an error.",
+    view: symbolsStage,
+  },
+  {
+    number: 4,
+    name: "Frame sync",
+    type: "IStage<Symbol, FrameSyncEvent>",
+    rule: "Two markers a second apart start a frame; a marker or a bit in the wrong second, or a gap outside 0.5 to 1.5 s, loses sync.",
+    view: frameSyncStage,
+  },
+  {
+    number: 5,
+    name: "Decode",
+    type: "IStage<Frame, DecodedFrame>",
+    rule: "Each field is the sum of the weights of its bits that are 1.",
+    view: decodeStage,
+  },
+  {
+    number: 6,
+    name: "Validate",
+    type: "IStage<DecodedFrame, ValidationResult>",
+    rule: "A frame is accepted when it passes all ten checks; the last is that its time is one minute after the frame before.",
+    view: validateStage,
+  },
+  {
+    number: 7,
+    name: "Clock",
+    type: "IStage<ValidationResult, ClockState>",
+    rule: "Two accepted frames in a row lock the clock; once locked it holds through two rejected frames, and the third sends it back to acquiring.",
+    view: clockStage,
+  },
 ];

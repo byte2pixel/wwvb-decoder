@@ -109,6 +109,8 @@ Text contrast is at least 4.5 to 1 on its surface, in both themes. A state is ne
 
 Seven buttons in a row, joined by a line. Each shows the stage number, its name, the latest output, and a health dot. Clicking one, or pressing its number, opens that stage's focus view.
 
+The focused stage's button is highlighted with an accent border on the hover surface, and it is marked as pressed for a screen reader. Clicking the highlighted button goes back to the overview, because a pointer has no `Esc`.
+
 The dot is a glyph as well as a color, so it does not depend on hue: a ring for no data, a check for good, a triangle for warn, and a cross for bad. Each carries its meaning as a text alternative: `no data`, `good`, `warning`, `fault`.
 
 | Stage | Message | Readout | Health |
@@ -138,9 +140,15 @@ Four lanes over the same time axis, with a line at every second.
 | Symbol | 3 | A chip per pulse: `0`, `1`, `M`, or a red `×` |
 | Second | 4 | The second the symbol filled, `:17`. A dash while searching |
 
-- The newest second is drawn up to a cursor at the estimated present (see [Source clock](#source-clock)). Stage 2 holds a pulse until the next edge confirms it, so the newest pulse and symbol read `pending`.
-- A `slotFilled` event labels the symbol that arrived just before it.
+- The newest second is drawn up to a cursor at the estimated present (see [Source clock](#source-clock)). Nothing is drawn to the right of the cursor, even when an edge has arrived ahead of the estimate. When there is no present, because the source stopped or was reset, the window ends at the newest edge and the last picture stays on screen.
+- Stage 2 reports a pulse only when a later edge confirms it, about a second after the pulse starts. Until then the pulse lane draws every reduced-carrier interval that starts after the last measured pulse as a bar that reads `pending`, growing to the cursor while the carrier is still reduced. A dip that stage 2 drops as a glitch is such a bar for about a second; after that it shows in the carrier lane only.
+- A pending bar is drawn as an outline, not filled. One too narrow to carry the word gets no label, so a glitch does not flash `pending`.
+- The symbol lane has one chip for each bar. A chip reads `pending` until the symbol with the same start time arrives. A pending chip is an outline too, and with the labels hidden it shrinks to an ellipsis.
+- A `slotFilled` event labels the symbol that arrived just before it. A symbol that filled no second, because frame sync was searching, gets a dash. The newest symbol gets nothing until its `slotFilled` arrives or a newer symbol does: the two messages arrive a few milliseconds apart, and a dash must not flash between them.
+- A bar that the window's left edge cuts slides out under the edge. Its duration, its chip, and its second label leave with it, and the duration stays the measured one.
+- The lines at every second take their phase from the frame in progress: the frame start of the newest filled slot. Before frame sync has placed anything they take it from the newest measured pulse, since a pulse starts at the top of a second. Before the first pulse there are no lines.
 - The window is 12 s at 1× speed. Above 1× it is 60 s and the pulse and second labels are hidden, because they would be unreadable.
+- The header's state line names the window, `12 s window` or `60 s window`, because the time axis carries no numbers.
 - Drawn on a canvas, once per animation frame, straight from the store's buffers.
 
 ### Pulse width
@@ -149,8 +157,13 @@ A histogram of the last 600 symbol durations from 0 to 1,000 ms.
 
 - Bins are 25 ms wide, so the class boundaries at 100, 350, 650, and 900 ms fall on bin edges.
 - Bars are colored by class: zero dim accent, one accent, marker neutral, error `bad`.
-- The two decision thresholds are solid lines; the valid range limits are dashed, with the error zones tinted.
-- A dashed line marks the last pulse, and the header line reads `Last pulse 502 ms classified as 1`.
+- A bar's class is the host's: the `kind` of the newest symbol in its bin. The page does not classify a duration. Only the bin from 900 ms can hold two classes, because the host still accepts exactly 900 ms as a marker.
+- A duration of 1,000 ms or more is counted in the last bin, so a long error still shows.
+- A bar's height is its count against the fullest bin, and never less than 0.125 rem, so a single pulse still shows beside a full bin.
+- The two decision thresholds are solid lines; the valid range limits are dashed, with the error zones tinted. They are drawn from constants that repeat the defaults of the host's `SymbolClassifier`, because no message carries them. The axis names the four in milliseconds. Its text is 10.5 px in the overview and 16 px where the panel is wide, as in the stage 3 focus view; a container query on the view's width decides.
+- A dashed line marks the last pulse, and the header line reads `Last pulse 502 ms classified as 1`. The class is written `0`, `1`, `M`, or `error`. Before the first pulse the line reads `No pulses yet`. The line of a pulse of 1,000 ms or more sits at the right edge.
+- Each bar and each error zone has a `title`, such as `200 to 225 ms: 14`, which a pointer shows as a tooltip.
+- Drawn in DOM. Every position is a percentage of the plot, so the view measures nothing and scales with its panel.
 
 ### Frame
 
@@ -201,7 +214,7 @@ Signal settings holds the reduced-carrier level (`setReducedCarrierLevel`).
 
 ### Status bar and protocol log
 
-The status bar shows the run state from `sourceStatus`, the source's name and detail, the last `seq` with a count of gaps, and the key hints. The protocol log from Step 8 becomes a drawer opened with `L`. It is a development tool and is closed on stage.
+The status bar shows the run state from `sourceStatus`, the source's name and detail, the last `seq` with a count of gaps, and the key hints: `1 to 7 stage · Esc overview · ? shortcuts`. The protocol log from Step 8 becomes a drawer opened with `L`. It is a development tool and is closed on stage.
 
 ## Focus views
 
@@ -217,7 +230,25 @@ Pressing `1` to `7` replaces the panels with one stage, sized to be read from th
 | 6 Validate | The table at 20 rows with every failure's detail | The ten checks as a list for the selected frame |
 | 7 Clock | The time panel enlarged | The four statuses as a state diagram with the counters |
 
+In stage 1 the edges are listed newest first, as the protocol log lists its messages, each as the rail writes the last edge. The 50 lines run down three columns, filled one after the other. Before the first edge the list reads `No edges yet`.
+
 In stage 5 the page lists which weights are set; the sum it shows is the host's value.
+
+A baseline view is built from the overview's panels, each with its header and its error boundary. A signal panel that shows fewer lanes names those lanes and carries only their stage chips. Until Step 13 fills them, stages 4 to 7 show their overview panel in its no-data state, and stages 5 and 6 both show the decoded-frames panel.
+
+### Focus header
+
+The type is the host's, as C# writes it. The numbers in a rule repeat the host's defaults, because no message carries them.
+
+| Stage | Type | Rule |
+| --- | --- | --- |
+| 1 Edges | `IEdgeSource` | Every change of the receiver's output pin arrives as its new level and a time in microseconds. |
+| 2 Pulses | `IStage<Edge, Pulse>` | A pulse is the time the carrier stays reduced; a pulse under 50 ms is dropped and a gap under 50 ms is bridged. |
+| 3 Symbols | `IStage<Pulse, Symbol>` | A pulse from 100 ms is a 0, from 350 ms a 1, from 650 ms a marker, and outside 100 to 900 ms an error. |
+| 4 Frame sync | `IStage<Symbol, FrameSyncEvent>` | Two markers a second apart start a frame; a marker or a bit in the wrong second, or a gap outside 0.5 to 1.5 s, loses sync. |
+| 5 Decode | `IStage<Frame, DecodedFrame>` | Each field is the sum of the weights of its bits that are 1. |
+| 6 Validate | `IStage<DecodedFrame, ValidationResult>` | A frame is accepted when it passes all ten checks; the last is that its time is one minute after the frame before. |
+| 7 Clock | `IStage<ValidationResult, ClockState>` | Two accepted frames in a row lock the clock; once locked it holds through two rejected frames, and the third sends it back to acquiring. |
 
 ## Panel states
 
@@ -238,7 +269,8 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
                               \---->  canvas views       (read buffers every animation frame)
 ```
 
-- **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 20 validation results, 50 info lines), the latest message of each type for the rail, and the counters.
+- **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 120 filled slots, 20 validation results, 50 info lines), the latest message of each type for the rail, and the counters. A filled slot is a `slotFilled` event together with the start time of the symbol that arrived just before it, which is the symbol it placed. The signal panel's second lane and the frame panel both read that buffer.
+- **The page's own state.** The store also holds what the page decides for itself: the focused stage and the open drawer. No message changes them, so they are outside the reducer, and a source reset leaves them alone.
 - **Rendering.** Components subscribe to small slices, so a new edge batch does not re-render the tables. The canvas views do not go through React at all.
 - **View models.** Each custom view has a pure function from buffers, size, and tokens to a list of things to draw, and a thin component that paints the list. Tests cover the function.
 - **Simulator.** When `window.chrome.webview` is absent, a simulator bridge plays a recorded message stream at a chosen speed and answers commands with canned status. The recording is taken from the real host, so the simulator cannot drift from the protocol.
@@ -302,6 +334,13 @@ Keys are ignored while a text field or slider has focus.
 | `L` | Protocol log |
 | `?` | Shortcut list |
 | `F11`, `D` | Full screen and the noise demo preset, both added in Step 15 |
+
+- The arrow and page keys walk a row of eight places: the overview, then stages 1 to 7. They stop at both ends.
+- Pressing the number of the stage in focus changes nothing. Only the rail's button toggles.
+- A key pressed with Ctrl, Alt, or the Windows key is left to the browser, and a key that is held down acts once.
+- The protocol log and the shortcut list are drawers, and one is open at a time: `L` and `?` each open theirs and close it again, and opening one closes the other. The app bar's keyboard button opens the shortcut list too.
+- While a drawer is open no other key acts on the page. `Esc` closes the drawer and leaves the view behind it as it was.
+- When a key acts, the control that has focus gives it up. A button clicked with the mouse keeps focus, and the browser draws its focus ring on the next key press, so a stage key would light up the Start button. Tab carries on from the control that had focus.
 
 ## Motion
 

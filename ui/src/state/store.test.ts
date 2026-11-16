@@ -9,10 +9,22 @@ const info = (seq: number): HostMessage => ({
   payload: { line: "#" },
 });
 
+const reset: HostMessage = {
+  type: "sourceStatus",
+  seq: 2,
+  payload: {
+    source: "synthetic",
+    name: "synthetic",
+    state: "running",
+    detail: "reset: start",
+  },
+};
+
 describe("useAppStore", () => {
   // The store is one module-level object shared by every test.
+  // This puts all of it back, the page's own state included.
   beforeEach(() => {
-    useAppStore.setState(initialState);
+    useAppStore.setState(useAppStore.getInitialState(), true);
   });
 
   it("starts in the initial state", () => {
@@ -35,6 +47,41 @@ describe("useAppStore", () => {
     useAppStore.getState().dispatch(info(2));
 
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it("starts on the overview with no drawer open", () => {
+    expect(useAppStore.getState().focus).toBeNull();
+    expect(useAppStore.getState().drawer).toBeNull();
+  });
+
+  it("focuses a stage and goes back to the overview", () => {
+    useAppStore.getState().setFocus(3);
+    expect(useAppStore.getState().focus).toBe(3);
+
+    useAppStore.getState().setFocus(null);
+    expect(useAppStore.getState().focus).toBeNull();
+  });
+
+  it("opens one drawer at a time", () => {
+    useAppStore.getState().setDrawer("log");
+    useAppStore.getState().setDrawer("shortcuts");
+    expect(useAppStore.getState().drawer).toBe("shortcuts");
+
+    useAppStore.getState().setDrawer(null);
+    expect(useAppStore.getState().drawer).toBeNull();
+  });
+
+  it("keeps the focus and the drawer through a source reset", () => {
+    useAppStore.getState().dispatch(info(1));
+    useAppStore.getState().setFocus(2);
+    useAppStore.getState().setDrawer("log");
+
+    useAppStore.getState().dispatch(reset);
+
+    // The reset cleared what the source produced, and nothing of the page's own.
+    expect(useAppStore.getState().infoLines).toEqual([]);
+    expect(useAppStore.getState().focus).toBe(2);
+    expect(useAppStore.getState().drawer).toBe("log");
   });
 });
 

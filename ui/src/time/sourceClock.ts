@@ -5,6 +5,8 @@ export interface SourceClock {
   sync(sourceMicros: number): void;
   /** 0 means unpaced and gives no present. */
   setSpeed(speed: number): void;
+  /** Reports the current speed of the clock. */
+  speed(): number;
   /** Discards the anchor, so there is no present until the next edge. Speed is kept. */
   reset(): void;
 }
@@ -78,6 +80,9 @@ export function createSourceClock(wallMs: () => number): SourceClock {
               pending: position.target - position.reading,
             };
       speed = newSpeed;
+    },
+    speed(): number {
+      return speed;
     },
     reset(): void {
       anchor = null;

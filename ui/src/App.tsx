@@ -1,58 +1,63 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect } from "react";
 import { type Bridge } from "./protocol/bridge";
 import { useAppStore } from "./state/store";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { AppBar } from "./shell/AppBar";
+import { FocusLayout } from "./shell/FocusLayout";
 import { PipelineRail } from "./shell/PipelineRail";
+import { ShortcutList } from "./shell/ShortcutList";
 import { StatusBar } from "./shell/StatusBar";
-import { Panel } from "./shell/Panel";
+import {
+  DecodedFramesPanel,
+  FramePanel,
+  PulseWidthPanel,
+  SignalPanel,
+  TimePanel,
+} from "./shell/panels";
+import { stages } from "./shell/stages";
+import { useKeyboard } from "./shell/useKeyboard";
+import type { SourceClock } from "./time/sourceClock";
 
-/** What a panel shows before it has anything to draw. */
-function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
+/** The whole pipeline at a glance: the panels ordered by time scale. */
+function Overview({ clock }: Readonly<{ clock: SourceClock }>) {
   return (
-    <p className="flex h-full items-center justify-center text-xs text-muted-foreground">
-      {children}
-    </p>
+    <main className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_21.5rem] grid-rows-[11.625rem_14.625rem_minmax(0,1fr)] gap-3 p-3">
+      <SignalPanel clock={clock} />
+      <PulseWidthPanel />
+      <FramePanel />
+      <TimePanel className="row-span-2" />
+      <DecodedFramesPanel />
+    </main>
   );
 }
 
-export default function App({ bridge }: Readonly<{ bridge: Bridge }>) {
+export default function App({
+  bridge,
+  clock,
+}: Readonly<{ bridge: Bridge; clock: SourceClock }>) {
   useEffect(() => {
     const off = bridge.onMessage(useAppStore.getState().dispatch);
     bridge.send({ command: "hello", protocol: 1 });
     return off;
   }, [bridge]);
 
+  useKeyboard();
+
+  const focus = useAppStore((state) => state.focus);
+  const focused = stages.find((stage) => stage.number === focus);
+
   return (
     <TooltipProvider>
       <div className="flex h-full flex-col">
         <AppBar bridge={bridge} />
         <PipelineRail />
-        <main className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_21.5rem] grid-rows-[11.625rem_14.625rem_minmax(0,1fr)] gap-3 p-3">
-          <Panel title="Signal" stages={[1, 2, 3, 4]}>
-            <Placeholder>Pick a source and press Start</Placeholder>
-          </Panel>
-          <Panel title="Pulse width" stages={[3]}>
-            <Placeholder>No pulses yet</Placeholder>
-          </Panel>
-          <Panel title="Frame" stages={[4]}>
-            <Placeholder>No symbols placed yet</Placeholder>
-          </Panel>
-          <Panel
-            title="Time"
-            stages={[7]}
-            state="No signal"
-            className="row-span-2"
-          >
-            <p className="flex h-full items-center justify-center font-mono text-[3.75rem] font-semibold text-muted-foreground">
-              --:--:--
-            </p>
-          </Panel>
-          <Panel title="Decoded frames" stages={[5, 6]}>
-            <Placeholder>No frames yet</Placeholder>
-          </Panel>
-        </main>
+        {focused ? (
+          <FocusLayout stage={focused} clock={clock} />
+        ) : (
+          <Overview clock={clock} />
+        )}
         <StatusBar />
+        <ShortcutList />
       </div>
     </TooltipProvider>
   );

@@ -7,12 +7,15 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Bridge } from "@/protocol/bridge";
-import { SunMoon } from "lucide-react";
+import { useAppStore } from "@/state/store";
+import { Keyboard, SunMoon } from "lucide-react";
 import { useState, useId } from "react";
+import { toggleTheme } from "./theme";
 
 export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
   const [noise, setNoise] = useState(0);
   const noiseId = useId();
+  const setDrawer = useAppStore((state) => state.setDrawer);
 
   return (
     <header className="flex h-11.5 flex-none items-center gap-3 border-b bg-bar px-3">
@@ -80,13 +83,28 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
               variant="ghost"
               size="icon-sm"
               aria-label="Switch theme"
-              onClick={() => document.documentElement.classList.toggle("dark")}
+              onClick={toggleTheme}
             />
           }
         >
           <SunMoon />
         </TooltipTrigger>
         <TooltipContent>Switch theme</TooltipContent>
+      </Tooltip>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Keyboard shortcuts"
+              onClick={() => setDrawer("shortcuts")}
+            />
+          }
+        >
+          <Keyboard />
+        </TooltipTrigger>
+        <TooltipContent>Keyboard shortcuts</TooltipContent>
       </Tooltip>
     </header>
   );

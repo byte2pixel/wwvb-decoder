@@ -21,6 +21,8 @@ export function StatusBar() {
   const sourceStatus = useAppStore((state) => state.sourceStatus);
   const lastSeq = useAppStore((state) => state.lastSeq);
   const lostMessages = useAppStore((state) => state.lostMessages);
+  const logOpen = useAppStore((state) => state.drawer === "log");
+  const setDrawer = useAppStore((state) => state.setDrawer);
 
   return (
     <footer className="flex h-6 flex-none items-center gap-3 border-t bg-bar px-3 text-xs text-muted-foreground">
@@ -39,7 +41,13 @@ export function StatusBar() {
       {lostMessages > 0 && (
         <span className="font-mono text-warn">{lostMessages} lost</span>
       )}
-      <Sheet>
+      <span className="whitespace-nowrap">
+        1 to 7 stage · Esc overview · ? shortcuts
+      </span>
+      <Sheet
+        open={logOpen}
+        onOpenChange={(open) => setDrawer(open ? "log" : null)}
+      >
         <SheetTrigger
           render={<Button variant="ghost" size="xs" className="h-5" />}
         >

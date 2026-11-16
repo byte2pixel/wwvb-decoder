@@ -7,6 +7,7 @@ import type {
   HostMessage,
   Pulse,
   SourceStatus,
+  SymbolKind,
   ValidationResult,
   Symbol as WwvbSymbol,
 } from "@/protocol/messages";
@@ -18,12 +19,22 @@ const maxPulses = 300;
 const maxSymbols = 600;
 const maxValidations = 20;
 const maxInfos = 50;
+const maxSlots = 120;
 
 const appendCapped = <T>(
   array: ReadonlyArray<T>,
   items: T[],
   max: number,
 ): ReadonlyArray<T> => [...array, ...items].slice(-max);
+
+/** A second of the frame that frame sync filled. */
+export interface FilledSlot {
+  /** The start of the symbol placed: the one that arrived just before the event. */
+  startMicros: number;
+  frameStartMicros: number;
+  second: number;
+  symbol: SymbolKind;
+}
 
 export interface AppState {
   edges: ReadonlyArray<Edge>;
@@ -41,6 +52,7 @@ export interface AppState {
   lastSeq: number | null;
   lostMessages: number;
   log: ProtocolLog;
+  slots: ReadonlyArray<FilledSlot>;
   /** The latest loss of frame sync. The store clears it 5 s later. */
   syncLoss: Readonly<{ reason: string; seq: number }> | null;
 }
@@ -61,6 +73,7 @@ export const initialState: AppState = {
   lastSeq: null,
   lostMessages: 0,
   log: emptyLog,
+  slots: [],
   syncLoss: null,
 };
 
@@ -122,7 +135,23 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
         ...state,
         decodedFrame: message.payload,
       };
-    case "frameSync":
+    case "frameSync": {
+      const placed = state.symbols.at(-1);
+      const slots =
+        message.payload.kind === "slotFilled" && placed
+          ? appendCapped(
+              state.slots,
+              [
+                {
+                  startMicros: placed.startMicros,
+                  frameStartMicros: message.payload.frameStartMicros,
+                  second: message.payload.second,
+                  symbol: message.payload.symbol,
+                },
+              ],
+              maxSlots,
+            )
+          : state.slots;
       return {
         ...state,
         frameSync: message.payload,
@@ -130,7 +159,9 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
           message.payload.kind === "syncLost"
             ? { reason: message.payload.reason, seq: message.seq }
             : state.syncLoss,
+        slots,
       };
+    }
     case "sourceStatus":
       if (message.payload.detail.startsWith("reset:")) {
         return {

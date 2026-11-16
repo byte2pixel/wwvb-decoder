@@ -21,12 +21,18 @@ const healthMarks: Record<
 
 const StageButton = ({ stage }: Readonly<{ stage: Stage }>) => {
   const { readout, health } = useAppStore(useShallow(stage.view));
+  const focused = useAppStore((state) => state.focus === stage.number);
+  const setFocus = useAppStore((state) => state.setFocus);
+  // A pointer has no Esc, so the highlighted button leads back to the overview.
+  const toggleFocus = () => setFocus(focused ? null : stage.number);
   const mark = healthMarks[health];
   const Icon = mark.icon;
   return (
     <button
       type="button"
-      className="relative flex w-full flex-col gap-0.5 rounded-md border border-input bg-secondary px-2.5 py-1.5 text-left hover:bg-accent"
+      aria-pressed={focused}
+      onClick={toggleFocus}
+      className="relative flex w-full flex-col gap-0.5 rounded-md border border-input bg-secondary px-2.5 py-1.5 text-left hover:bg-accent aria-pressed:border-signal aria-pressed:bg-accent aria-pressed:ring-1 aria-pressed:ring-signal"
     >
       <span className="flex items-center gap-1.5">
         <span className="font-mono text-[0.65625rem] text-muted-foreground">

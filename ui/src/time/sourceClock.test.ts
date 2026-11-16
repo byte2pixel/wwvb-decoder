@@ -231,4 +231,15 @@ describe("createSourceClock", () => {
     // 250 ms at 10x is 2,500,000, plus the 150,000 still owed.
     expect(clock.now()).toBe(15_025_000);
   });
+
+  it("reports its speed, which is 1 until it is set", () => {
+    // Arrange
+    const clock = createSourceClock(() => 0);
+
+    // Act & Assert
+    expect(clock.speed()).toBe(1);
+
+    clock.setSpeed(10);
+    expect(clock.speed()).toBe(10);
+  });
 });
