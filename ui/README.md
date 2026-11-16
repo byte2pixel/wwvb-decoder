@@ -4,7 +4,7 @@ React + TypeScript, built with Vite. The host loads it inside WebView2. Opened i
 
 The layout and visual language are specified in [`docs/design/ui-design.md`](../docs/design/ui-design.md), and the libraries are decided in [ADR-0007](../docs/design/adr/0007-tailwind-shadcn-hand-drawn-views.md).
 
-As of construction plan Step 12a the page is the shell: app bar, pipeline rail with live readouts, five panels in their no-data states, status bar, and the protocol log in a drawer. Three things wait for Steps 12b and 13: the rail's buttons do nothing, nothing calls the source clock, and Live and Replay are disabled.
+As of construction plan Step 12b the page shows the signal. The Signal panel draws four lanes on one time axis, scrolling on the source clock, and the Pulse width panel draws the histogram. A key from `1` to `7`, or a click on the rail, opens that stage's focus view. Step 13 fills the Frame, Decoded frames, and Time panels, which show their no-data states until then, and enables Live and Replay.
 
 ```powershell
 npm install
@@ -37,13 +37,14 @@ CI runs `format:check`, `lint`, `test`, and `build`; `../verify.ps1 -Only ui` ru
 | --- | --- |
 | `protocol/` | The page's half of the message contract: schemas, types, and the bridge to the host |
 | `state/` | `AppState`, its reducer, and the store |
-| `time/` | The source clock |
+| `time/` | The source clock, and the feed that keeps it on the stream's time |
 | `sim/` | The simulator, the recorder, and the recorded fixture. Development builds only |
-| `shell/` | The frame of the screen: app bar, pipeline rail, panels, status bar, protocol log |
+| `shell/` | The frame of the screen: app bar, pipeline rail, panels, focus layout, keyboard map, status bar, protocol log |
+| `views/` | What the panels show, one folder per view: the signal lanes, the pulse-width histogram, the edge log |
 | `components/ui/` | Controls written by the shadcn CLI. They are linted and formatted like the rest, and left out of coverage |
 | `lib/` | `cn`, which the generated controls import |
 
-`main.tsx` picks the bridge and renders `App`. `App.tsx` subscribes the store to the bridge, sends `hello`, and lays out the shell.
+`main.tsx` picks the bridge, creates the source clock, subscribes the clock's feed to the bridge, and renders `App`. `App.tsx` subscribes the store to the bridge, sends `hello`, runs the keyboard map, and lays out the overview or one stage's focus view.
 
 ## Protocol
 
@@ -53,6 +54,7 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 | --- | --- |
 | `messages.ts` | zod schemas for every host envelope and page command, and the types inferred from them. The schemas are the source of truth; no type is written by hand. `hostMessageSchema` is a discriminated union on `type`, `commandSchema` on `command`, with the three `selectSource` shapes nested on `source`. |
 | `bridge.ts` | `createBridge(webview)` wraps `window.chrome.webview`: `onMessage` validates each event with `safeParse` and drops, with a `console.warn`, anything that fails; `send` posts a command object. `findWebView()` returns the real one, or `undefined` in a plain browser. `Bridge` is the interface the page depends on; the simulator implements it too. |
+| `edgeLine.ts` | `edgeLine(edge)` writes an edge as the serial protocol does, `H 12345678`. The rail's stage 1 readout and the edge log both call it. |
 | `*.test.ts` | `messages.test.ts` parses every file in `docs/design/message-examples/` through the schema its file name selects, so the host's serializer tests and these tests assert against the same files. The bridge is tested with a fake webview object, no DOM. |
 
 ## State
@@ -64,26 +66,78 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 | `edges`, `pulses`, `symbols`, `validations`, `infoLines` | The newest 2,000, 300, 600, 20, and 50 |
 | `clock`, `decodedFrame`, `frameSync`, `sourceStatus`, `ports`, `captures` | The latest message of that type |
 | `frameCount`, `lastSeq`, `lostMessages` | Counters. `frameCount` counts `validation` messages; `lostMessages` adds up the gaps in `seq` |
+| `slots` | The newest 120 `slotFilled` events, each with the start of the symbol it placed: the symbol that arrived just before it |
 | `syncLoss` | The latest loss of frame sync, held for 5 s (see "Sync loss" in `ui-design.md`) |
 | `log` | The protocol log: the last 200 messages and a count per type |
 
 A `sourceStatus` whose `detail` starts with `reset:` is a source reset. The reducer goes back to `initialState` and keeps `ports`, `captures`, the sequence tracking, and the log.
 
-`state/store.ts` wraps the reducer in one Zustand store, `useAppStore`. `dispatch(message)` runs the reducer, and starts the 5 s timer when the message is a `syncLost`; that timer is the only thing in the store that is not a reducer.
+`state/store.ts` wraps the reducer in one Zustand store, `useAppStore`. `dispatch(message)` runs the reducer, and starts the 5 s timer when the message is a `syncLost`.
+
+The store also holds what the page decides for itself, `UiState`, beside the reducer's state and not in it:
+
+| Field | Holds | Set by |
+| --- | --- | --- |
+| `focus` | The stage whose focus view is open, 1 to 7, or `null` for the overview | `setFocus` |
+| `drawer` | The open drawer, `"log"` or `"shortcuts"`, or `null` | `setDrawer` |
+
+No host message changes these, and a source reset leaves them alone: the reducer never returns them, and `set` merges what it does return.
 
 - A component subscribes to the slice it shows: `useAppStore((state) => state.lastSeq)`.
 - Zustand compares a selector's result by identity. A selector that builds a new object on every call goes through `useShallow`, as the rail's buttons do.
-- A test puts the store back with `useAppStore.setState(initialState)` in `beforeEach`.
+- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus` and `drawer` keep their values. A test file that touches those two replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
+
+## Time
+
+Nothing in a message says what time it is now, only when each edge happened. `time/sourceClock.ts` estimates the present in the source's microseconds, so the signal panel can scroll between messages. The rules are under "Source clock" in `ui-design.md`.
+
+| File | Holds |
+| --- | --- |
+| `sourceClock.ts` | `createSourceClock(wallMs)` returns a `SourceClock`: `now()`, `sync(micros)`, `setSpeed(speed)`, `speed()`, and `reset()`. `slewMs` and `pullBack` at the top are the two tuning values |
+| `clockFeed.ts` | `feedClock(clock)` returns a function of one message. An `edges` message syncs the clock to its newest edge; a source reset, or a status that is not `running`, resets it |
+
+`main.tsx` creates the one clock and hands it to `App`. In a browser it also sets the clock's speed from the simulator's `?speed=`.
 
 ## Shell
 
 | File | Holds |
 | --- | --- |
-| `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md` |
-| `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone |
+| `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md`. Each stage also carries the host type and the one-sentence rule that its focus view's header shows |
+| `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone. A click focuses the stage, the focused stage's button is pressed (`aria-pressed`), and a click on it goes back to the overview |
 | `Panel.tsx` | A titled region with a chip per stage, an optional line of state, and an error boundary around its children: a view that throws shows a message in its own panel and the rest of the screen keeps running |
-| `AppBar.tsx` | The name, the source toggle, the noise slider, Start, Stop, and the theme button |
-| `StatusBar.tsx`, `ProtocolLog.tsx` | The run state, the source's name and detail, the last `seq`, the lost count, and the Log button, which opens the protocol log in a sheet |
+| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, and the three that show a no-data state until Step 13. The overview and the focus views lay out the same components |
+| `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels |
+| `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
+| `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, for Ctrl, Alt, and the Windows key, and for a key that is held down |
+| `theme.ts` | `toggleTheme()`, for the app bar's button and the `T` key |
+| `AppBar.tsx` | The name, the source toggle, the noise slider, Start, Stop, the theme button, and the button for the shortcut list |
+| `StatusBar.tsx`, `ProtocolLog.tsx` | The run state, the source's name and detail, the last `seq`, the lost count, the key hints, and the Log button. The protocol log is a sheet that opens when the store's `drawer` is `"log"` |
+| `ShortcutList.tsx` | The shortcut list, a sheet that opens when `drawer` is `"shortcuts"`. Its rows are written out by hand, so a key added to the map is added here too |
+
+## Views
+
+A view is split as ADR-0007 asks: a pure function decides what to show and is tested with plain data, and the component that puts it on the screen is thin. Each view reads its own slice of the store. What each one shows is specified under "Panels" and "Focus views" in `ui-design.md`.
+
+**`views/signal/`**, the four lanes on one time axis, on a canvas:
+
+| File | Holds |
+| --- | --- |
+| `lanes.ts` | `signalLanes(input)`: what is on each lane, in source microseconds, from the store's buffers, the present, and the window. No pixels |
+| `model.ts` | `drawSignal(lanes, view)`: the same lanes as a `SignalDrawing` of lines, rectangles, and text in CSS pixels, for a canvas of a given size. The drawing's proportions are the constants at the top, each a multiple of the root font size |
+| `paint.ts` | `paintSignal(ctx, drawing, fontFamily)`: paints a drawing on a 2D context, and decides nothing |
+| `style.ts` | `readSignalStyle(element)`: the colors from the CSS variables, the root font size, and the font family, read from the page. A canvas cannot use a Tailwind class for a color |
+| `timeWindow.ts` | `timeWindowFor(speed)`: 12 s with labels at 1× and below, 60 s without above |
+| `SignalView.tsx` | The canvas and the lane names beside it. One effect holds the animation loop, a `ResizeObserver` that sizes the bitmap in device pixels and reads the style again, and a `MutationObserver` that reads it again when the theme changes. `show` picks the lanes; pass it a constant, because a new array restarts the effect |
+| `recordingContext.ts` | A stand-in for a canvas context, for tests. It records each stroke, fill, text, clear, and transform with the state it was painted in |
+
+**`views/pulse-width/`**, the histogram, in DOM:
+
+| File | Holds |
+| --- | --- |
+| `model.ts` | `pulseWidthHistogram(symbols)`: 40 bins of 25 ms, each with a count, a height against the fullest bin, and the host's class of its newest pulse. The page does not classify a duration. `lastPulseText(last)` writes the panel's state line |
+| `PulseWidthView.tsx` | The bars, the four boundaries, the error zones, and the last-pulse line. Every position is a percentage of the plot, so the view measures nothing. The four boundaries repeat the defaults of the host's `SymbolClassifier`, because no message carries them |
+
+**`views/edge-log/`**: `EdgeLog.tsx` lists the newest 50 edges, newest first, as `edgeLine` writes them.
 
 ## Styling
 
@@ -184,6 +238,10 @@ After an oxlint upgrade it is worth one try: move the map under `pattern`, add `
 One jsdom environment for everything does not work: jsdom replaces the global `URL`, which `messages.test.ts` uses to find the example files. So a test that needs a DOM is named `.test.tsx`, whether or not it contains JSX.
 
 `test-setup.ts` adds the `jest-dom` matchers and unmounts after each test. Testing Library cannot register that cleanup itself, because there are no vitest globals: test files import `describe`, `it`, and `expect` from `vitest`.
+
+jsdom lays nothing out and has no canvas, so `test-setup.ts` also gives every dom test a `ResizeObserver` that never reports and a `getContext` that returns `null`. A view that sizes itself or paints then renders and does nothing more. A test that needs sizes or painting stubs its own, as `SignalView.test.tsx` does: a fake observer the test drives with `reportSize(width, height)`, and the recording context from `views/signal/recordingContext.ts`.
+
+jsdom also shows focus on every focused element: it matches `:focus-visible` wherever `:focus` matches. What a mouse click leaves behind, focus without a focus ring, can only be seen in a browser.
 
 Coverage leaves out the tests, `components/ui/`, `main.tsx`, and `test-setup.ts`.
 
