@@ -135,6 +135,21 @@ describe("PulseWidthView", () => {
 
     expect(percent(screen.getByTitle("Last pulse").style.left)).toBe(100);
   });
+
+  it("enlarges the axis text when its panel is wide, as in the focus view", () => {
+    const { container } = render(<PulseWidthView />);
+
+    const axisText = [
+      ...items("Boundaries").map((mark) => mark.firstElementChild),
+      screen.getByText("ms"),
+    ];
+
+    // The view is the container whose width the text follows.
+    expect(container.firstElementChild).toHaveClass("@container");
+    expect(
+      axisText.map((text) => text?.classList.contains("@2xl:text-base")),
+    ).toEqual([true, true, true, true, true]);
+  });
 });
 
 describe("LastPulseLine", () => {

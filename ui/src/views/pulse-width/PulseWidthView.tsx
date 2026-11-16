@@ -40,7 +40,7 @@ export function PulseWidthView() {
   const { bins, last } = pulseWidthHistogram(symbols);
 
   return (
-    <div className="h-full px-3 pt-2 pb-5">
+    <div className="@container h-full px-3 pt-2 pb-5">
       <div className="relative h-full border-b border-input">
         {ERROR_ZONES.map(({ fromMs, toMs, title }) => (
           <div
@@ -60,13 +60,13 @@ export function PulseWidthView() {
                 limit ? "border-dashed" : "",
               )}
             >
-              <span className="absolute top-full mt-1 -translate-x-1/2 font-mono text-[0.65625rem] leading-none text-muted-foreground">
+              <span className="absolute top-full mt-1 -translate-x-1/2 font-mono text-[0.65625rem] leading-none text-muted-foreground @2xl:text-base">
                 {ms}
               </span>
             </li>
           ))}
         </ul>
-        <span className="absolute top-full right-0 mt-1 font-mono text-[0.65625rem] leading-none text-muted-foreground">
+        <span className="absolute top-full right-0 mt-1 font-mono text-[0.65625rem] leading-none text-muted-foreground @2xl:text-base">
           ms
         </span>
         <ul aria-label="Bins">
