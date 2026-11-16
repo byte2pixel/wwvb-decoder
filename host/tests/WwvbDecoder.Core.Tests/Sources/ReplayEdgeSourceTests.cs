@@ -492,4 +492,64 @@ public class ReplayEdgeSourceTests
             new EdgeEvent.Sample(new Edge(2_200_000, PinLevel.Low))
         );
     }
+
+    [Fact(Timeout = 5000)]
+    public async Task ReadAsync_LateDelay_IsTakenBackOnTheNextSample()
+    {
+        // Arrange
+        ReplayEdgeSource source = new(Paced, _timeProvider) { Speed = 1.0 };
+        var e = source
+            .ReadAsync(TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        (await NextAsync(e, MoveAsync(e))).ShouldBe(new EdgeEvent.Reset("start"));
+        (await NextAsync(e, MoveAsync(e))).ShouldBe(
+            new EdgeEvent.Sample(new Edge(1_000_000, PinLevel.High))
+        );
+
+        // Act: the 200 ms delay fires 15 ms late, as a timer on Windows does.
+        var move = MoveAsync(e);
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(215));
+        (await NextAsync(e, move)).ShouldBe(
+            new EdgeEvent.Sample(new Edge(1_200_000, PinLevel.Low))
+        );
+
+        // Assert: the next sample is due 1,000 ms after the first, so in 785 ms, not 800.
+        move = MoveAsync(e);
+        move.IsCompleted.ShouldBeFalse();
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(784));
+        move.IsCompleted.ShouldBeFalse();
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(1));
+        (await NextAsync(e, move)).ShouldBe(
+            new EdgeEvent.Sample(new Edge(2_000_000, PinLevel.High))
+        );
+    }
+
+    [Fact(Timeout = 5000)]
+    public async Task ReadAsync_SampleAlreadyDue_FollowsWithoutADelay()
+    {
+        // Arrange: two samples 10 ms apart, as a glitch gives.
+        string[] lines = [.. Header, "H 1000000", "L 1200000", "H 1210000", "L 2000000"];
+        ReplayEdgeSource source = new(lines, _timeProvider) { Speed = 1.0 };
+        var e = source
+            .ReadAsync(TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        (await NextAsync(e, MoveAsync(e))).ShouldBe(new EdgeEvent.Reset("start"));
+        (await NextAsync(e, MoveAsync(e))).ShouldBe(
+            new EdgeEvent.Sample(new Edge(1_000_000, PinLevel.High))
+        );
+
+        // Act: one late tick passes the time both were due.
+        var move = MoveAsync(e);
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(215));
+        (await NextAsync(e, move)).ShouldBe(
+            new EdgeEvent.Sample(new Edge(1_200_000, PinLevel.Low))
+        );
+
+        // Assert: H 1210000 was due at 210 ms, which has passed.
+        move = MoveAsync(e);
+        move.IsCompleted.ShouldBeTrue();
+        (await NextAsync(e, move)).ShouldBe(
+            new EdgeEvent.Sample(new Edge(1_210_000, PinLevel.High))
+        );
+    }
 }

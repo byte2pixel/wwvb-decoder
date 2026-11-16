@@ -115,21 +115,29 @@ public sealed class SyntheticEdgeSource : IEdgeSource
     {
         yield return new EdgeEvent.Reset("start");
 
+        long origin = _timeProvider.GetTimestamp();
         ulong? previous = null;
+        // When the edge at previous was due, measured from origin.
+        TimeSpan previousDue = TimeSpan.Zero;
         foreach (Edge edge in GenerateEdges())
         {
             double speed = Speed;
             ct.ThrowIfCancellationRequested();
+            TimeSpan now = _timeProvider.GetElapsedTime(origin);
+            TimeSpan due = now;
             if (speed > 0.0 && previous.HasValue)
             {
-                await Task.Delay(
-                    TimeSpan.FromMicroseconds((edge.Micros - previous.Value) / speed),
-                    _timeProvider,
-                    ct
-                );
+                due =
+                    previousDue + TimeSpan.FromMicroseconds((edge.Micros - previous.Value) / speed);
+            }
+
+            if (due > now)
+            {
+                await Task.Delay(due - now, _timeProvider, ct);
             }
             yield return new EdgeEvent.Sample(edge);
             previous = edge.Micros;
+            previousDue = due;
         }
     }
 

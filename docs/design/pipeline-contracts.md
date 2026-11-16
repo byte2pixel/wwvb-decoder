@@ -509,11 +509,11 @@ public sealed class SyntheticEdgeSource : IEdgeSource
 
 All random draws come from one `new Random(Seed)` per enumeration. The same `Seed` with the same `Noise` gives the same stream.
 
-**Pacing.**
+**Pacing.** The edges are paced against a schedule, by the same rule as the replay source's samples (see "Pacing" under [Replay source](#replay-source)).
 
 - **`Speed = 0`.** Everything is yielded at once.
-- **`Speed > 0`.** Before yielding each edge after the first, the source waits `(edge.Micros - previousEdge.Micros) / Speed` µs with `Task.Delay(TimeSpan, timeProvider, ct)`. `Speed` is read for each delay, so a change takes effect on the next one.
-- **Example at `Speed = 1`.** `Reset("start")` and `H 0` arrive at once. `L 800000`, the end of the lead-in marker, arrives 800 ms later, and `H 1000000` 200 ms after that.
+- **`Speed > 0`.** The first edge is due at once. Every later edge is due `(edge.Micros - previousEdge.Micros) / Speed` µs after the edge before it was due, and the source waits only for the time left until then, with `Task.Delay(TimeSpan, timeProvider, ct)`. The present is `timeProvider.GetElapsedTime` since a timestamp taken when the enumeration starts. `Speed` is read for each edge, so a change applies from the next gap.
+- **Example at `Speed = 1`.** `Reset("start")` and `H 0` arrive at once. `L 800000`, the end of the lead-in marker, is due 800 ms later, and `H 1000000` 200 ms after that. If the first delay ends at 815 ms, the wait for `H 1000000` is 185 ms, not 200.
 
 ## Replay source
 
@@ -562,7 +562,17 @@ public sealed class ReplayEdgeSource : IEdgeSource
 3. Before a `Sample` whose timestamp is smaller than the previous `Sample`'s since the last `Reset`, `Reset("timestamp went backwards")`.
 4. At the end: with `Loop`, `Reset("loop")` and start again at step 2. Without it, the enumeration completes.
 
-**Pacing.** With `Speed > 0`, the source waits `(micros - previousMicros) / Speed` µs before each `Sample`, using `Task.Delay(TimeSpan, timeProvider, ct)`. `Speed` is read for each delay. Every `Reset`, from `# session` lines included, clears the baseline, so the next `Sample` follows without a delay. `Info` and `Reset` events are never delayed. With `Speed = 0`, nothing waits.
+**Pacing.** With `Speed > 0`, the source paces the samples against a schedule, so a delay that ends late does not make the stream run slow:
+
+- **Due times.** The first `Sample` after a `Reset` is due at once. Every later `Sample` is due `(micros - previousMicros) / Speed` µs after the `Sample` before it was due. That is counted from when that sample was due, not from when it left.
+- **Waiting.** Before a `Sample`, the source waits for the time left until it is due, with `Task.Delay(TimeSpan, timeProvider, ct)`, and does not wait when that time has passed. A late `Sample` therefore takes nothing from the next one, and several can leave in one timer tick.
+- **Time.** The present is `timeProvider.GetElapsedTime` since a timestamp taken in the constructor.
+- **Speed.** `Speed` is read for each `Sample`, so a change applies from the next gap. A delay that is already running is not shortened.
+- **Resets.** Every `Reset`, from `# session` lines included, starts the schedule again, so the next `Sample` follows without a delay. `Info` and `Reset` events are never delayed.
+- **`Speed = 0`.** Nothing waits, and each `Sample` counts as due when it is read.
+- **Example at `Speed = 1`.** For `H 1000000`, `L 1200000`, `H 2000000`: the first leaves at once and the second is due 200 ms later. If that delay ends at 215 ms, the third is still due 1,000 ms after the first, so the source waits 785 ms for it, not 800.
+
+A delay on Windows ends up to a timer tick late, about 15 ms. Waiting for each gap in full let that add up: a replay at 10× ran 22% slow (measured 2026-11-13, in Step 13 of the construction plan).
 
 ## Adapters
 

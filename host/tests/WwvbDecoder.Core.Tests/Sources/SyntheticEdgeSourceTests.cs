@@ -728,6 +728,61 @@ public class SyntheticEdgeSourceTests
         pulseCount.ShouldBeInRange(100, 200);
     }
 
+    [Fact(Timeout = 5000)]
+    public async Task ReadAsync_LateDelay_IsTakenBackOnTheNextEdge()
+    {
+        // Arrange
+        SyntheticEdgeSource source = new(_timeProvider) { StartUtc = StartUtc, Speed = 1.0 };
+        var e = source
+            .ReadAsync(TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        (await NextAsync(e, MoveAsync(e))).ShouldBe(new EdgeEvent.Reset("start"));
+        (await NextAsync(e, MoveAsync(e))).ShouldBe(
+            new EdgeEvent.Sample(new Edge(0, PinLevel.High))
+        );
+
+        // Act: the 800 ms delay fires 15 ms late, as a timer on Windows does.
+        var move = MoveAsync(e);
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(815));
+        (await NextAsync(e, move)).ShouldBe(new EdgeEvent.Sample(new Edge(800_000, PinLevel.Low)));
+
+        // Assert: H 1000000 is due 1,000 ms after H 0, so in 185 ms, not 200.
+        move = MoveAsync(e);
+        move.IsCompleted.ShouldBeFalse();
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(184));
+        move.IsCompleted.ShouldBeFalse();
+        _timeProvider.Advance(TimeSpan.FromMilliseconds(1));
+        (await NextAsync(e, move)).ShouldBe(
+            new EdgeEvent.Sample(new Edge(1_000_000, PinLevel.High))
+        );
+    }
+
+    [Fact(Timeout = 5000)]
+    public async Task ReadAsync_EdgeAlreadyDue_FollowsWithoutADelay()
+    {
+        // Arrange
+        SyntheticEdgeSource source = new(_timeProvider) { StartUtc = StartUtc, Speed = 1.0 };
+        var e = source
+            .ReadAsync(TestContext.Current.CancellationToken)
+            .GetAsyncEnumerator(TestContext.Current.CancellationToken);
+        (await NextAsync(e, MoveAsync(e))).ShouldBe(new EdgeEvent.Reset("start"));
+        (await NextAsync(e, MoveAsync(e))).ShouldBe(
+            new EdgeEvent.Sample(new Edge(0, PinLevel.High))
+        );
+
+        // Act: the reader stalls, and a full second passes before L 800000 is taken.
+        var move = MoveAsync(e);
+        _timeProvider.Advance(TimeSpan.FromSeconds(1));
+        (await NextAsync(e, move)).ShouldBe(new EdgeEvent.Sample(new Edge(800_000, PinLevel.Low)));
+
+        // Assert: H 1000000 was due at 1,000 ms, which is now.
+        move = MoveAsync(e);
+        move.IsCompleted.ShouldBeTrue();
+        (await NextAsync(e, move)).ShouldBe(
+            new EdgeEvent.Sample(new Edge(1_000_000, PinLevel.High))
+        );
+    }
+
     private static readonly Edge[] FirstFrameEdges =
     [
         new(1_000_000, PinLevel.High), // second 0: Marker
