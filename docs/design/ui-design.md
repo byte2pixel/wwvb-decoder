@@ -228,6 +228,8 @@ Pressing `1` to `7` replaces the panels with one stage, sized to be read from th
 | 6 Validate | The table at 20 rows with every failure's detail | The ten checks as a list for the selected frame |
 | 7 Clock | The time panel enlarged | The four statuses as a state diagram with the counters |
 
+In stage 1 the edges are listed newest first, as the protocol log lists its messages, each as the rail writes the last edge. Before the first edge the list reads `No edges yet`.
+
 In stage 5 the page lists which weights are set; the sum it shows is the host's value.
 
 ## Panel states

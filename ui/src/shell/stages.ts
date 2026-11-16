@@ -2,9 +2,9 @@ import type { AppState } from "@/state/appState";
 import type {
   ClockStatus,
   FrameSyncEvent,
-  PinLevel,
   Symbol as WwvbSymbol,
 } from "@/protocol/messages";
+import { edgeLine } from "@/protocol/edgeLine";
 
 /** The dot's meaning. `idle` is the text-3 dot: nothing to judge yet. */
 export type Health = "idle" | "good" | "warn" | "bad";
@@ -16,8 +16,6 @@ export interface StageView {
 }
 
 export const noData = "—";
-
-const levelChar = (level: PinLevel) => (level === "high" ? "H" : "L");
 
 const edgeHealth = (state: AppState): Health => {
   if (state.sourceStatus?.state === "error") {
@@ -34,7 +32,7 @@ export function edgesStage(state: AppState): StageView {
   }
 
   return {
-    readout: `${levelChar(lastEdge.level)} ${lastEdge.micros}`,
+    readout: edgeLine(lastEdge),
     health,
   };
 }
