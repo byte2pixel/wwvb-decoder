@@ -97,6 +97,29 @@ describe("useKeyboard", () => {
     expect(ui().focus).toBe(2);
   });
 
+  it("takes focus off a clicked button when it acts on a key, so no focus ring lights up", async () => {
+    const user = userEvent.setup();
+    render(<Page />);
+    const start = screen.getByRole("button", { name: "Start" });
+
+    await user.click(start);
+    expect(start).toHaveFocus();
+    await user.keyboard("2");
+
+    expect(start).not.toHaveFocus();
+  });
+
+  it("leaves the focus where it is on a key it does not act on", async () => {
+    const user = userEvent.setup();
+    render(<Page />);
+    const start = screen.getByRole("button", { name: "Start" });
+
+    await user.click(start);
+    await user.keyboard("a");
+
+    expect(start).toHaveFocus();
+  });
+
   it.each(["Port", "Noise", "Notes", "Capture"])(
     "leaves a key pressed in the %s control to the control",
     async (name) => {

@@ -340,6 +340,7 @@ Keys are ignored while a text field or slider has focus.
 - A key pressed with Ctrl, Alt, or the Windows key is left to the browser, and a key that is held down acts once.
 - The protocol log and the shortcut list are drawers, and one is open at a time: `L` and `?` each open theirs and close it again, and opening one closes the other. The app bar's keyboard button opens the shortcut list too.
 - While a drawer is open no other key acts on the page. `Esc` closes the drawer and leaves the view behind it as it was.
+- When a key acts, the control that has focus gives it up. A button clicked with the mouse keeps focus, and the browser draws its focus ring on the next key press, so a stage key would light up the Start button. Tab carries on from the control that had focus.
 
 ## Motion
 

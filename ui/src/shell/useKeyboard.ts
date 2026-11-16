@@ -23,6 +23,9 @@ export function useKeyboard(): void {
       if (!action) return;
 
       event.preventDefault();
+      // The key was for the page, so the control with focus gives it up. A clicked
+      // button keeps focus, and the browser would draw its focus ring on this key press.
+      document.querySelector<HTMLElement>(":focus")?.blur();
       switch (action.kind) {
         case "focus":
           setFocus(action.stage);
