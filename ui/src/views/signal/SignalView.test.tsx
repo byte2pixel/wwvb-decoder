@@ -70,6 +70,8 @@ function mount(
   return {
     canvas: view.container.querySelector("canvas")!,
     unmount: view.unmount,
+    /** What was painted since the mount, or since the last frame() began. */
+    painted,
     /** Runs one animation frame and returns what it painted. */
     frame: () => {
       painted.length = 0;
@@ -259,5 +261,27 @@ describe("SignalView", () => {
     // The source stops and its last picture stays, so nothing is written over it.
     act(() => useAppStore.setState({ edges, sourceStatus: status("stopped") }));
     expect(hint()).not.toBeInTheDocument();
+  });
+
+  it("paints at once on a resize, without waiting for the next animation frame", () => {
+    useAppStore.setState({ edges });
+    const { painted } = mount();
+
+    reportSize(1212, 100);
+
+    // Sizing a canvas clears it, and the browser shows that frame before the loop runs again.
+    expect(painted).toContainEqual({
+      op: "clear",
+      x: 0,
+      y: 0,
+      w: 1212,
+      h: 100,
+    });
+    expect(painted.at(-1)).toEqual({
+      op: "stroke",
+      path: ["M 1200 0", "L 1200 100"],
+      strokeStyle: "signal",
+      lineWidth: 1,
+    });
   });
 });

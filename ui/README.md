@@ -127,7 +127,7 @@ A view is split as ADR-0007 asks: a pure function decides what to show and is te
 | `paint.ts` | `paintSignal(ctx, drawing, fontFamily)`: paints a drawing on a 2D context, and decides nothing |
 | `style.ts` | `readSignalStyle(element)`: the colors from the CSS variables, the root font size, and the font family, read from the page. A canvas cannot use a Tailwind class for a color |
 | `timeWindow.ts` | `timeWindowFor(speed)`: 12 s with labels at 1× and below, 60 s without above |
-| `SignalView.tsx` | The canvas and the lane names beside it. One effect holds the animation loop, a `ResizeObserver` that sizes the bitmap in device pixels and reads the style again, and a `MutationObserver` that reads it again when the theme changes. `show` picks the lanes; pass it a constant, because a new array restarts the effect |
+| `SignalView.tsx` | The canvas and the lane names beside it. One effect holds the animation loop, a `ResizeObserver` that sizes the bitmap in device pixels, reads the style again, and paints at once, because sizing a bitmap clears it, and a `MutationObserver` that reads the style again when the theme changes. `show` picks the lanes; pass it a constant, because a new array restarts the effect |
 | `recordingContext.ts` | A stand-in for a canvas context, for tests. It records each stroke, fill, text, clear, and transform with the state it was painted in |
 
 **`views/pulse-width/`**, the histogram, in DOM:

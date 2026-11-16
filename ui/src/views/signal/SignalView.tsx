@@ -47,18 +47,6 @@ export function SignalView({
     let scale = 1;
     let style = readSignalStyle(canvas);
 
-    const sizes = new ResizeObserver((entries) => {
-      const box = entries[0].contentRect;
-      width = box.width;
-      height = box.height;
-      scale = window.devicePixelRatio;
-      canvas.width = Math.round(width * scale);
-      canvas.height = Math.round(height * scale);
-      // rem changes with the resize, so read the style again.
-      style = readSignalStyle(canvas);
-    });
-    sizes.observe(canvas);
-
     const theme = new MutationObserver(() => {
       style = readSignalStyle(canvas);
     });
@@ -67,7 +55,6 @@ export function SignalView({
       attributeFilter: ["class"],
     });
 
-    let frame = 0;
     const paint = (): void => {
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.clearRect(0, 0, width, height);
@@ -91,9 +78,28 @@ export function SignalView({
         tokens: style.tokens,
       });
       paintSignal(ctx, drawing, style.fontFamily);
-      frame = requestAnimationFrame(paint);
     };
-    frame = requestAnimationFrame(paint);
+
+    const sizes = new ResizeObserver((entries) => {
+      const box = entries[0].contentRect;
+      width = box.width;
+      height = box.height;
+      scale = window.devicePixelRatio;
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      // rem changes with the resize, so read the style again.
+      style = readSignalStyle(canvas);
+      // Paint immediately after resizing.
+      paint();
+    });
+    sizes.observe(canvas);
+
+    let frame = 0;
+    const loop = (): void => {
+      paint();
+      frame = requestAnimationFrame(loop);
+    };
+    frame = requestAnimationFrame(loop);
 
     return () => {
       cancelAnimationFrame(frame);
