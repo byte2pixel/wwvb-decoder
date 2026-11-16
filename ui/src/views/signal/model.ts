@@ -105,6 +105,13 @@ const SECOND_MICROS = 1_000_000;
 
 /** The room kept free right of the cursor, in rem. */
 const CURSOR_INSET = 0.75;
+/** Every lane, top to bottom, as the overview shows them. */
+export const ALL_LANES: readonly LaneName[] = [
+  "carrier",
+  "pulse",
+  "symbol",
+  "second",
+];
 /** How the lanes share the height: the carrier gets twice the room of the others. */
 export const LANE_WEIGHTS: Record<LaneName, number> = {
   carrier: 2,

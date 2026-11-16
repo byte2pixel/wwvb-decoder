@@ -1,8 +1,7 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { HostMessage } from "@/protocol/messages";
-import { initialState } from "@/state/appState";
 import { useAppStore } from "@/state/store";
 import { StatusBar } from "./StatusBar";
 
@@ -18,7 +17,7 @@ const dispatch = (...messages: HostMessage[]) =>
 describe("StatusBar", () => {
   // The store is one module-level object shared by every test.
   beforeEach(() => {
-    useAppStore.setState(initialState);
+    useAppStore.setState(useAppStore.getInitialState(), true);
   });
 
   it("says there is no host before the first source status", () => {
@@ -71,5 +70,38 @@ describe("StatusBar", () => {
 
     const log = screen.getByRole("dialog", { name: "Protocol log" });
     expect(within(log).getByText(/# wall 2026-11-02/)).toBeInTheDocument();
+  });
+
+  it("opens the protocol log when a key asks for it, and closes it again", async () => {
+    render(<StatusBar />);
+
+    act(() => useAppStore.getState().setDrawer("log"));
+    expect(
+      screen.getByRole("dialog", { name: "Protocol log" }),
+    ).toBeInTheDocument();
+
+    act(() => useAppStore.getState().setDrawer(null));
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+    );
+  });
+
+  it("tells the store when the log is closed", async () => {
+    const user = userEvent.setup();
+    render(<StatusBar />);
+    await user.click(screen.getByRole("button", { name: "Log" }));
+    expect(useAppStore.getState().drawer).toBe("log");
+
+    await user.click(screen.getByRole("button", { name: "Close" }));
+
+    expect(useAppStore.getState().drawer).toBeNull();
+  });
+
+  it("names the keys that change the view", () => {
+    render(<StatusBar />);
+
+    expect(screen.getByRole("contentinfo")).toHaveTextContent(
+      "1 to 7 stage · Esc overview · ? shortcuts",
+    );
   });
 });

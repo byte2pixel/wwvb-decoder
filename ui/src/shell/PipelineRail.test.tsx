@@ -1,13 +1,16 @@
 import { act, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
-import { initialState } from "@/state/appState";
 import { useAppStore } from "@/state/store";
 import { PipelineRail } from "./PipelineRail";
+
+/** The one highlighted button. It throws when there is none, or more than one. */
+const highlighted = () => screen.getByRole("button", { pressed: true });
 
 describe("PipelineRail", () => {
   // The store is one module-level object shared by every test.
   beforeEach(() => {
-    useAppStore.setState(initialState);
+    useAppStore.setState(useAppStore.getInitialState(), true);
   });
 
   it("shows the seven stages in pipeline order", () => {
@@ -52,5 +55,41 @@ describe("PipelineRail", () => {
     const edges = screen.getByRole("button", { name: /Edges/ });
     expect(edges).toHaveTextContent("L 2617209411");
     expect(within(edges).getByText("good")).toBeInTheDocument();
+  });
+
+  it("highlights no stage in the overview", () => {
+    render(<PipelineRail />);
+
+    expect(screen.queryAllByRole("button", { pressed: true })).toEqual([]);
+  });
+
+  it("focuses a stage when its button is clicked, and highlights it", async () => {
+    const user = userEvent.setup();
+    render(<PipelineRail />);
+
+    await user.click(screen.getByRole("button", { name: /Symbols/ }));
+
+    expect(useAppStore.getState().focus).toBe(3);
+    expect(highlighted()).toHaveTextContent("Symbols");
+  });
+
+  it("goes back to the overview when the highlighted stage is clicked", async () => {
+    const user = userEvent.setup();
+    render(<PipelineRail />);
+    const symbols = screen.getByRole("button", { name: /Symbols/ });
+
+    await user.click(symbols);
+    await user.click(symbols);
+
+    expect(useAppStore.getState().focus).toBeNull();
+    expect(screen.queryAllByRole("button", { pressed: true })).toEqual([]);
+  });
+
+  it("highlights the stage a key focused", () => {
+    render(<PipelineRail />);
+
+    act(() => useAppStore.getState().setFocus(5));
+
+    expect(highlighted()).toHaveTextContent("Decode");
   });
 });

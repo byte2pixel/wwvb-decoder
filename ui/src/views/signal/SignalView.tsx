@@ -3,12 +3,11 @@ import type { SourceClock } from "@/time/sourceClock";
 import { useAppStore } from "@/state/store";
 import { timeWindowFor } from "./timeWindow";
 import { signalLanes } from "./lanes";
-import { drawSignal, LANE_WEIGHTS, type LaneName } from "./model";
+import { ALL_LANES, drawSignal, LANE_WEIGHTS, type LaneName } from "./model";
 import { readSignalStyle } from "./style";
 import { paintSignal } from "./paint";
 import type { PinLevel } from "@/protocol/messages";
 
-const LANES: readonly LaneName[] = ["carrier", "pulse", "symbol", "second"];
 const LANE_NAMES: Record<LaneName, string> = {
   carrier: "Carrier",
   pulse: "Pulse",
@@ -18,8 +17,20 @@ const LANE_NAMES: Record<LaneName, string> = {
 /** The host's default. Step 13's signal settings will make it a choice. */
 const REDUCED_LEVEL: PinLevel = "high";
 
-/** The signal panel's canvas: four lanes over one time axis, painted on every animation frame. */
-export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
+interface SignalViewProps {
+  clock: SourceClock;
+  /**
+   * The lanes to draw, top to bottom. A focus view shows fewer than four.
+   * Pass a constant: a new array on every render would restart the painting.
+   */
+  show?: readonly LaneName[];
+}
+
+/** The signal panel's canvas: lanes over one time axis, painted on every animation frame. */
+export function SignalView({
+  clock,
+  show = ALL_LANES,
+}: Readonly<SignalViewProps>) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const idle = useAppStore(
     (state) =>
@@ -75,7 +86,7 @@ export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
         width,
         height,
         rem: style.rem,
-        show: LANES,
+        show,
         labels,
         tokens: style.tokens,
       });
@@ -89,7 +100,7 @@ export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
       sizes.disconnect();
       theme.disconnect();
     };
-  }, [clock]);
+  }, [clock, show]);
 
   return (
     <div className="flex h-full">
@@ -97,7 +108,7 @@ export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
         aria-label="Lanes"
         className="flex flex-none flex-col border-r text-[0.65625rem] text-muted-foreground"
       >
-        {LANES.map((lane) => (
+        {show.map((lane) => (
           <li
             key={lane}
             style={{ flexGrow: LANE_WEIGHTS[lane] }}
@@ -112,7 +123,7 @@ export function SignalView({ clock }: Readonly<{ clock: SourceClock }>) {
           ref={canvasRef}
           className="absolute inset-0 block h-full w-full font-mono"
         >
-          The signal over the last seconds, drawn in four lanes.
+          The signal over the last seconds, drawn in lanes on one time axis.
         </canvas>
         {idle && (
           <p className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground">

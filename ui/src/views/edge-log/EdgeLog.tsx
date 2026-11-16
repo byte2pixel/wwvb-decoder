@@ -3,7 +3,10 @@ import { useAppStore } from "@/state/store";
 
 const MAX_LINES = 50;
 
-/** The newest edges as the serial protocol writes them, newest first. */
+/**
+ * The newest edges as the serial protocol writes them, newest first.
+ * Three columns, filled one after the other, hold the 50 lines.
+ */
 export function EdgeLog() {
   const edges = useAppStore((state) => state.edges);
 
@@ -12,7 +15,10 @@ export function EdgeLog() {
       No edges yet
     </p>
   ) : (
-    <ol aria-label="Edges" className="h-full overflow-hidden font-mono text-sm">
+    <ol
+      aria-label="Edges"
+      className="h-full columns-3 gap-6 overflow-hidden px-3 py-2 font-mono text-base [column-fill:auto]"
+    >
       {edges
         .slice(-MAX_LINES)
         .toReversed()

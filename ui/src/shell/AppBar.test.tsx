@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { Bridge } from "@/protocol/bridge";
 import type { Command } from "@/protocol/messages";
+import { useAppStore } from "@/state/store";
 import { AppBar } from "./AppBar";
 
 const fakeBridge = () =>
@@ -83,5 +84,17 @@ describe("AppBar", () => {
 
     await user.click(theme);
     expect(document.documentElement).toHaveClass("dark");
+  });
+
+  it("asks for the shortcut list", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({ drawer: null });
+    render(<AppBar bridge={fakeBridge()} />);
+
+    await user.click(
+      screen.getByRole("button", { name: "Keyboard shortcuts" }),
+    );
+
+    expect(useAppStore.getState().drawer).toBe("shortcuts");
   });
 });

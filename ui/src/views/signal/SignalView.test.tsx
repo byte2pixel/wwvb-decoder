@@ -4,6 +4,7 @@ import type { Edge, SourceStatus } from "@/protocol/messages";
 import { initialState } from "@/state/appState";
 import { useAppStore } from "@/state/store";
 import type { SourceClock } from "@/time/sourceClock";
+import type { LaneName } from "./model";
 import { recordingContext } from "./recordingContext";
 import { SignalView } from "./SignalView";
 
@@ -58,11 +59,14 @@ class FakeResizeObserver {
   }
 }
 
-/** Renders the view over a recording context. */
-function mount(clock: SourceClock = clockAt(12_000_000)) {
+/** Renders the view over a recording context. Without `show` it draws every lane. */
+function mount(
+  clock: SourceClock = clockAt(12_000_000),
+  show?: readonly LaneName[],
+) {
   const { ctx, painted } = recordingContext();
   vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
-  const view = render(<SignalView clock={clock} />);
+  const view = render(<SignalView clock={clock} show={show} />);
   return {
     canvas: view.container.querySelector("canvas")!,
     unmount: view.unmount,
@@ -224,6 +228,24 @@ describe("SignalView", () => {
       "1",
       "1",
     ]);
+  });
+
+  it("draws and names only the lanes it is asked to show", () => {
+    useAppStore.setState({ edges });
+    const { frame } = mount(clockAt(12_000_000), ["carrier"]);
+    reportSize(1212, 100);
+
+    // The carrier has the whole height: the dip is at 94, where four lanes put it at 34.
+    expect(frame()).toContainEqual({
+      op: "stroke",
+      path: ["M 100 94", "L 180 94", "L 180 6", "L 1200 6"],
+      strokeStyle: "signal",
+      lineWidth: 1.5,
+    });
+    const names = within(
+      screen.getByRole("list", { name: "Lanes" }),
+    ).getAllByRole("listitem");
+    expect(names.map((name) => name.textContent)).toEqual(["Carrier"]);
   });
 
   it("asks for a source until one runs, and not over a picture a source left", () => {

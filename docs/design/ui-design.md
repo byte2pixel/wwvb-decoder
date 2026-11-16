@@ -109,6 +109,8 @@ Text contrast is at least 4.5 to 1 on its surface, in both themes. A state is ne
 
 Seven buttons in a row, joined by a line. Each shows the stage number, its name, the latest output, and a health dot. Clicking one, or pressing its number, opens that stage's focus view.
 
+The focused stage's button is highlighted with an accent border on the hover surface, and it is marked as pressed for a screen reader. Clicking the highlighted button goes back to the overview, because a pointer has no `Esc`.
+
 The dot is a glyph as well as a color, so it does not depend on hue: a ring for no data, a check for good, a triangle for warn, and a cross for bad. Each carries its meaning as a text alternative: `no data`, `good`, `warning`, `fault`.
 
 | Stage | Message | Readout | Health |
@@ -212,7 +214,7 @@ Signal settings holds the reduced-carrier level (`setReducedCarrierLevel`).
 
 ### Status bar and protocol log
 
-The status bar shows the run state from `sourceStatus`, the source's name and detail, the last `seq` with a count of gaps, and the key hints. The protocol log from Step 8 becomes a drawer opened with `L`. It is a development tool and is closed on stage.
+The status bar shows the run state from `sourceStatus`, the source's name and detail, the last `seq` with a count of gaps, and the key hints: `1 to 7 stage · Esc overview · ? shortcuts`. The protocol log from Step 8 becomes a drawer opened with `L`. It is a development tool and is closed on stage.
 
 ## Focus views
 
@@ -228,9 +230,25 @@ Pressing `1` to `7` replaces the panels with one stage, sized to be read from th
 | 6 Validate | The table at 20 rows with every failure's detail | The ten checks as a list for the selected frame |
 | 7 Clock | The time panel enlarged | The four statuses as a state diagram with the counters |
 
-In stage 1 the edges are listed newest first, as the protocol log lists its messages, each as the rail writes the last edge. Before the first edge the list reads `No edges yet`.
+In stage 1 the edges are listed newest first, as the protocol log lists its messages, each as the rail writes the last edge. The 50 lines run down three columns, filled one after the other. Before the first edge the list reads `No edges yet`.
 
 In stage 5 the page lists which weights are set; the sum it shows is the host's value.
+
+A baseline view is built from the overview's panels, each with its header and its error boundary. A signal panel that shows fewer lanes names those lanes and carries only their stage chips. Until Step 13 fills them, stages 4 to 7 show their overview panel in its no-data state, and stages 5 and 6 both show the decoded-frames panel.
+
+### Focus header
+
+The type is the host's, as C# writes it. The numbers in a rule repeat the host's defaults, because no message carries them.
+
+| Stage | Type | Rule |
+| --- | --- | --- |
+| 1 Edges | `IEdgeSource` | Every change of the receiver's output pin arrives as its new level and a time in microseconds. |
+| 2 Pulses | `IStage<Edge, Pulse>` | A pulse is the time the carrier stays reduced; a pulse under 50 ms is dropped and a gap under 50 ms is bridged. |
+| 3 Symbols | `IStage<Pulse, Symbol>` | A pulse from 100 ms is a 0, from 350 ms a 1, from 650 ms a marker, and outside 100 to 900 ms an error. |
+| 4 Frame sync | `IStage<Symbol, FrameSyncEvent>` | Two markers a second apart start a frame; a marker or a bit in the wrong second, or a gap outside 0.5 to 1.5 s, loses sync. |
+| 5 Decode | `IStage<Frame, DecodedFrame>` | Each field is the sum of the weights of its bits that are 1. |
+| 6 Validate | `IStage<DecodedFrame, ValidationResult>` | A frame is accepted when it passes all ten checks; the last is that its time is one minute after the frame before. |
+| 7 Clock | `IStage<ValidationResult, ClockState>` | Two accepted frames in a row lock the clock; once locked it holds through two rejected frames, and the third sends it back to acquiring. |
 
 ## Panel states
 
@@ -252,6 +270,7 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
 ```
 
 - **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 120 filled slots, 20 validation results, 50 info lines), the latest message of each type for the rail, and the counters. A filled slot is a `slotFilled` event together with the start time of the symbol that arrived just before it, which is the symbol it placed. The signal panel's second lane and the frame panel both read that buffer.
+- **The page's own state.** The store also holds what the page decides for itself: the focused stage and the open drawer. No message changes them, so they are outside the reducer, and a source reset leaves them alone.
 - **Rendering.** Components subscribe to small slices, so a new edge batch does not re-render the tables. The canvas views do not go through React at all.
 - **View models.** Each custom view has a pure function from buffers, size, and tokens to a list of things to draw, and a thin component that paints the list. Tests cover the function.
 - **Simulator.** When `window.chrome.webview` is absent, a simulator bridge plays a recorded message stream at a chosen speed and answers commands with canned status. The recording is taken from the real host, so the simulator cannot drift from the protocol.
@@ -315,6 +334,12 @@ Keys are ignored while a text field or slider has focus.
 | `L` | Protocol log |
 | `?` | Shortcut list |
 | `F11`, `D` | Full screen and the noise demo preset, both added in Step 15 |
+
+- The arrow and page keys walk a row of eight places: the overview, then stages 1 to 7. They stop at both ends.
+- Pressing the number of the stage in focus changes nothing. Only the rail's button toggles.
+- A key pressed with Ctrl, Alt, or the Windows key is left to the browser, and a key that is held down acts once.
+- The protocol log and the shortcut list are drawers, and one is open at a time: `L` and `?` each open theirs and close it again, and opening one closes the other. The app bar's keyboard button opens the shortcut list too.
+- While a drawer is open no other key acts on the page. `Esc` closes the drawer and leaves the view behind it as it was.
 
 ## Motion
 
