@@ -38,7 +38,7 @@ public partial class App
         );
         _controller = new SourceController(
             pipeline,
-            new HostEnvironment(clock, HostEnvironment.FindCapturesDirectory()),
+            new HostEnvironment(clock, HostEnvironment.FindCapturesDirectory(e.Args)),
             _bridge
         );
 

@@ -8,7 +8,7 @@ namespace WwvbDecoder.Host.Tests.Services;
 /// </summary>
 internal sealed class FakeEdgeSource : IEdgeSource
 {
-    public string Name => "fake";
+    public string Name { get; init; } = "fake";
     public bool Disposed { get; private set; }
 
     /// <summary>Events yielded after the initial reset.</summary>

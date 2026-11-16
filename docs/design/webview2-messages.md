@@ -314,8 +314,6 @@ interface SourceStatus {
 | `state` | `running` while the pipeline is pumping; `stopped` after `stop` or when a replay without looping reaches its end; `error` when the source could not start or the run faulted |
 | `detail` | Display text. For a serial source the banner line once seen; for an error the exception message; on a source reset `reset: <reason>` with the reason from the contracts document (`open`, `start`, `session`, `loop`, `timestamp went backwards`); otherwise empty or a short description |
 
-Step 8 wires only the synthetic source. Until Steps 10 and 11 land, `selectSource` with `serial` or `replay` answers `state: "error"` and `detail: "not available yet"`.
-
 ```json
 {
   "type": "sourceStatus",
@@ -400,6 +398,14 @@ Stops the current run, if any, builds the requested source, and starts the pipel
 | `serial` | `port`: a name from `ports` | Opens the port at 115200 8N1 with DTR asserted |
 | `replay` | `path`: a path from `captures`; `speed`: 0 for as fast as possible, otherwise a multiple of real time | Replays the capture, looping at the end |
 | `synthetic` | `noise`: 0 to 1 | Generates a clean or noisy signal starting at the current UTC minute |
+
+A source that cannot start leaves nothing running, and the answer is a `sourceStatus` in `state: "error"` whose `detail` says why:
+
+- **`replay`.** The file must be inside the host's captures directory, as every `path` in `captures` is. A path outside it is refused with `Not a capture in the captures directory.` A file that cannot be read, or is not a valid capture, is refused with the reader's message. A `speed` below 0 is refused too.
+- **`serial`.** The port opens when the run starts to read it, so `sourceStatus` first says `running`, and a port that cannot open follows as `error` a moment later. Once the logger's banner line arrives, `detail` holds it: `# wwvb-edge-logger 0.1.0 pin=2`. It confirms that the port belongs to the logger.
+- **`synthetic`.** A `noise` outside 0 to 1 is refused.
+
+The host does not apply a capture's `# reduced-carrier-level` line. `setReducedCarrierLevel` is the only thing that changes the level.
 
 ```json
 { "command": "selectSource", "source": "serial", "port": "COM5" }

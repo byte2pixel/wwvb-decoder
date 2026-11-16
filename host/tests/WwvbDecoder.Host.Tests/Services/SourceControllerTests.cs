@@ -96,38 +96,225 @@ public class SourceControllerTests
         next.Status.State.ShouldBe(SourceState.Running);
     }
 
-    [Theory]
-    [InlineData("serial", SourceKind.Serial, "serial COM5")]
-    [InlineData("replay", SourceKind.Replay, "replay")]
-    public async Task SelectSerialOrReplay_AnswersNotAvailableYet(
-        string source,
-        SourceKind kind,
-        string name
-    )
+    [Fact]
+    public async Task SelectSynthetic_NoiseOutOfRange_AnswersErrorAndStartsNothing()
     {
         // Arrange
         await using SourceController controller = CreateController();
-        Command select = source switch
-        {
-            "serial" => new Command.SelectSerial(Port: "COM5"),
-            "replay" => new Command.SelectReplay(Path: "captures/a.edges.txt", Speed: 1),
-            _ => throw new ArgumentOutOfRangeException(nameof(source)),
-        };
+
+        // Act: the real source refuses a noise above 1 when it is created
+        await controller.HandleAsync(new Command.SelectSynthetic(Noise: 2.0));
+
+        // Assert
+        var status = _poster.Posted.ShouldHaveSingleItem().Payload.ShouldBeOfType<SourceStatus>();
+        status.Source.ShouldBe(SourceKind.Synthetic);
+        status.Name.ShouldBe("synthetic");
+        status.State.ShouldBe(SourceState.Error);
+        status.Detail.ShouldStartWith("Noise must be a number between 0.0 and 1.0.");
+        _environment.Created.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task SelectSerial_StartsPipelineAndAnswersRunning()
+    {
+        // Arrange
+        await using SourceController controller = CreateController();
+        TaskCompletionSource<string> reset = new();
+        _pipeline.SourceReset += reason => reset.TrySetResult(reason);
 
         // Act
-        await controller.HandleAsync(select);
+        await controller.HandleAsync(new Command.SelectSerial(Port: "COM5"));
+
+        // Assert
+        _environment.SerialPorts.ShouldBe(["COM5"]);
+        _poster
+            .Posted[0]
+            .Payload.ShouldBe(
+                new SourceStatus(SourceKind.Serial, "serial COM5", SourceState.Running, "")
+            );
+        controller.Status.State.ShouldBe(SourceState.Running);
+        (await reset.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct)).ShouldBe("start");
+    }
+
+    [Fact]
+    public async Task SelectSerial_PortCannotOpen_AnswersErrorWithTheMessage()
+    {
+        // Arrange: a serial source opens its port when the run starts to read it
+        _environment.Serial = port => new FakeEdgeSource
+        {
+            Name = $"serial {port}",
+            Fault = new UnauthorizedAccessException("Access to the path 'COM5' is denied."),
+        };
+        await using SourceController controller = CreateController();
+
+        // Act
+        await controller.HandleAsync(new Command.SelectSerial(Port: "COM5"));
+
+        // Assert
+        var post = await _poster.WaitForAsync(p =>
+            p.Payload is SourceStatus { State: SourceState.Error }
+        );
+        post.Payload.ShouldBe(
+            new SourceStatus(
+                SourceKind.Serial,
+                "serial COM5",
+                SourceState.Error,
+                "Access to the path 'COM5' is denied."
+            )
+        );
+    }
+
+    [Fact]
+    public async Task SelectSerial_BannerLine_BecomesTheStatusDetail()
+    {
+        // Arrange: another info line comes first and is not the banner
+        const string banner = "# wwvb-edge-logger 0.1.0 pin=2";
+        _environment.Serial = port => new FakeEdgeSource
+        {
+            Name = $"serial {port}",
+            Script = [new EdgeEvent.Info("# dropped 1"), new EdgeEvent.Info(banner)],
+        };
+        await using SourceController controller = CreateController();
+
+        // Act
+        await controller.HandleAsync(new Command.SelectSerial(Port: "COM5"));
+
+        // Assert
+        var post = await _poster.WaitForAsync(p => p.Payload is SourceStatus { Detail: banner });
+        post.Payload.ShouldBe(
+            new SourceStatus(SourceKind.Serial, "serial COM5", SourceState.Running, banner)
+        );
+        _poster
+            .Posted.Select(p => p.Payload)
+            .OfType<SourceStatus>()
+            .Select(s => s.Detail)
+            .ShouldBe(["", "reset: start", banner]);
+    }
+
+    [Fact]
+    public async Task BannerLine_FromASourceThatIsNotSerial_LeavesTheStatusAlone()
+    {
+        // Arrange: a capture holds the banner of the session it recorded
+        _environment.Replay = (_, _) =>
+            new FakeEdgeSource
+            {
+                Name = "replay",
+                Script =
+                [
+                    new EdgeEvent.Info("# wwvb-edge-logger 0.1.0 pin=2"),
+                    new EdgeEvent.Reset("loop"),
+                ],
+            };
+        await using SourceController controller = CreateController();
+
+        // Act
+        await controller.HandleAsync(
+            new Command.SelectReplay(Path: "captures/a.edges.txt", Speed: 1)
+        );
+
+        // Assert: the reset after the banner has been reported, and the banner was not
+        await _poster.WaitForAsync(p => p.Payload is SourceStatus { Detail: "reset: loop" });
+        _poster
+            .Posted.Select(p => p.Payload)
+            .OfType<SourceStatus>()
+            .Select(s => s.Detail)
+            .ShouldBe(["", "reset: start", "reset: loop"]);
+    }
+
+    [Fact]
+    public async Task SelectReplay_StartsPipelineAndAnswersRunning()
+    {
+        // Arrange
+        await using SourceController controller = CreateController();
+        TaskCompletionSource<string> reset = new();
+        _pipeline.SourceReset += reason => reset.TrySetResult(reason);
+
+        // Act
+        await controller.HandleAsync(
+            new Command.SelectReplay(Path: "captures/a.edges.txt", Speed: 10)
+        );
+
+        // Assert
+        _environment.ReplayPaths.ShouldBe(["captures/a.edges.txt"]);
+        _environment
+            .Created.ShouldHaveSingleItem()
+            .ShouldBeOfType<ReplayEdgeSource>()
+            .Speed.ShouldBe(10);
+        _poster
+            .Posted[0]
+            .Payload.ShouldBe(
+                new SourceStatus(SourceKind.Replay, "replay", SourceState.Running, "")
+            );
+        controller.Status.State.ShouldBe(SourceState.Running);
+        (await reset.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct)).ShouldBe("start");
+    }
+
+    [Fact]
+    public async Task SelectReplay_CaptureCannotBeRead_AnswersErrorWithTheMessage()
+    {
+        // Arrange
+        _environment.Replay = (_, _) => throw new FileNotFoundException("no such capture");
+        await using SourceController controller = CreateController();
+
+        // Act
+        await controller.HandleAsync(
+            new Command.SelectReplay(Path: "captures/missing.edges.txt", Speed: 1)
+        );
 
         // Assert
         _poster
             .Posted.ShouldHaveSingleItem()
-            .Payload.ShouldBe(new SourceStatus(kind, name, SourceState.Error, "not available yet"));
-        _environment.Created.ShouldBeEmpty();
+            .Payload.ShouldBe(
+                new SourceStatus(SourceKind.Replay, "replay", SourceState.Error, "no such capture")
+            );
+        controller.Status.State.ShouldBe(SourceState.Error);
+    }
+
+    [Fact]
+    public async Task SelectReplay_OnTheRealEnvironment_ReplaysTheFileAndLoops()
+    {
+        // Arrange: a capture of 20 ms in a captures directory of its own
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            "wwvb-host-tests-" + Guid.NewGuid().ToString("N")
+        );
+        Directory.CreateDirectory(directory);
+        try
+        {
+            string path = Path.Combine(directory, "2026-11-09T0434Z-t.edges.txt");
+            string[] lines =
+            [
+                "# capture v1",
+                "# recorded 2026-11-09T04:34:28Z",
+                "# source test",
+                "H 1000000",
+                "L 1010000",
+                "H 1020000",
+            ];
+            await File.WriteAllTextAsync(path, string.Join('\n', lines) + "\n", Ct);
+            var environment = new HostEnvironment(TimeProvider.System, directory);
+            await using SourceController controller = new(_pipeline, environment, _poster);
+
+            // Act
+            await controller.HandleAsync(new Command.SelectReplay(path, Speed: 1));
+
+            // Assert: the file was read to its end, and the replay started over
+            await _poster.WaitForAsync(p => p.Payload is SourceStatus { Detail: "reset: loop" });
+            controller.Status.Source.ShouldBe(SourceKind.Replay);
+            controller.Status.State.ShouldBe(SourceState.Running);
+        }
+        finally
+        {
+            Directory.Delete(directory, recursive: true);
+        }
     }
 
     [Fact]
     public async Task SelectSerial_WhileSyntheticRuns_StopsTheRunFirst()
     {
         // Arrange
+        var synthetic = new FakeEdgeSource();
+        _environment.Synthetic = _ => synthetic;
         await using SourceController controller = CreateController();
         await controller.HandleAsync(new Command.SelectSynthetic(Noise: 0.0));
 
@@ -135,10 +322,31 @@ public class SourceControllerTests
         await controller.HandleAsync(new Command.SelectSerial(Port: "COM5"));
 
         // Assert
-        controller.Status.State.ShouldBe(SourceState.Error);
-        // the pipeline is free again, so a new synthetic run starts instead of throwing "already running"
-        await controller.HandleAsync(new Command.SelectSynthetic(Noise: 0.0));
+        synthetic.Disposed.ShouldBeTrue();
+        controller.Status.Source.ShouldBe(SourceKind.Serial);
         controller.Status.State.ShouldBe(SourceState.Running);
+    }
+
+    [Fact]
+    public async Task SelectThatFails_WhileASourceRuns_StillStopsTheRun()
+    {
+        // Arrange
+        var synthetic = new FakeEdgeSource();
+        _environment.Synthetic = _ => synthetic;
+        _environment.Replay = (_, _) => throw new FileNotFoundException("no such capture");
+        await using SourceController controller = CreateController();
+        await controller.HandleAsync(new Command.SelectSynthetic(Noise: 0.0));
+
+        // Act
+        await controller.HandleAsync(
+            new Command.SelectReplay(Path: "captures/missing.edges.txt", Speed: 1)
+        );
+
+        // Assert: the old source is gone and the status says why nothing runs
+        synthetic.Disposed.ShouldBeTrue();
+        controller.Status.ShouldBe(
+            new SourceStatus(SourceKind.Replay, "replay", SourceState.Error, "no such capture")
+        );
     }
 
     [Fact]
@@ -281,7 +489,26 @@ public class SourceControllerTests
     }
 
     [Fact]
-    public async Task SetReplaySpeed_IsIgnoredUntilReplayArrives()
+    public async Task SetReplaySpeed_ChangesTheRunningReplay()
+    {
+        // Arrange
+        await using SourceController controller = CreateController();
+        await controller.HandleAsync(
+            new Command.SelectReplay(Path: "captures/a.edges.txt", Speed: 1)
+        );
+
+        // Act
+        await controller.HandleAsync(new Command.SetReplaySpeed(Speed: 10));
+
+        // Assert
+        _environment
+            .Created.ShouldHaveSingleItem()
+            .ShouldBeOfType<ReplayEdgeSource>()
+            .Speed.ShouldBe(10);
+    }
+
+    [Fact]
+    public async Task SetReplaySpeed_WhenNothingRuns_IsIgnored()
     {
         // Arrange
         await using SourceController controller = CreateController();
@@ -291,6 +518,23 @@ public class SourceControllerTests
 
         // Assert
         _poster.Posted.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task SetReplaySpeed_WhenTheSourceIsNotReplay_IsIgnored()
+    {
+        // Arrange
+        await using SourceController controller = CreateController();
+        await controller.HandleAsync(new Command.SelectSynthetic(Noise: 0.0));
+
+        // Act
+        await controller.HandleAsync(new Command.SetReplaySpeed(Speed: 10));
+
+        // Assert: the synthetic source keeps its own speed
+        _environment
+            .Created.ShouldHaveSingleItem()
+            .ShouldBeOfType<SyntheticEdgeSource>()
+            .Speed.ShouldBe(1);
     }
 
     [Fact]

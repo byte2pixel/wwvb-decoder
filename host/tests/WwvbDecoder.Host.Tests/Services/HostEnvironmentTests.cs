@@ -78,6 +78,65 @@ public sealed class HostEnvironmentTests : IDisposable
         environment.ListCaptures().ShouldBeEmpty();
     }
 
+    private static readonly string[] Capture =
+    [
+        "# capture v1",
+        "# recorded 2026-11-09T04:34:28Z",
+        "# source synthetic",
+        "H 1000000",
+        "L 1200000",
+        "H 91000000",
+    ];
+
+    private static async Task<string> WriteCaptureAsync(string directory)
+    {
+        Directory.CreateDirectory(directory);
+        string path = Path.Combine(directory, "2026-11-09T0434Z-t.edges.txt");
+        await File.WriteAllTextAsync(
+            path,
+            string.Join('\n', Capture) + "\n",
+            TestContext.Current.CancellationToken
+        );
+        return path;
+    }
+
+    [Fact]
+    public async Task CreateReplay_ReadsTheCaptureAtTheGivenSpeedAndLoops()
+    {
+        // Arrange
+        string path = await WriteCaptureAsync(_directory);
+        var environment = new HostEnvironment(_time, _directory);
+
+        // Act
+        var source = environment.CreateReplay(path, speed: 10).ShouldBeOfType<ReplayEdgeSource>();
+
+        // Assert
+        source.Info.Recorded.ShouldBe(new DateTimeOffset(2026, 11, 9, 4, 34, 28, TimeSpan.Zero));
+        source.Speed.ShouldBe(10);
+        source.Loop.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task CreateReplay_PathOutsideTheCapturesDirectory_Throws()
+    {
+        // Arrange: a real capture in a folder whose name only starts like the captures directory's.
+        string elsewhere = _directory + "-elsewhere";
+        try
+        {
+            string path = await WriteCaptureAsync(elsewhere);
+            var environment = new HostEnvironment(_time, _directory);
+
+            // Act & Assert
+            Should
+                .Throw<FileNotFoundException>(() => environment.CreateReplay(path, speed: 1))
+                .Message.ShouldBe("Not a capture in the captures directory.");
+        }
+        finally
+        {
+            Directory.Delete(elsewhere, recursive: true);
+        }
+    }
+
     [Fact]
     public void FindCapturesDirectory_WalksUpToAnExistingCapturesFolder()
     {
@@ -87,5 +146,51 @@ public sealed class HostEnvironmentTests : IDisposable
         // Assert
         Path.GetFileName(found).ShouldBe("captures");
         Directory.Exists(found).ShouldBeTrue(found);
+    }
+
+    [Fact]
+    public void FindCapturesDirectory_CapturesArgument_NamesTheDirectory()
+    {
+        // Act: the option is found among others, and its directory need not exist yet
+        string found = HostEnvironment.FindCapturesDirectory(["--other", "--captures", _directory]);
+
+        // Assert
+        found.ShouldBe(_directory);
+    }
+
+    [Fact]
+    public void FindCapturesDirectory_RelativeCapturesArgument_IsMadeAbsolute()
+    {
+        // Act
+        string found = HostEnvironment.FindCapturesDirectory(["--captures", "my-captures"]);
+
+        // Assert
+        found.ShouldBe(Path.Combine(Directory.GetCurrentDirectory(), "my-captures"));
+    }
+
+    [Theory]
+    [InlineData]
+    [InlineData("--verbose")]
+    [InlineData("--captures")] // the option with no directory after it
+    public void FindCapturesDirectory_NoCapturesArgument_WalksUp(params string[] args)
+    {
+        // Act
+        string found = HostEnvironment.FindCapturesDirectory(args);
+
+        // Assert
+        found.ShouldBe(HostEnvironment.FindCapturesDirectory());
+    }
+
+    [Fact]
+    public void CreateSerial_NamesTheSourceAfterThePort()
+    {
+        // Arrange
+        var environment = new HostEnvironment(_time, _directory);
+
+        // Act: nothing opens the port until the source is read
+        var source = environment.CreateSerial("COM5").ShouldBeOfType<Adapters.SerialEdgeSource>();
+
+        // Assert
+        source.Name.ShouldBe("serial COM5");
     }
 }
