@@ -39,7 +39,7 @@ Unknown properties are ignored on both sides, so either side can add a field wit
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `type` | string | One of the eleven types below |
+| `type` | string | One of the twelve types below |
 | `seq` | number | Monotonic, starting at 1 when the host starts, shared by every type. A gap means a message was lost; the page may log it |
 | `payload` | object | The shape the type selects |
 
@@ -59,6 +59,7 @@ type Envelope =
   | { type: "sourceStatus"; seq: number; payload: SourceStatus }
   | { type: "ports"; seq: number; payload: { items: string[] } }
   | { type: "captures"; seq: number; payload: { items: CaptureEntry[] } }
+  | { type: "frameLayout"; seq: number; payload: FrameLayout }
   | { type: "info"; seq: number; payload: { line: string } };
 ```
 
@@ -355,6 +356,51 @@ interface CaptureEntry { path: string; recorded: string; minutes: number }
 }
 ```
 
+### `frameLayout`
+
+Not a stage output. Sent once after `hello`, as the last message of the reply. It carries the frame layout of the contracts document as `WwvbFrameLayout` holds it, so the page can draw bit weights and field brackets without a copy of the layout in TypeScript. No command asks for it again, and the layout does not change while the host runs, so the page keeps it across source resets.
+
+```ts
+type SecondRole =
+  | "marker" | "unused" | "minute" | "hour" | "dayOfYear" | "ut1Sign"
+  | "ut1Correction" | "year" | "leapYear" | "leapSecondPending" | "dst";
+
+/** Both arrays hold exactly 60 items, indexed by second. */
+interface FrameLayout { roles: SecondRole[]; weights: (number | null)[] }
+```
+
+| Field | Meaning |
+| --- | --- |
+| `roles` | `WwvbFrameLayout.Roles`: what each second carries. A field is the seconds that share its role, and they need not be adjacent: the day of year runs from second 22 to second 33 across an unused second and a marker |
+| `weights` | The weight of the second's bit as the layout table writes it: 40, not 4, for the first minute bit. The UT1 correction's weights, 8 4 2 1, are tenths of a second. `null` for a second without a weight: the markers, the unused seconds, the UT1 sign, the two flags, and the DST pair |
+
+The payload is not one of the pipeline's records. The host builds it from `WwvbFrameLayout`: `roles` is `Roles`, and `weights` takes each `LayoutBit` in `Digits` and `Ut1Correction` and puts its `Weight` at its `Second`.
+
+```json
+{
+  "type": "frameLayout",
+  "seq": 6,
+  "payload": {
+    "roles": [
+      "marker", "minute", "minute", "minute", "unused", "minute", "minute", "minute", "minute", "marker",
+      "unused", "unused", "hour", "hour", "unused", "hour", "hour", "hour", "hour", "marker",
+      "unused", "unused", "dayOfYear", "dayOfYear", "unused", "dayOfYear", "dayOfYear", "dayOfYear", "dayOfYear", "marker",
+      "dayOfYear", "dayOfYear", "dayOfYear", "dayOfYear", "unused", "unused", "ut1Sign", "ut1Sign", "ut1Sign", "marker",
+      "ut1Correction", "ut1Correction", "ut1Correction", "ut1Correction", "unused", "year", "year", "year", "year", "marker",
+      "year", "year", "year", "year", "unused", "leapYear", "leapSecondPending", "dst", "dst", "marker"
+    ],
+    "weights": [
+      null, 40, 20, 10, null, 8, 4, 2, 1, null,
+      null, null, 20, 10, null, 8, 4, 2, 1, null,
+      null, null, 200, 100, null, 80, 40, 20, 10, null,
+      8, 4, 2, 1, null, null, null, null, null, null,
+      8, 4, 2, 1, null, 80, 40, 20, 10, null,
+      8, 4, 2, 1, null, null, null, null, null, null
+    ]
+  }
+}
+```
+
 ### `info`
 
 Pipeline event `InfoReceived`: a `#` line from the source, verbatim. From a serial source these are the banner and `# dropped <n>`; from replay also the capture's `# wall` lines, which carry the recorded PC-clock offset.
@@ -383,7 +429,7 @@ type Command =
 
 ### `hello`
 
-Sent once when the page has loaded and subscribed. `protocol` is the version of this document the page was built against, currently 1. The host logs a mismatch and carries on. It answers with `sourceStatus`, `ports`, and `captures`, in that order, so a reloaded page recovers the host's state.
+Sent once when the page has loaded and subscribed. `protocol` is the version of this document the page was built against, currently 1. The host logs a mismatch and carries on. It answers with `sourceStatus`, `ports`, `captures`, and `frameLayout`, in that order, so a reloaded page recovers the host's state.
 
 ```json
 { "command": "hello", "protocol": 1 }

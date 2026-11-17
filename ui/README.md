@@ -38,7 +38,7 @@ CI runs `format:check`, `lint`, `test`, and `build`; `../verify.ps1 -Only ui` ru
 | `protocol/` | The page's half of the message contract: schemas, types, and the bridge to the host |
 | `state/` | `AppState`, its reducer, and the store |
 | `time/` | The source clock, and the feed that keeps it on the stream's time |
-| `sim/` | The simulator, the recorder, and the recorded fixture. Development builds only |
+| `sim/` | The simulator, the recorder, and their fixtures: the recorded stream and a copy of the `frameLayout` example. Development builds only |
 | `shell/` | The frame of the screen: app bar, pipeline rail, panels, focus layout, keyboard map, status bar, protocol log |
 | `views/` | What the panels show, one folder per view: the signal lanes, the pulse-width histogram, the edge log |
 | `components/ui/` | Controls written by the shadcn CLI. They are linted and formatted like the rest, and left out of coverage |
@@ -64,13 +64,13 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 | Fields | Keep |
 | --- | --- |
 | `edges`, `pulses`, `symbols`, `validations`, `infoLines` | The newest 2,000, 300, 600, 20, and 50 |
-| `clock`, `decodedFrame`, `frameSync`, `sourceStatus`, `ports`, `captures` | The latest message of that type |
+| `clock`, `decodedFrame`, `frameSync`, `sourceStatus`, `ports`, `captures`, `frameLayout` | The latest message of that type |
 | `frameCount`, `lastSeq`, `lostMessages` | Counters. `frameCount` counts `validation` messages; `lostMessages` adds up the gaps in `seq` |
 | `slots` | The newest 120 `slotFilled` events, each with the start of the symbol it placed: the symbol that arrived just before it |
 | `syncLoss` | The latest loss of frame sync, held for 5 s (see "Sync loss" in `ui-design.md`) |
 | `log` | The protocol log: the last 200 messages and a count per type |
 
-A `sourceStatus` whose `detail` starts with `reset:` is a source reset. The reducer goes back to `initialState` and keeps `ports`, `captures`, the sequence tracking, and the log.
+A `sourceStatus` whose `detail` starts with `reset:` is a source reset. The reducer goes back to `initialState` and keeps `ports`, `captures`, `frameLayout`, the sequence tracking, and the log. The host sends the layout only in its reply to `hello`, so a reset that dropped it would leave the frame panel without one.
 
 `state/store.ts` wraps the reducer in one Zustand store, `useAppStore`. `dispatch(message)` runs the reducer, and starts the 5 s timer when the message is a `syncLost`.
 
@@ -154,7 +154,7 @@ It plays `sim/fixtures/synthetic-noise-0.jsonl`, a recording of the host's synth
 
 | Command | The simulator's answer |
 | --- | --- |
-| `hello` | `sourceStatus` stopped, then empty `ports` and `captures` |
+| `hello` | `sourceStatus` stopped, empty `ports` and `captures`, then `frameLayout` from `sim/fixtures/frameLayout.json` |
 | `selectSource` | Plays the recording from the top, whichever source and noise were asked for |
 | `stop` | Stops playing and sends `sourceStatus` stopped |
 | Anything else | Nothing |
@@ -164,13 +164,15 @@ It plays `sim/fixtures/synthetic-noise-0.jsonl`, a recording of the host's synth
 - `seq` is renumbered from 1 as messages go out, so the count never shows a gap.
 - `?speed=10` on the address plays ten times faster: http://localhost:5173/?speed=10. Any positive number works, fractions too; anything else means 1. Only the arrival times shrink. The timestamps inside the messages are untouched, so at 10 the source runs at ten times wall time.
 
-The simulator and the recorder sit behind `import.meta.env.DEV`, so `npm run build` leaves both out, and the fixture with them. A production build opened without the host gets a bridge that only logs a warning, and the status bar reads `no host`.
+`sim/fixtures/frameLayout.json` is a copy of `docs/design/message-examples/frameLayout.json`, because the simulator has no host to build the layout for it. Two tests keep the copy true. In the host, `Serialize_FrameLayout_MatchesExample` holds the example equal to the layout table in C#. Here, the `hello` test in `sim/simulator.test.ts` holds the fixture equal to the example. When the layout changes in C#, change the example, copy it over the fixture, and run `npx prettier --write src/sim/fixtures/frameLayout.json`.
+
+The simulator and the recorder sit behind `import.meta.env.DEV`, so `npm run build` leaves both out, and both fixtures with them. In the host, the only layout the page has is the one the host sends. A production build opened without the host gets a bridge that only logs a warning, and the status bar reads `no host`.
 
 A development build runs under React's StrictMode, which mounts `App` twice. `hello` goes out twice and the log opens with two sets of answers. That is expected, in the host as well.
 
 ## Recording a fixture
 
-A fixture is recorded from the real host, so it cannot drift from the protocol. In a development build `main.tsx` subscribes a recorder to the bridge and puts it on `window.wwvbRecorder`.
+The stream fixture is recorded from the real host, so it cannot drift from the protocol. In a development build `main.tsx` subscribes a recorder to the bridge and puts it on `window.wwvbRecorder`.
 
 1. Run `npm run dev`, then start the host in Debug. It loads the page from the dev server, which is the build that has the recorder.
 2. Open the dev tools in the host window (F12, or right-click and Inspect) and run `wwvbRecorder.start()` in the console.
@@ -203,7 +205,7 @@ The controls are built on Base UI, and most examples online are for the Radix ve
 
 ## Imports
 
-- A local import carries no file extension: `import { reduce } from "./appState"`. A stylesheet and the raw fixture keep theirs (`./index.css`, `./fixtures/synthetic-noise-0.jsonl?raw`).
+- A local import carries no file extension: `import { reduce } from "./appState"`. A stylesheet, a JSON file, and the raw fixture keep theirs (`./index.css`, `./fixtures/frameLayout.json`, `./fixtures/synthetic-noise-0.jsonl?raw`).
 - The same folder or below is relative (`./stages`). Another folder goes through the alias (`@/state/store`). Never `../`.
 
 The linter enforces the first rule and not the second.
@@ -222,7 +224,7 @@ There is no `baseUrl`: TypeScript 7 rejects it (TS5102), and `paths` works witho
 
 `.oxlintrc.json` turns on the `react`, `typescript`, `oxc`, `jsx-a11y`, and `import` plugins, with the correctness, suspicious, and perf categories as errors.
 
-The editor underlines the `import/extensions` rule in that file with "Array has too many items". Leave it. The schema accepts either a plain map of extensions or a settings object with that map under `pattern`, and the file mixes the two: `css`, `jsonl`, and `checkTypeImports` side by side. In oxlint 1.90.0 the schema's own form, with the map under `pattern`, stops checking `import type` lines. The mixed form checks them.
+The editor underlines the `import/extensions` rule in that file with "Array has too many items". Leave it. The schema accepts either a plain map of extensions or a settings object with that map under `pattern`, and the file mixes the two: `css`, `json`, `jsonl`, and `checkTypeImports` side by side. In oxlint 1.90.0 the schema's own form, with the map under `pattern`, stops checking `import type` lines. The mixed form checks them.
 
 After an oxlint upgrade it is worth one try: move the map under `pattern`, add `.ts` to an `import type` line, and run `npm run lint`. If the line is reported, keep the schema's form.
 
@@ -235,7 +237,7 @@ After an oxlint upgrade it is worth one try: move the map under `pattern`, add `
 | `unit` | `*.test.ts` | Node |
 | `dom` | `*.test.tsx` | jsdom, with `src/test-setup.ts` |
 
-One jsdom environment for everything does not work: jsdom replaces the global `URL`, which `messages.test.ts` uses to find the example files. So a test that needs a DOM is named `.test.tsx`, whether or not it contains JSX.
+One jsdom environment for everything does not work: jsdom replaces the global `URL`, which `messages.test.ts` and `sim/simulator.test.ts` use to find the example files. So a test that needs a DOM is named `.test.tsx`, whether or not it contains JSX.
 
 `test-setup.ts` adds the `jest-dom` matchers and unmounts after each test. Testing Library cannot register that cleanup itself, because there are no vitest globals: test files import `describe`, `it`, and `expect` from `vitest`.
 

@@ -10,6 +10,7 @@ import type {
   ClockState,
   DecodedFrame,
   Edge,
+  FrameLayout,
   FrameSyncEvent,
   HostMessage,
   SourceStatus,
@@ -53,6 +54,17 @@ const validation = (minute: number): ValidationResult => ({
   },
   accepted: true,
   failures: [],
+});
+
+const layout: FrameLayout = {
+  roles: Array(60).fill("unused"),
+  weights: Array(60).fill(null),
+};
+
+const frameLayout = (seq: number): HostMessage => ({
+  type: "frameLayout",
+  seq,
+  payload: layout,
 });
 
 describe("reduce", () => {
@@ -276,6 +288,13 @@ describe("reduce", () => {
     expect(state.captures).toEqual(captures);
   });
 
+  it("remembers the frame layout", () => {
+    const state = reduce(initialState, frameLayout(1));
+
+    expect(initialState.frameLayout).toBeNull();
+    expect(state.frameLayout).toEqual(layout);
+  });
+
   it("clears the stream on a source reset and keeps the lists", () => {
     const before: HostMessage[] = [
       {
@@ -335,6 +354,12 @@ describe("reduce", () => {
       lastSeq: 7,
       log: state.log,
     });
+  });
+
+  it("keeps the frame layout across a source reset", () => {
+    const state = [frameLayout(1), reset(2)].reduce(reduce, initialState);
+
+    expect(state.frameLayout).toEqual(layout);
   });
 
   it("keeps the stream on a source status that is not a reset", () => {

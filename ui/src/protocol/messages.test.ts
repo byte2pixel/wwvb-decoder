@@ -12,14 +12,14 @@ const files = readdirSync(examplesDir)
   .sort();
 
 describe("message examples", () => {
-  it("has 19 example files", () => {
-    expect(files).toHaveLength(19);
+  it("has 20 example files", () => {
+    expect(files).toHaveLength(20);
   });
 
-  it("has 8 command files and 11 host message files", () => {
+  it("has 8 command files and 12 host message files", () => {
     const commands = files.filter((f) => f.startsWith("command-"));
     expect(commands).toHaveLength(8);
-    expect(files.length - commands.length).toBe(11);
+    expect(files.length - commands.length).toBe(12);
   });
 });
 
@@ -65,6 +65,16 @@ describe("schema rejects", () => {
           symbols: good.payload.frame.symbols.slice(1),
         },
       },
+    };
+    expect(hostMessageSchema.safeParse(short).success).toBe(false);
+  });
+
+  it.each(["roles", "weights"] as const)("a frame layout with 59 %s", (key) => {
+    const good = hostMessageSchema.parse(load("frameLayout.json"));
+    if (good.type !== "frameLayout") throw new Error("wrong type");
+    const short = {
+      ...good,
+      payload: { ...good.payload, [key]: good.payload[key].slice(1) },
     };
     expect(hostMessageSchema.safeParse(short).success).toBe(false);
   });

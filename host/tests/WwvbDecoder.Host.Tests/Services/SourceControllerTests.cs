@@ -16,7 +16,7 @@ public class SourceControllerTests
     [Theory]
     [InlineData(1)]
     [InlineData(99)] // a mismatch is logged, not refused
-    public async Task Hello_AnswersStatusPortsCapturesInOrder(int protocol)
+    public async Task Hello_AnswersStatusPortsCapturesLayoutInOrder(int protocol)
     {
         // Arrange
         await using SourceController controller = CreateController();
@@ -26,12 +26,15 @@ public class SourceControllerTests
 
         // Assert
         var posted = _poster.Posted;
-        posted.Select(p => p.Type).ShouldBe(["sourceStatus", "ports", "captures"]);
+        posted.Select(p => p.Type).ShouldBe(["sourceStatus", "ports", "captures", "frameLayout"]);
         posted[0].Payload.ShouldBe(new SourceStatus(SourceKind.None, "", SourceState.Stopped, ""));
         posted[1].Payload.ShouldBeOfType<ItemsPayload<string>>().Items.ShouldBe(["COM3", "COM5"]);
         posted[2]
             .Payload.ShouldBeOfType<ItemsPayload<CaptureEntry>>()
             .Items.ShouldBe(_environment.Captures);
+        posted[3]
+            .Payload.ShouldBeOfType<FrameLayoutPayload>()
+            .Roles.ShouldBe(WwvbFrameLayout.Roles);
     }
 
     [Theory]

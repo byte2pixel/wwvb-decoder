@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostMessage } from "@/protocol/messages";
 import { createSimulator } from "./simulator";
 import type { RecordedMessage } from "./recording";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const line = (t: number, text: string): RecordedMessage => ({
   t,
@@ -13,6 +15,19 @@ const summary = (messages: HostMessage[]) =>
   messages.map((message) =>
     message.type === "info" ? message.payload.line : message.type,
   );
+
+/** The message example. The host's tests hold it equal to the host's layout table. */
+const layoutExample: object = JSON.parse(
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../../docs/design/message-examples/frameLayout.json",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  ),
+);
 
 const select = {
   command: "selectSource",
@@ -29,7 +44,7 @@ describe("createSimulator", () => {
     vi.useRealTimers();
   });
 
-  it("answers hello with the source status, the ports, and the captures", () => {
+  it("answers hello with the source status, the ports, the captures, and the frame layout", () => {
     // Arrange
     const simulator = createSimulator([]);
     const received: HostMessage[] = [];
@@ -48,6 +63,7 @@ describe("createSimulator", () => {
       },
       { type: "ports", seq: 2, payload: { items: [] } },
       { type: "captures", seq: 3, payload: { items: [] } },
+      { ...layoutExample, seq: 4 },
     ]);
   });
 
@@ -90,7 +106,7 @@ describe("createSimulator", () => {
     vi.advanceTimersByTime(10);
 
     // Assert
-    expect(received.map((message) => message.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(received.map((message) => message.seq)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("stops playing and reports stopped", () => {

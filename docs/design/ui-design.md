@@ -302,22 +302,15 @@ The rail's stage 4 health and the frame panel's header both read this one field.
 
 ## Protocol additions
 
-Neither exists yet. Each lands with its example file and both test suites, in the step that needs it.
+Each lands with its example file and both test suites, in the step that needs it.
 
-**`frameLayout` (needed by the frame panel, Step 13).** The frame layout is written down in exactly two places in code, `WwvbFrameLayout` and the Rust crate. A TypeScript copy would be a third, so the host sends it once after `hello`. Proposed shape:
+**`frameLayout` (the frame panel, Step 13).** The frame layout is written down in exactly two places in code, `WwvbFrameLayout` and the Rust crate. A TypeScript copy would be a third, so the host sends it once, at the end of its reply to `hello`. The payload is specified in [`webview2-messages.md`](webview2-messages.md#framelayout): a role and a bit weight for each of the 60 seconds.
 
-```ts
-type SecondRole =
-  | "marker" | "unused" | "minute" | "hour" | "dayOfYear" | "ut1Sign"
-  | "ut1Correction" | "year" | "leapYear" | "leapSecondPending" | "dst";
+- The page derives a field's bracket from the first and last second with its role.
+- The message carries no marker names. The page names the marker seconds in order: `Pr`, `P1` to `P5`, `P0`.
+- The store keeps the layout across a source reset, because the host does not send it again.
 
-interface FrameLayout {
-  roles: SecondRole[];          // 60, indexed by second
-  weights: (number | null)[];   // 60; the bit weight as the layout table writes it, or null
-}
-```
-
-The page derives a field's bracket from the first and last second with its role. Adding a message type does not change an existing one, so the protocol number stays 1.
+Adding a message type does not change an existing one, so the protocol number stays 1.
 
 **Pulse statistics (optional, Step 16).** `PulseMeasurement` counts `GlitchesDropped` and `GapsBridged`, but no message carries them. The stage 2 focus view can show them only if a message does. Until then the page shows the dips in the carrier lane and no count.
 

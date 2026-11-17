@@ -17,8 +17,10 @@ export function ProtocolLog() {
       <ol aria-label="Messages" className="min-h-0 flex-1 overflow-auto">
         {log.entries.toReversed().map(({ type, payload, seq }) => (
           <li key={seq} className="flex gap-3 whitespace-nowrap">
-            <span className="w-12 text-right text-muted-foreground">{seq}</span>
-            <span className="w-24">{type}</span>
+            <span className="w-12 shrink-0 text-right text-muted-foreground">
+              {seq}
+            </span>
+            <span className="w-24 shrink-0">{type}</span>
             <span className="text-foreground-soft">
               {JSON.stringify(payload)}
             </span>

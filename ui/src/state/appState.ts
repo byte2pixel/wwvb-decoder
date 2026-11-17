@@ -3,6 +3,7 @@ import type {
   ClockState,
   DecodedFrame,
   Edge,
+  FrameLayout,
   FrameSyncEvent,
   HostMessage,
   Pulse,
@@ -53,6 +54,8 @@ export interface AppState {
   lostMessages: number;
   log: ProtocolLog;
   slots: ReadonlyArray<FilledSlot>;
+  /** Comes from the hello reply. A reset does not clear it. */
+  frameLayout: Readonly<FrameLayout> | null;
   /** The latest loss of frame sync. The store clears it 5 s later. */
   syncLoss: Readonly<{ reason: string; seq: number }> | null;
 }
@@ -74,6 +77,7 @@ export const initialState: AppState = {
   lostMessages: 0,
   log: emptyLog,
   slots: [],
+  frameLayout: null,
   syncLoss: null,
 };
 
@@ -135,6 +139,11 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
         ...state,
         decodedFrame: message.payload,
       };
+    case "frameLayout":
+      return {
+        ...state,
+        frameLayout: message.payload,
+      };
     case "frameSync": {
       const placed = state.symbols.at(-1);
       const slots =
@@ -168,6 +177,7 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
           ...initialState,
           ports: state.ports,
           captures: state.captures,
+          frameLayout: state.frameLayout,
           sourceStatus: message.payload,
         };
       }

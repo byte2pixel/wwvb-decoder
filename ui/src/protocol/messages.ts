@@ -136,6 +136,28 @@ export const captureEntrySchema = z.object({
 });
 export type CaptureEntry = z.infer<typeof captureEntrySchema>;
 
+export const secondRoleSchema = z.enum([
+  "marker",
+  "unused",
+  "minute",
+  "hour",
+  "dayOfYear",
+  "ut1Sign",
+  "ut1Correction",
+  "year",
+  "leapYear",
+  "leapSecondPending",
+  "dst",
+]);
+
+export type SecondRole = z.infer<typeof secondRoleSchema>;
+
+export const frameLayoutSchema = z.object({
+  roles: z.array(secondRoleSchema).length(60),
+  weights: z.array(z.number().nullable()).length(60),
+});
+export type FrameLayout = z.infer<typeof frameLayoutSchema>;
+
 export const hostMessageSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("edges"),
@@ -182,6 +204,11 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("captures"),
     seq: z.number(),
     payload: z.object({ items: z.array(captureEntrySchema) }),
+  }),
+  z.object({
+    type: z.literal("frameLayout"),
+    seq: z.number(),
+    payload: frameLayoutSchema,
   }),
   z.object({
     type: z.literal("info"),

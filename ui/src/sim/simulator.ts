@@ -1,12 +1,20 @@
 import type { Bridge } from "@/protocol/bridge";
 import type { RecordedMessage } from "./recording";
-import type { Command, HostMessage } from "@/protocol/messages";
+import {
+  hostMessageSchema,
+  type Command,
+  type HostMessage,
+} from "@/protocol/messages";
+import layoutFixture from "./fixtures/frameLayout.json";
 
 const stopped: HostMessage = {
   type: "sourceStatus",
   seq: 0,
   payload: { source: "none", name: "", state: "stopped", detail: "" },
 };
+
+/** A copy of the message example. The host builds the same payload from its layout table. */
+const frameLayout = hostMessageSchema.parse(layoutFixture);
 
 const loopGapMs = 1_000;
 
@@ -58,6 +66,7 @@ export function createSimulator(
             emit(stopped);
             emit({ type: "ports", seq: 0, payload: { items: [] } });
             emit({ type: "captures", seq: 0, payload: { items: [] } });
+            emit(frameLayout);
           }, 0);
           break;
         }

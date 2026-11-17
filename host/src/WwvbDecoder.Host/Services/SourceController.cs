@@ -42,13 +42,14 @@ public sealed class SourceController(
                 {
                     Trace.TraceWarning("Protocol mismatch: client {0} vs host 1", hello.Protocol);
                 }
-                // send the status, ports, and captures in order
+                // send the status, ports, captures, and frame layout in order
                 poster.Post("sourceStatus", Status);
                 poster.Post("ports", new ItemsPayload<string>([.. environment.ListPorts()]));
                 poster.Post(
                     "captures",
                     new ItemsPayload<CaptureEntry>([.. environment.ListCaptures()])
                 );
+                poster.Post("frameLayout", FrameLayoutPayload.Create());
                 break;
             case Command.ListPorts:
                 poster.Post("ports", new ItemsPayload<string>([.. environment.ListPorts()]));
