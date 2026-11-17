@@ -59,7 +59,13 @@ describe("createSimulator", () => {
       {
         type: "sourceStatus",
         seq: 1,
-        payload: { source: "none", name: "", state: "stopped", detail: "" },
+        payload: {
+          source: "none",
+          name: "",
+          state: "stopped",
+          detail: "",
+          speed: 1,
+        },
       },
       { type: "ports", seq: 2, payload: { items: [] } },
       { type: "captures", seq: 3, payload: { items: [] } },
@@ -180,6 +186,34 @@ describe("createSimulator", () => {
 
     vi.advanceTimersByTime(15); // past it
     expect(summary(received)).toEqual(["A", "B", "A"]);
+  });
+
+  it("says its speed in every source status it sends", () => {
+    const running: RecordedMessage = {
+      t: 0,
+      message: {
+        type: "sourceStatus",
+        seq: 99,
+        payload: {
+          source: "synthetic",
+          name: "synthetic",
+          state: "running",
+          detail: "",
+        },
+      },
+    };
+    const simulator = createSimulator([running, line(10, "A")], { speed: 10 });
+    const received: HostMessage[] = [];
+    simulator.onMessage((message) => received.push(message));
+
+    simulator.send({ command: "hello", protocol: 1 });
+    simulator.send(select);
+    vi.advanceTimersByTime(1);
+
+    const speeds = received.flatMap((message) =>
+      message.type === "sourceStatus" ? [message.payload.speed] : [],
+    );
+    expect(speeds).toEqual([10, 10]);
   });
 
   it("stops delivering to a handler that unsubscribed", () => {

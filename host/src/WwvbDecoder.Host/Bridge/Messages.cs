@@ -50,7 +50,13 @@ public enum SourceState
 }
 
 /// <summary>Posted whenever the source changes state. <paramref name="Detail"/> is display text.</summary>
-public sealed record SourceStatus(SourceKind Source, string Name, SourceState State, string Detail);
+public sealed record SourceStatus(
+    SourceKind Source,
+    string Name,
+    SourceState State,
+    string Detail,
+    double Speed = 1.0
+);
 
 /// <summary>One capture file. <paramref name="Path"/> is what <c>selectSource</c> takes back.</summary>
 public sealed record CaptureEntry(string Path, DateTimeOffset Recorded, double Minutes);

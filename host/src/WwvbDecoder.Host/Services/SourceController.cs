@@ -98,6 +98,7 @@ public sealed class SourceController(
                 if (_run?.Source is ReplayEdgeSource replaying)
                 {
                     replaying.Speed = speed.Speed;
+                    SetStatus(Status with { Detail = "" });
                 }
                 break;
             case Command.Stop:
@@ -230,9 +231,17 @@ public sealed class SourceController(
         run.Cts.Dispose();
     }
 
+    private readonly Lock _statusGate = new();
+
     private void SetStatus(SourceStatus status)
     {
-        Status = status;
-        poster.Post("sourceStatus", status);
+        lock (_statusGate)
+        {
+            Status = status with
+            {
+                Speed = _run?.Source is ReplayEdgeSource replay ? replay.Speed : 1.0,
+            };
+            poster.Post("sourceStatus", Status);
+        }
     }
 }

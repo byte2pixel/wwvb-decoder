@@ -43,6 +43,15 @@ describe.each(commandFiles)("command example %s", (file) => {
   });
 });
 
+describe("a source status", () => {
+  it("keeps its speed", () => {
+    const message = hostMessageSchema.parse(load("sourceStatus.json"));
+    if (message.type !== "sourceStatus") throw new Error("wrong type");
+
+    expect(message.payload.speed).toBe(1);
+  });
+});
+
 describe("schema rejects", () => {
   it("a frameSync with an unknown kind", () => {
     const result = hostMessageSchema.safeParse({

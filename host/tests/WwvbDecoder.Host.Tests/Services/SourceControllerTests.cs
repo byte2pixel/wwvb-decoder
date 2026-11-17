@@ -246,7 +246,7 @@ public class SourceControllerTests
         _poster
             .Posted[0]
             .Payload.ShouldBe(
-                new SourceStatus(SourceKind.Replay, "replay", SourceState.Running, "")
+                new SourceStatus(SourceKind.Replay, "replay", SourceState.Running, "", Speed: 10)
             );
         controller.Status.State.ShouldBe(SourceState.Running);
         (await reset.Task.WaitAsync(TimeSpan.FromSeconds(5), Ct)).ShouldBe("start");
@@ -508,6 +508,27 @@ public class SourceControllerTests
             .Created.ShouldHaveSingleItem()
             .ShouldBeOfType<ReplayEdgeSource>()
             .Speed.ShouldBe(10);
+    }
+
+    [Fact]
+    public async Task SetReplaySpeed_AnswersStatusWithTheNewSpeed()
+    {
+        // Arrange
+        await using SourceController controller = CreateController();
+        await controller.HandleAsync(
+            new Command.SelectReplay(Path: "captures/a.edges.txt", Speed: 1)
+        );
+        await _poster.WaitForAsync(p => p.Payload is SourceStatus { Detail: "reset: start" });
+
+        // Act
+        await controller.HandleAsync(new Command.SetReplaySpeed(Speed: 10));
+
+        // Assert
+        _poster
+            .Posted.Select(p => p.Payload)
+            .OfType<SourceStatus>()
+            .Select(s => (s.Detail, s.Speed))
+            .ShouldBe([("", 1), ("reset: start", 1), ("", 10)]);
     }
 
     [Fact]

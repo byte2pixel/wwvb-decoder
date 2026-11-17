@@ -20,6 +20,18 @@ const status = (state: SourceState, detail = ""): HostMessage => ({
   payload: { source: "synthetic", name: "synthetic", state, detail },
 });
 
+const replaying = (speed: number): HostMessage => ({
+  type: "sourceStatus",
+  seq: 2,
+  payload: {
+    source: "replay",
+    name: "replay",
+    state: "running",
+    detail: "",
+    speed,
+  },
+});
+
 /** A clock whose wall time stands still, so its reading is its anchor. */
 const start = () => {
   const clock = createSourceClock(() => 0);
@@ -72,6 +84,23 @@ describe("feedClock", () => {
     });
 
     expect(clock.now()).toBe(12_000_000);
+  });
+
+  it("runs the clock at the speed a status reports", () => {
+    const { clock, feed } = start();
+
+    feed(replaying(10));
+
+    expect(clock.speed()).toBe(10);
+  });
+
+  it("takes a status without a speed as 1", () => {
+    const { clock, feed } = start();
+    feed(replaying(10));
+
+    feed(status("running"));
+
+    expect(clock.speed()).toBe(1);
   });
 
   it("ignores an empty batch", () => {

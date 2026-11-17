@@ -12,6 +12,7 @@ export const feedClock =
         break;
       }
       case "sourceStatus": {
+        clock.setSpeed(message.payload.speed ?? 1);
         if (
           message.payload.detail.startsWith("reset:") ||
           message.payload.state !== "running"

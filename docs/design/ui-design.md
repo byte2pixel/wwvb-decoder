@@ -279,7 +279,7 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
 
 Edges arrive in batches every 100 ms and only when the carrier changes, so the present has to be estimated between them. One module does this for every view:
 
-- It maps `performance.now()` to source microseconds, anchored on the first edge and advancing at the source's speed (1 for live and synthetic, the replay speed for replay).
+- It maps `performance.now()` to source microseconds, anchored on the first edge and advancing at the source's speed (1 for live and synthetic, the replay speed for replay). The speed is the `speed` of the latest `sourceStatus`, so it changes when the host says it has, not when the page asks.
 - Every later batch corrects it with the timestamp of its newest edge:
   - An edge later than the estimate proves the clock is behind. The whole difference is made up.
   - An edge earlier than the estimate is the normal case, because edges arrive late. A tenth of the difference is taken back. This keeps the clock with a stream that runs slower than its nominal speed, which a paced source can (see Step 13, Task 1 in the construction plan), and with a Pico whose crystal runs slower than the PC's.

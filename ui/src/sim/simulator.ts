@@ -26,7 +26,11 @@ export function createSimulator(
   let next = 1;
   let timers: ReturnType<typeof setTimeout>[] = [];
   const emit = (message: HostMessage) => {
-    subscribers.forEach((callback) => callback({ ...message, seq: next }));
+    const stamped =
+      message.type === "sourceStatus"
+        ? { ...message, payload: { ...message.payload, speed } }
+        : message;
+    subscribers.forEach((callback) => callback({ ...stamped, seq: next }));
     next++;
   };
   const cancel = () => {

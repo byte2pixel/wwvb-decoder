@@ -126,7 +126,9 @@ export const sourceStatusSchema = z.object({
   name: z.string(),
   state: sourceStateSchema,
   detail: z.string(),
+  speed: z.number().optional(),
 });
+
 export type SourceStatus = z.infer<typeof sourceStatusSchema>;
 
 export const captureEntrySchema = z.object({

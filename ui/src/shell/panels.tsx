@@ -9,6 +9,7 @@ import { ALL_LANES, type LaneName } from "@/views/signal/model";
 import { SignalView } from "@/views/signal/SignalView";
 import { timeWindowFor } from "@/views/signal/timeWindow";
 import { Panel } from "./Panel";
+import { useAppStore } from "@/state/store";
 
 // The screen's panels, each a view inside its Panel. The overview and the focus views
 // lay out the same ones.
@@ -37,7 +38,8 @@ export function SignalPanel({
   lanes = ALL_LANES,
   className,
 }: Readonly<SignalPanelProps>) {
-  const { windowMicros } = timeWindowFor(clock.speed());
+  const speed = useAppStore((state) => state.sourceStatus?.speed ?? 1);
+  const { windowMicros } = timeWindowFor(speed);
 
   return (
     <Panel

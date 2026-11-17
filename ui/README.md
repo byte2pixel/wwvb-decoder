@@ -94,9 +94,9 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | File | Holds |
 | --- | --- |
 | `sourceClock.ts` | `createSourceClock(wallMs)` returns a `SourceClock`: `now()`, `sync(micros)`, `setSpeed(speed)`, `speed()`, and `reset()`. `slewMs` and `pullBack` at the top are the two tuning values |
-| `clockFeed.ts` | `feedClock(clock)` returns a function of one message. An `edges` message syncs the clock to its newest edge; a source reset, or a status that is not `running`, resets it |
+| `clockFeed.ts` | `feedClock(clock)` returns a function of one message. An `edges` message syncs the clock to its newest edge. A `sourceStatus` sets the clock's speed from its `speed`, 1 when it has none; a source reset, or a status that is not `running`, also resets the clock |
 
-`main.tsx` creates the one clock and hands it to `App`. In a browser it also sets the clock's speed from the simulator's `?speed=`.
+`main.tsx` creates the one clock and hands it to `App`. Nothing on the page chooses the clock's speed. The host says it in every `sourceStatus`: the replay speed while a replay runs, 1 otherwise. The Signal panel's `12 s window` or `60 s window` line reads the same field from the store.
 
 ## Shell
 
@@ -162,7 +162,7 @@ It plays `sim/fixtures/synthetic-noise-0.jsonl`, a recording of the host's synth
 - Each message is sent at the time it arrived when it was recorded, so the stream has the host's real timing, late edges included.
 - One second after the last message the recording starts again. It opens with the host's `reset: start` status, so the page clears at the top of every pass.
 - `seq` is renumbered from 1 as messages go out, so the count never shows a gap.
-- `?speed=10` on the address plays ten times faster: http://localhost:5173/?speed=10. Any positive number works, fractions too; anything else means 1. Only the arrival times shrink. The timestamps inside the messages are untouched, so at 10 the source runs at ten times wall time.
+- `?speed=10` on the address plays ten times faster: http://localhost:5173/?speed=10. Any positive number works, fractions too; anything else means 1. Only the arrival times shrink. The timestamps inside the messages are untouched, so at 10 the source runs at ten times wall time. The simulator writes that speed into every `sourceStatus` it sends, as the host does for a replay, and that is how the page's clock learns it.
 
 `sim/fixtures/frameLayout.json` is a copy of `docs/design/message-examples/frameLayout.json`, because the simulator has no host to build the layout for it. Two tests keep the copy true. In the host, `Serialize_FrameLayout_MatchesExample` holds the example equal to the layout table in C#. Here, the `hello` test in `sim/simulator.test.ts` holds the fixture equal to the example. When the layout changes in C#, change the example, copy it over the fixture, and run `npx prettier --write src/sim/fixtures/frameLayout.json`.
 

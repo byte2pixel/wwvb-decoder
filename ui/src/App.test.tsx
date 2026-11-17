@@ -113,9 +113,20 @@ describe("App", () => {
   });
 
   it("names the 60 s window when the source runs faster than 1x", () => {
-    const clock = idleClock();
-    clock.setSpeed(10);
-    render(<App bridge={fakeBridge().bridge} clock={clock} />);
+    const { bridge, emit } = fakeBridge();
+    render(<App bridge={bridge} clock={idleClock()} />);
+
+    emit({
+      type: "sourceStatus",
+      seq: 1,
+      payload: {
+        source: "replay",
+        name: "replay",
+        state: "running",
+        detail: "",
+        speed: 10,
+      },
+    });
 
     expect(screen.getByRole("region", { name: "Signal" })).toHaveTextContent(
       "60 s window",

@@ -297,7 +297,7 @@ interface ClockState {
 
 ### `sourceStatus`
 
-Not a stage output. The host posts it whenever the source changes state: in reply to `hello`, after every `selectSource` and `stop`, when a run ends on its own or fails, and on every source reset.
+Not a stage output. The host posts it whenever the source changes state: in reply to `hello`, after every `selectSource` and `stop`, when a run ends on its own or fails, on every source reset, and when `setReplaySpeed` changes the speed of a running replay.
 
 ```ts
 interface SourceStatus {
@@ -305,6 +305,7 @@ interface SourceStatus {
   name: string;
   state: "stopped" | "running" | "error";
   detail: string;
+  speed: number;
 }
 ```
 
@@ -314,6 +315,9 @@ interface SourceStatus {
 | `name` | The source's display name: `serial COM5`, `replay`, `synthetic`, or empty for `none` |
 | `state` | `running` while the pipeline is pumping; `stopped` after `stop` or when a replay without looping reaches its end; `error` when the source could not start or the run faulted |
 | `detail` | Display text. For a serial source the banner line once seen; for an error the exception message; on a source reset `reset: <reason>` with the reason from the contracts document (`open`, `start`, `session`, `loop`, `timestamp went backwards`); otherwise empty or a short description |
+| `speed` | How fast the source's time runs against real time. While a replay is the source it is the replay's speed, 0 for as fast as possible. In every other status it is 1. The page runs its source clock at this speed |
+
+The page has no other way to learn the speed, and a reloaded page gets it back with the reply to `hello`. A page that receives a status without `speed` takes it as 1.
 
 ```json
 {
@@ -323,7 +327,8 @@ interface SourceStatus {
     "source": "serial",
     "name": "serial COM5",
     "state": "running",
-    "detail": "# wwvb-edge-logger 0.1.0 pin=2"
+    "detail": "# wwvb-edge-logger 0.1.0 pin=2",
+    "speed": 1
   }
 }
 ```
@@ -467,7 +472,7 @@ The host does not apply a capture's `# reduced-carrier-level` line. `setReducedC
 
 ### `setReplaySpeed`
 
-Changes the replay speed while running; takes effect on the next edge. Ignored unless the current source is replay.
+Changes the replay speed while running; takes effect on the next edge. The host answers with `sourceStatus` carrying the new `speed`. That status has an empty `detail`, so the page does not take it for a source reset. Ignored unless the current source is replay, and then there is no answer.
 
 ```json
 { "command": "setReplaySpeed", "speed": 10 }
@@ -518,5 +523,7 @@ Cancels the current run and disposes the source. The host answers with `sourceSt
 `DecoderPipeline` raises its events synchronously on the pump thread, the thread enumerating the source. The bridge's handlers do only two things there: serialize the event to a string, and queue it. Edges go into the batch; everything else goes straight to the dispatcher. `CoreWebView2.PostWebMessageAsJson` must be called on the WPF dispatcher thread, so the bridge posts through `Dispatcher.BeginInvoke`. The `seq` counter is assigned when a message is queued for the dispatcher, and the dispatcher queue is first in, first out, so sequence numbers match posting order.
 
 Commands arrive on the dispatcher in `CoreWebView2.WebMessageReceived`. Starting or stopping a source happens there too; the running pipeline is cancelled through its `CancellationTokenSource` and the new run starts on a thread-pool thread. Options changed by `setNoise`, `setReplaySpeed`, and `setReducedCarrierLevel` are written on the dispatcher and read on the pump thread; the Core types make those reads and writes volatile.
+
+While a replay runs, `sourceStatus` is posted from both threads: a source reset from the pump thread, and the answer to `setReplaySpeed` from the dispatcher. The controller reads the source's speed and posts the status under one lock, so the last status posted always carries the current speed.
 
 On the page, `window.chrome.webview` delivers `message` events on the main thread, one per posted message, with the parsed object in `event.data`. The page should validate each envelope against its schema and drop, with a console warning, any it cannot parse.
