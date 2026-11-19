@@ -50,7 +50,9 @@ function PickList({
     <Select
       items={items}
       value={value ?? null}
-      onValueChange={onPick}
+      onValueChange={(picked, { reason }) => {
+        if (reason !== "none") onPick(picked);
+      }}
       onOpenChange={(open) => {
         if (open) onOpen();
       }}
@@ -113,10 +115,17 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
       state.sourceStatus?.source === "replay" &&
       state.sourceStatus.state === "running",
   );
+  const syntheticRunning = useAppStore(
+    (state) =>
+      state.sourceStatus?.source === "synthetic" &&
+      state.sourceStatus.state === "running",
+  );
   const setDrawer = useAppStore((state) => state.setDrawer);
 
-  const port = pickedPort ?? ports.at(0);
-  const capture = pickedCapture ?? captures.at(0)?.path;
+  const port = ports.find((name) => name === pickedPort) ?? ports.at(0);
+  const capture = (
+    captures.find((entry) => entry.path === pickedCapture) ?? captures.at(0)
+  )?.path;
 
   const startCommand = (): Command | null => {
     switch (source) {
@@ -205,9 +214,13 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
               max={1}
               step={0.05}
               value={[noise]}
-              onValueChange={(value) =>
-                setNoise(typeof value === "number" ? value : value[0])
-              }
+              onValueChange={(value) => {
+                const next = typeof value === "number" ? value : value[0];
+                setNoise(next);
+                if (syntheticRunning) {
+                  bridge.send({ command: "setNoise", noise: next });
+                }
+              }}
             />
           </div>
           <span className="w-8 font-mono text-xs">{noise.toFixed(2)}</span>

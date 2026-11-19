@@ -1008,6 +1008,10 @@ The overview is complete and every stage has a baseline focus view: its panel en
 6. Stages 1 and 2: informational lines beside the edge log. If the glitch counts are wanted, add them to a message first (the optional addition in `ui-design.md`), with its example file and both test suites; otherwise leave them out.
 7. Motion: the overview-to-focus transition with the View Transitions API; the frame-complete sequence on the rail; everything instant under `prefers-reduced-motion`.
 8. Tests: each view's model from the example messages; the reduced-motion path.
+9. App bar polish, left open by Step 13 on 2026-11-18. Each control works as it is, so these come last, each with its tests:
+   - **Capture rows.** A row reads `2026-11-09 04:34 UTC · 8 h 45 min`, and two rows are hard to tell apart at a glance. Keep the length. Make the date and time easier to read, and add the capture's label, the part of the file name after the timestamp (`overnight`, `desk`). `ui/src/shell/captures.ts` builds the row.
+   - **Noise on release.** While the synthetic source runs, the slider sends `setNoise` on every step it passes. Send it once, when the slider is released (`onValueCommitted` on the Base UI slider), and let the readout keep following the thumb.
+   - **A reloaded page.** After a reload the app bar shows its defaults (Synthetic, 1×, noise 0, the first port, the newest capture) while the host may be running something else. The status bar and the clock follow `sourceStatus`; the controls do not. Either the page stops the source when it loads, or the host reports what it is running (source, port or capture, speed, noise, reduced-carrier level) and the page shows that. Step 15 Task 4 stores the same values in `settings.json`, so decide the two together.
 
 ### Files
 
@@ -1074,4 +1078,4 @@ Every mutation is one commit touching only this file, merged before the affected
 | 13 | pending | | | Rewritten on 2026-11-12: the grid is 3 rows of 20, the fields and validation views became one decoded-frames table, and a `frameLayout` message was added so the layout is not copied into TypeScript. Task 1's pacing item was rewritten on 2026-11-13 after a measurement: the paced sources run slower than their nominal speed because each delay is taken from the previous edge, so the fix is pacing against a schedule and no longer a choice between batching and relabeling |
 | 14 | pending | | | |
 | 15 | pending | | | |
-| 16 | pending | | | Inserted on 2026-11-12: the full focus views and the motion pass. Second in the cut order, after Step 14 |
+| 16 | pending | | | Inserted on 2026-11-12: the full focus views and the motion pass. Second in the cut order, after Step 14. Task 9 added on 2026-11-18: three app bar polish items that Step 13 left open (the capture rows, noise on release, a reloaded page) |

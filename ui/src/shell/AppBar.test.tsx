@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bridge } from "@/protocol/bridge";
@@ -157,6 +157,61 @@ describe("AppBar", () => {
     });
   });
 
+  it("starts the picked capture again when it is back in the list", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    useAppStore.setState({ captures: [overnight, desk] });
+    render(<AppBar bridge={bridge} />);
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+    await user.click(screen.getByRole("combobox", { name: "Capture" }));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "2026-11-08 23:00 UTC · 3 min",
+      }),
+    );
+
+    act(() => useAppStore.setState({ captures: [overnight] }));
+
+    expect(
+      await screen.findByRole("combobox", { name: "Capture" }),
+    ).toHaveTextContent("2026-11-09 04:34 UTC · 8 h 45 min");
+
+    act(() => useAppStore.setState({ captures: [overnight, desk] }));
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(screen.getByRole("combobox", { name: "Capture" })).toHaveTextContent(
+      "2026-11-08 23:00 UTC · 3 min",
+    );
+    expect(bridge.send).toHaveBeenLastCalledWith({
+      command: "selectSource",
+      source: "replay",
+      path: desk.path,
+      speed: 1,
+    });
+  });
+
+  it("keeps the capture when a key is typed on the closed list", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    useAppStore.setState({ captures: [overnight, desk] });
+    render(<AppBar bridge={bridge} />);
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+
+    screen.getByRole("combobox", { name: "Capture" }).focus();
+    await user.keyboard("2");
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(screen.getByRole("combobox", { name: "Capture" })).toHaveTextContent(
+      "2026-11-09 04:34 UTC · 8 h 45 min",
+    );
+    expect(bridge.send).toHaveBeenCalledExactlyOnceWith({
+      command: "selectSource",
+      source: "replay",
+      path: overnight.path,
+      speed: 1,
+    });
+  });
+
   it("cannot start a replay while no capture is listed", async () => {
     const user = userEvent.setup();
     render(<AppBar bridge={fakeBridge()} />);
@@ -236,13 +291,63 @@ describe("AppBar", () => {
     });
   });
 
+  it("starts the first port when the picked one leaves the list", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    useAppStore.setState({ ports: ["COM3", "COM7"] });
+    render(<AppBar bridge={bridge} />);
+    await user.click(screen.getByRole("button", { name: "Live" }));
+    await user.click(screen.getByRole("combobox", { name: "Port" }));
+    await user.click(await screen.findByRole("option", { name: "COM7" }));
+
+    act(() => useAppStore.setState({ ports: ["COM1", "COM3"] }));
+    await user.click(await screen.findByRole("button", { name: "Start" }));
+
+    expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent(
+      "COM1",
+    );
+    expect(bridge.send).toHaveBeenLastCalledWith({
+      command: "selectSource",
+      source: "serial",
+      port: "COM1",
+    });
+  });
+
+  it("starts the picked port again when it is back in the list", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    useAppStore.setState({ ports: ["COM3", "COM7"] });
+    render(<AppBar bridge={bridge} />);
+    await user.click(screen.getByRole("button", { name: "Live" }));
+    await user.click(screen.getByRole("combobox", { name: "Port" }));
+    await user.click(await screen.findByRole("option", { name: "COM7" }));
+
+    act(() => useAppStore.setState({ ports: ["COM3"] }));
+
+    expect(
+      await screen.findByRole("combobox", { name: "Port" }),
+    ).toHaveTextContent("COM3");
+
+    act(() => useAppStore.setState({ ports: ["COM3", "COM7"] }));
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent(
+      "COM7",
+    );
+    expect(bridge.send).toHaveBeenLastCalledWith({
+      command: "selectSource",
+      source: "serial",
+      port: "COM7",
+    });
+  });
+
   it("cannot start Live while no port is listed", async () => {
     const user = userEvent.setup();
     render(<AppBar bridge={fakeBridge()} />);
     await user.click(screen.getByRole("button", { name: "Live" }));
 
     expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent(
-      "No ports",
+      "No ports found",
     );
     expect(screen.getByRole("button", { name: "Start" })).toBeDisabled();
 
@@ -372,6 +477,39 @@ describe("AppBar", () => {
       source: "synthetic",
       noise: 0.4,
     });
+  });
+
+  it("sets the noise of a running synthetic source", () => {
+    const bridge = fakeBridge();
+    useAppStore.setState({ sourceStatus: status("synthetic", "running") });
+    render(<AppBar bridge={bridge} />);
+
+    fireEvent.change(screen.getByLabelText("Noise", { selector: "input" }), {
+      target: { value: "0.4" },
+    });
+
+    expect(screen.getByText("0.40")).toBeInTheDocument();
+    expect(bridge.send).toHaveBeenCalledExactlyOnceWith({
+      command: "setNoise",
+      noise: 0.4,
+    });
+  });
+
+  it.each([
+    ["a stopped synthetic source", status("synthetic", "stopped")],
+    ["a failed synthetic source", status("synthetic", "error")],
+    ["another source running", status("replay", "running")],
+  ])("sends no noise to %s", (_, sourceStatus) => {
+    const bridge = fakeBridge();
+    useAppStore.setState({ sourceStatus });
+    render(<AppBar bridge={bridge} />);
+
+    fireEvent.change(screen.getByLabelText("Noise", { selector: "input" }), {
+      target: { value: "0.4" },
+    });
+
+    expect(screen.getByText("0.40")).toBeInTheDocument();
+    expect(bridge.send).not.toHaveBeenCalled();
   });
 
   it("stops the source", async () => {
