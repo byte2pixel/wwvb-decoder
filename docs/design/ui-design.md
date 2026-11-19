@@ -202,15 +202,23 @@ The full `detail` of every failure shows in a tooltip and in the stage 6 focus v
 
 ### App bar
 
-Name; a three-way source control (Live, Replay, Synthetic); the selected source's own controls; Stop; and three icon buttons for signal settings, theme, and keyboard shortcuts.
+Name; a three-way source control (Live, Replay, Synthetic); the selected source's own controls; Start and Stop; and three icon buttons for signal settings, theme, and keyboard shortcuts.
 
 | Source | Controls | Commands |
 | --- | --- | --- |
 | Live | Port list, refreshed on open | `selectSource` serial, `listPorts` |
-| Replay | Capture list with date and length; speed 1×, 10×, 60× | `selectSource` replay, `setReplaySpeed`, `listCaptures` |
+| Replay | Capture list with date and length, refreshed on open; speed 1×, 10×, 60× | `selectSource` replay, `setReplaySpeed`, `listCaptures` |
 | Synthetic | Noise slider, 0 to 1 | `selectSource` synthetic, `setNoise` |
 
-Signal settings holds the reduced-carrier level (`setReducedCarrierLevel`).
+- **Start.** Choosing a source, a port, a capture, a speed, or a noise level changes nothing in the host until Start is pressed. Start sends `selectSource` for the source on show. It is disabled while that source has nothing to start: no port is listed, or no capture.
+- **The default pick.** With nothing picked, the first port and the newest capture count as picked. A picked port or capture that leaves its list gives way to that default and is picked again when it comes back, so a logger that is unplugged and plugged in again is still the one selected.
+- **While its source runs.** A speed button sends `setReplaySpeed` at once while a replay is running, and the noise slider sends `setNoise` on each step while the synthetic source is running. With another source running, or none, they only set what the next Start sends.
+- **A capture row** reads `2026-11-09 04:34 UTC · 8 h 45 min`: when the capture was recorded, in UTC, and how long it runs.
+- **An empty list** reads `No ports found` or `No captures found`, on its button and as its only row.
+- **Signal settings** is a popover with the reduced-carrier level, High or Low. A pick is sent as `setReducedCarrierLevel` at once, whether or not a source runs, because the host keeps the level from one run to the next. The signal panel reads the carrier with the same level.
+- **The pressed button** of the source, the speed, and the level is drawn in the accent color, so the choice can be read from the back of the room.
+
+The host does not report the port, the capture, the noise, or the level, so a reloaded page shows its defaults: Synthetic, the first port, the newest capture, 1×, noise 0, and High. The clock still runs at the host's speed, because every `sourceStatus` carries it; the speed buttons do not follow it. Step 16 Task 9 holds what is left to polish here.
 
 ### Status bar and protocol log
 
@@ -316,7 +324,7 @@ Adding a message type does not change an existing one, so the protocol number st
 
 ## Keyboard
 
-Keys are ignored while a text field or slider has focus.
+Keys are left to the control while a text field or slider has focus, and while a list or the signal settings are open.
 
 | Key | Action |
 | --- | --- |
@@ -333,6 +341,9 @@ Keys are ignored while a text field or slider has focus.
 - A key pressed with Ctrl, Alt, or the Windows key is left to the browser, and a key that is held down acts once.
 - The protocol log and the shortcut list are drawers, and one is open at a time: `L` and `?` each open theirs and close it again, and opening one closes the other. The app bar's keyboard button opens the shortcut list too.
 - While a drawer is open no other key acts on the page. `Esc` closes the drawer and leaves the view behind it as it was.
+- An open list and the open signal settings have the keyboard too, from the moment they open. No key acts on the page: letters and digits search the list, the arrows move in it or between High and Low, and `Esc` closes the control and leaves the view as it was. This holds for a list with nothing to pick as well.
+- A closed list and the signal settings button are buttons like any other. A stage key pressed on one acts on the page, and the control stays closed.
+- A key the page acts on goes no further. An arrow key pressed on a source or speed button changes the stage and does not also move the focus along the buttons.
 - When a key acts, the control that has focus gives it up. A button clicked with the mouse keeps focus, and the browser draws its focus ring on the next key press, so a stage key would light up the Start button. Tab carries on from the control that had focus.
 
 ## Motion

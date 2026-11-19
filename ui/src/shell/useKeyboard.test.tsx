@@ -16,6 +16,12 @@ function Page() {
         <option>overnight</option>
       </select>
       <button type="button">Start</button>
+      <button type="button" aria-haspopup="listbox" aria-expanded="true">
+        Open list
+      </button>
+      <button type="button" aria-haspopup="listbox" aria-expanded="false">
+        Closed list
+      </button>
     </>
   );
 }
@@ -133,6 +139,27 @@ describe("useKeyboard", () => {
       expect(isDark()).toBe(false);
     },
   );
+
+  it("leaves a key pressed on the button of an open list to the list", async () => {
+    const user = userEvent.setup();
+    render(<Page />);
+
+    screen.getByRole("button", { name: "Open list" }).focus();
+    await user.keyboard("2tl{ArrowRight}{Escape}");
+
+    expect(ui()).toEqual({ focus: null, drawer: null });
+    expect(isDark()).toBe(false);
+  });
+
+  it("still listens while the button of a closed list has focus", async () => {
+    const user = userEvent.setup();
+    render(<Page />);
+
+    screen.getByRole("button", { name: "Closed list" }).focus();
+    await user.keyboard("2");
+
+    expect(ui().focus).toBe(2);
+  });
 
   it.each(["Control", "Alt", "Meta"])(
     "leaves a key pressed with %s to the browser",

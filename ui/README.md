@@ -83,9 +83,11 @@ The store also holds what the page decides for itself, `UiState`, beside the red
 
 No host message changes these, and a source reset leaves them alone: the reducer never returns them, and `set` merges what it does return.
 
+One more value is the page's own and is kept the same way: `reducedLevel`, the pin level that means reduced carrier, `"high"` until `setReducedLevel` says otherwise. The signal settings set it and the signal view reads it. It sits beside `UiState` and not in it, because `UiState` is what the keyboard map takes.
+
 - A component subscribes to the slice it shows: `useAppStore((state) => state.lastSeq)`.
 - Zustand compares a selector's result by identity. A selector that builds a new object on every call goes through `useShallow`, as the rail's buttons do.
-- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus` and `drawer` keep their values. A test file that touches those two replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
+- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus`, `drawer`, and `reducedLevel` keep their values. A test file that touches any of those replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
 
 ## Time
 
@@ -108,9 +110,10 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, and the three that show a no-data state until Step 13. The overview and the focus views lay out the same components |
 | `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels |
 | `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
-| `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, for Ctrl, Alt, and the Windows key, and for a key that is held down |
+| `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too |
 | `theme.ts` | `toggleTheme()`, for the app bar's button and the `T` key |
-| `AppBar.tsx` | The name, the source toggle, the noise slider, Start, Stop, the theme button, and the button for the shortcut list |
+| `AppBar.tsx` | The name, the source control with each source's own controls (the port list, the capture list and speed buttons, the noise slider), Start, Stop, and the buttons for the signal settings, the theme, and the shortcut list. `PickList`, `SpeedButtons`, and `SignalSettings` are components local to the file. The rules are under "App bar" in `ui-design.md` |
+| `captures.ts` | `captureLabel(entry)`: what the capture list shows for one capture, built from `formatRecorded` and `formatLength` |
 | `StatusBar.tsx`, `ProtocolLog.tsx` | The run state, the source's name and detail, the last `seq`, the lost count, the key hints, and the Log button. The protocol log is a sheet that opens when the store's `drawer` is `"log"` |
 | `ShortcutList.tsx` | The shortcut list, a sheet that opens when `drawer` is `"shortcuts"`. Its rows are written out by hand, so a key added to the map is added here too |
 
@@ -162,6 +165,7 @@ It plays `sim/fixtures/synthetic-noise-0.jsonl`, a recording of the host's synth
 - Each message is sent at the time it arrived when it was recorded, so the stream has the host's real timing, late edges included.
 - One second after the last message the recording starts again. It opens with the host's `reset: start` status, so the page clears at the top of every pass.
 - `seq` is renumbered from 1 as messages go out, so the count never shows a gap.
+- The recording was made at noise 0 with High as the reduced-carrier level, and no command changes it. The noise slider, the speed buttons, and the signal settings still move on the page, but the stream does not follow them, and the port and capture lists are empty. With the level set to Low the page reads the carrier the other way while the recorded pulses stay as they were, so the signal panel draws a pending bar over every stretch the recording did not measure. That is the simulator, not a fault. Check these controls in the host.
 - `?speed=10` on the address plays ten times faster: http://localhost:5173/?speed=10. Any positive number works, fractions too; anything else means 1. Only the arrival times shrink. The timestamps inside the messages are untouched, so at 10 the source runs at ten times wall time. The simulator writes that speed into every `sourceStatus` it sends, as the host does for a replay, and that is how the page's clock learns it.
 
 `sim/fixtures/frameLayout.json` is a copy of `docs/design/message-examples/frameLayout.json`, because the simulator has no host to build the layout for it. Two tests keep the copy true. In the host, `Serialize_FrameLayout_MatchesExample` holds the example equal to the layout table in C#. Here, the `hello` test in `sim/simulator.test.ts` holds the fixture equal to the example. When the layout changes in C#, change the example, copy it over the fixture, and run `npx prettier --write src/sim/fixtures/frameLayout.json`.
@@ -202,6 +206,12 @@ The controls are built on Base UI, and most examples online are for the Radix ve
 - `Slider` and `ToggleGroup` take `value` as an array, even for one value: `value={[noise]}`. A slider given a bare number draws two thumbs.
 - A class passed from outside does not beat one the component sets under a variant: `w-32` loses to the slider's `data-horizontal:w-full`. Put the control in a sized wrapper.
 - jsdom hides the slider's thumb. A test finds the real input with `screen.getByLabelText("Noise", { selector: "input" })` and changes it with `fireEvent.change`.
+- A `Select` shows the raw value on its button unless its root gets `items` of `{ value, label }`. An empty list draws as a hairline, so `PickList` gives it one disabled row.
+- A `Select` also reports changes it makes itself, with the reason `"none"`: it resets the value when the picked item leaves the list, and it picks by typeahead when a key is typed on the closed list. `PickList` takes only a pick the user made and leaves the rest to the page's own rule.
+- A list opens a moment after the click, and the focus arrives inside it a moment after that. A test finds what is inside with `findByRole`, and before it types it waits for the focus: `await waitFor(() => expect(option).toHaveFocus())`. A list with nothing to pick puts the focus on its own box, not on a row.
+- While a list is open the rest of the page is hidden from role queries, so the next control is found with `findByRole` too.
+
+One generated file is changed by hand. In `toggle.tsx` a pressed toggle is `aria-pressed:bg-primary aria-pressed:text-primary-foreground` where the CLI wrote `aria-pressed:bg-muted`. `--muted` is also the popover's background, so a pressed button inside a popover could not be seen, and it was faint on the app bar. If the CLI ever writes the file again, put the edit back.
 
 ## Imports
 

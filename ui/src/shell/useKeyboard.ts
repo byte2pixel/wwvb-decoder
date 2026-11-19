@@ -6,7 +6,9 @@ import { toggleTheme } from "./theme";
 /** True when a key pressed here belongs to the control: a text field, a list, or a slider, which is an `input` too. */
 const takesKeys = (target: EventTarget | null): boolean =>
   target instanceof Element &&
-  target.closest("input, textarea, select") !== null;
+  target.closest(
+    'input, textarea, select, [data-slot="select-content"], [data-slot="popover-content"], [aria-haspopup][aria-expanded="true"]',
+  ) !== null;
 
 /** Runs the keyboard map for the whole page while the component is mounted. */
 export function useKeyboard(): void {
@@ -23,6 +25,7 @@ export function useKeyboard(): void {
       if (!action) return;
 
       event.preventDefault();
+      event.stopPropagation();
       // The key was for the page, so the control with focus gives it up. A clicked
       // button keeps focus, and the browser would draw its focus ring on this key press.
       document.querySelector<HTMLElement>(":focus")?.blur();
