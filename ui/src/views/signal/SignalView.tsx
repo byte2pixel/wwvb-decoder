@@ -6,7 +6,6 @@ import { signalLanes } from "./lanes";
 import { ALL_LANES, drawSignal, LANE_WEIGHTS, type LaneName } from "./model";
 import { readSignalStyle } from "./style";
 import { paintSignal } from "./paint";
-import type { PinLevel } from "@/protocol/messages";
 
 const LANE_NAMES: Record<LaneName, string> = {
   carrier: "Carrier",
@@ -14,8 +13,6 @@ const LANE_NAMES: Record<LaneName, string> = {
   symbol: "Symbol",
   second: "Second",
 };
-/** The host's default. Step 13's signal settings will make it a choice. */
-const REDUCED_LEVEL: PinLevel = "high";
 
 interface SignalViewProps {
   clock: SourceClock;
@@ -58,7 +55,8 @@ export function SignalView({
     const paint = (): void => {
       ctx.setTransform(scale, 0, 0, scale, 0, 0);
       ctx.clearRect(0, 0, width, height);
-      const { edges, pulses, symbols, slots } = useAppStore.getState();
+      const { edges, pulses, symbols, slots, reducedLevel } =
+        useAppStore.getState();
       const { windowMicros, labels } = timeWindowFor(clock.speed());
       const lanes = signalLanes({
         edges,
@@ -67,7 +65,7 @@ export function SignalView({
         slots,
         windowMicros,
         nowMicros: clock.now(),
-        reducedLevel: REDUCED_LEVEL,
+        reducedLevel: reducedLevel,
       });
       const drawing = drawSignal(lanes, {
         width,

@@ -522,6 +522,62 @@ describe("AppBar", () => {
     expect(bridge.send).toHaveBeenCalledWith({ command: "stop" });
   });
 
+  it("opens the signal settings with high as the reduced-carrier level", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    render(<AppBar bridge={bridge} />);
+    expect(
+      screen.queryByRole("group", { name: "Reduced carrier level" }),
+    ).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Signal settings" }));
+
+    const level = await screen.findByRole("group", {
+      name: "Reduced carrier level",
+    });
+    expect(
+      within(level)
+        .getAllByRole("button")
+        .map((button) => [button.textContent, button.ariaPressed]),
+    ).toEqual([
+      ["High", "true"],
+      ["Low", "false"],
+    ]);
+    expect(bridge.send).not.toHaveBeenCalled();
+  });
+
+  it("sets the reduced-carrier level", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    render(<AppBar bridge={bridge} />);
+    await user.click(screen.getByRole("button", { name: "Signal settings" }));
+
+    await user.click(await screen.findByRole("button", { name: "Low" }));
+
+    expect(
+      screen.getByRole("button", { name: "Low", pressed: true }),
+    ).toBeInTheDocument();
+    expect(useAppStore.getState().reducedLevel).toBe("low");
+    expect(bridge.send).toHaveBeenCalledExactlyOnceWith({
+      command: "setReducedCarrierLevel",
+      level: "low",
+    });
+  });
+
+  it("keeps the level when its button is pressed again", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    render(<AppBar bridge={bridge} />);
+    await user.click(screen.getByRole("button", { name: "Signal settings" }));
+
+    await user.click(await screen.findByRole("button", { name: "High" }));
+
+    expect(
+      screen.getByRole("button", { name: "High", pressed: true }),
+    ).toBeInTheDocument();
+    expect(bridge.send).not.toHaveBeenCalled();
+  });
+
   it("switches between the dark and light themes", async () => {
     const user = userEvent.setup();
     document.documentElement.classList.add("dark");

@@ -1,5 +1,12 @@
 import { Button } from "@/components/ui/button";
 import {
+  Popover,
+  PopoverContent,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -14,9 +21,9 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Bridge } from "@/protocol/bridge";
-import type { Command, Source } from "@/protocol/messages";
+import type { Command, PinLevel, Source } from "@/protocol/messages";
+import { Keyboard, SlidersHorizontal, SunMoon } from "lucide-react";
 import { useAppStore } from "@/state/store";
-import { Keyboard, SunMoon } from "lucide-react";
 import { useState, useId } from "react";
 import { captureLabel } from "./captures";
 import { toggleTheme } from "./theme";
@@ -30,6 +37,11 @@ const sources: readonly { kind: SourceKind; label: string }[] = [
 ];
 
 const speeds = [1, 10, 60] as const;
+
+const levels: readonly { level: PinLevel; label: string }[] = [
+  { level: "high", label: "High" },
+  { level: "low", label: "Low" },
+];
 
 function PickList({
   label,
@@ -101,6 +113,68 @@ function SpeedButtons({
   );
 }
 
+function SignalSettings({ bridge }: Readonly<{ bridge: Bridge }>) {
+  const levelId = useId();
+  const reducedLevel = useAppStore((state) => state.reducedLevel);
+  const setReducedLevel = useAppStore((state) => state.setReducedLevel);
+
+  return (
+    <Popover>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <PopoverTrigger
+              render={
+                <Button
+                  className="ml-auto"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="Signal settings"
+                />
+              }
+            />
+          }
+        >
+          <SlidersHorizontal />
+        </TooltipTrigger>
+        <TooltipContent>Signal settings</TooltipContent>
+      </Tooltip>
+      <PopoverContent align="end" className="w-auto">
+        <PopoverHeader>
+          <PopoverTitle>Signal settings</PopoverTitle>
+        </PopoverHeader>
+        <div className="flex items-center gap-3">
+          <span id={levelId} className="text-xs text-muted-foreground">
+            Reduced carrier level
+          </span>
+          <ToggleGroup
+            aria-labelledby={levelId}
+            value={[reducedLevel]}
+            onValueChange={([picked]) => {
+              const next = levels.find(({ level }) => level === picked);
+              if (next) {
+                setReducedLevel(next.level);
+                bridge.send({
+                  command: "setReducedCarrierLevel",
+                  level: next.level,
+                });
+              }
+            }}
+            variant="outline"
+            size="sm"
+            spacing={0}
+          >
+            {levels.map(({ level, label }) => (
+              <ToggleGroupItem key={level} value={level}>
+                {label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
   const [source, setSource] = useState<SourceKind>("synthetic");
   const [pickedPort, setPickedPort] = useState<string | null>(null);
@@ -246,11 +320,11 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
       >
         Stop
       </Button>
+      <SignalSettings bridge={bridge} />
       <Tooltip>
         <TooltipTrigger
           render={
             <Button
-              className="ml-auto"
               variant="ghost"
               size="icon-sm"
               aria-label="Switch theme"
