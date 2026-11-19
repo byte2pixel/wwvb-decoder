@@ -75,8 +75,21 @@ describe("FocusLayout", () => {
     expect(items(signal, "Stages")).toEqual(["3"]);
   });
 
+  it("shows stage 4 as the frame panel, with its header line", () => {
+    useAppStore.setState({
+      frameSync: { kind: "searching", consecutiveMarkers: 1 },
+    });
+    focusOn(4);
+
+    expect(screen.getAllByRole("region")).toHaveLength(1);
+    const frame = screen.getByRole("region", { name: "Frame" });
+    expect(frame).toHaveTextContent("Searching, 1 of 2 markers");
+    expect(
+      within(frame).getByRole("list", { name: "Seconds 0 to 19" }),
+    ).toBeInTheDocument();
+  });
+
   it.each([
-    [4, "Frame", "No symbols placed yet"],
     [5, "Decoded frames", "No frames yet"],
     [6, "Decoded frames", "No frames yet"],
     [7, "Time", "--:--:--"],

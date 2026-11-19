@@ -107,7 +107,7 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md`. Each stage also carries the host type and the one-sentence rule that its focus view's header shows |
 | `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone. A click focuses the stage, the focused stage's button is pressed (`aria-pressed`), and a click on it goes back to the overview |
 | `Panel.tsx` | A titled region with a chip per stage, an optional line of state, and an error boundary around its children: a view that throws shows a message in its own panel and the rest of the screen keeps running |
-| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, and the three that show a no-data state until Step 13. The overview and the focus views lay out the same components |
+| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, and the two that show a no-data state until Step 13. The overview and the focus views lay out the same components |
 | `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels |
 | `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
 | `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too |
@@ -139,6 +139,15 @@ A view is split as ADR-0007 asks: a pure function decides what to show and is te
 | --- | --- |
 | `model.ts` | `pulseWidthHistogram(symbols)`: 40 bins of 25 ms, each with a count, a height against the fullest bin, and the host's class of its newest pulse. The page does not classify a duration. `lastPulseText(last)` writes the panel's state line |
 | `PulseWidthView.tsx` | The bars, the four boundaries, the error zones, and the last-pulse line. Every position is a percentage of the plot, so the view measures nothing. The four boundaries repeat the defaults of the host's `SymbolClassifier`, because no message carries them |
+
+**`views/frame/`**, the frame in progress as three rows of twenty seconds, in DOM:
+
+| File | Holds |
+| --- | --- |
+| `model.ts` | Pure functions, each from one slice of the store. `frameCells(layout)`: the 60 seconds with their role and the weight or marker name above each. `fieldBrackets(layout)`: each field's first and last second and its name. `placedSymbols(slots)`: the symbol in each second of the newest frame, which is how a new frame clears the cells. `receivingSecond(frameSync)`: the second after the one just placed. `frameHeader(state)`: the header line's text and the share of the frame placed. `cellState(role, symbol)` names how a cell is drawn |
+| `FrameView.tsx` | `FrameView` puts them together: a list of cells per row over a list of brackets, each bracket placed by a percentage. `CELL_CLASSES` maps a cell state to its classes. `FrameHeaderLine` is the panel's state line, with a `<progress>` bar while symbols are being placed |
+
+The frame view sizes its type with `clamp(small, n cqh, large)` inside a container of type `size` (`@container-size`), so it follows the panel's height. A width query such as `@2xl:` is wrong here: the overview's frame panel is wide and short, and it would get the focus view's sizes with no height to hold them.
 
 **`views/edge-log/`**: `EdgeLog.tsx` lists the newest 50 edges, newest first, as `edgeLine` writes them.
 
@@ -252,6 +261,8 @@ One jsdom environment for everything does not work: jsdom replaces the global `U
 `test-setup.ts` adds the `jest-dom` matchers and unmounts after each test. Testing Library cannot register that cleanup itself, because there are no vitest globals: test files import `describe`, `it`, and `expect` from `vitest`.
 
 jsdom lays nothing out and has no canvas, so `test-setup.ts` also gives every dom test a `ResizeObserver` that never reports and a `getContext` that returns `null`. A view that sizes itself or paints then renders and does nothing more. A test that needs sizes or painting stubs its own, as `SignalView.test.tsx` does: a fake observer the test drives with `reportSize(width, height)`, and the recording context from `views/signal/recordingContext.ts`.
+
+Because jsdom lays nothing out, a test cannot see cells that collapse or text that overlaps. A view drawn in DOM is looked at in the app at both of its sizes, in the overview and in its focus view, before it is called done.
 
 jsdom also shows focus on every focused element: it matches `:focus-visible` wherever `:focus` matches. What a mouse click leaves behind, focus without a focus ring, can only be seen in a browser.
 

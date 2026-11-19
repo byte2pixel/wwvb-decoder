@@ -169,12 +169,15 @@ A histogram of the last 600 symbol durations from 0 to 1,000 ms.
 
 The 60 seconds of the frame in progress, in three rows of 20. Every BCD field stays inside one row, and the position markers line up in the 10th and 20th columns.
 
-- A cell shows the symbol placed by `slotFilled`. Cell states: empty, empty marker slot (stronger border), `0` in a field, `0` in an unused second (no fill), `1`, `M`, error, and the cell being received now (accent border).
-- Above each cell: its bit weight, or the marker's name (`Pr`, `P1` to `P5`, `P0`). Below each row: a bracket under each field with its name.
+- A cell shows the symbol placed by `slotFilled`, written as the signal panel's chips write it: `0`, `1`, `M`, and `×` for an error. Cell states: empty, empty marker slot (stronger border), `0` in a field, `1`, `M`, error, and the cell being received now (accent border).
+- An unused second has a dashed border, empty or holding its 0, and its 0 has no fill. The time code leaves these seconds at 0, so without the dashes they read as part of the field beside them.
+- Above each cell: its bit weight, or the marker's name (`Pr`, `P1` to `P5`, `P0`). Below each row: a bracket under each field with its name: Minute, Hour, Day of year, UT1 sign, UT1, Year, LY, LS, DST. A bracket runs from the field's first second to its last, across a marker or an unused second between them.
+- The cell being received is the second after the last one placed. Frame sync places a second at the moment the next one begins, so no clock is needed. After second 59, and while frame sync is searching, no cell is marked.
 - The overview shows bits only. Values appear in the decoded-frames table, because the host decodes only a complete frame.
-- A `slotFilled` with a new `frameStartMicros` clears the cells first.
-- Header line: `Synced, 37 of 60 symbols` with a progress bar; `Searching, 1 of 2 markers`; or, for 5 s after `syncLost`, the host's reason.
-- Which seconds belong to which field comes from the host (see [Protocol additions](#protocol-additions)).
+- A `slotFilled` with a new `frameStartMicros` clears the cells first. A loss of sync does not: the cells keep what was placed, so the place where it broke stays on screen until the next frame starts.
+- Header line: `Synced, 37 of 60 symbols` with a progress bar; `Searching, 1 of 2 markers`; or, for 5 s after `syncLost`, `Sync lost: ` and the host's reason, in the fault color. With a source running and no event yet it reads `Searching`; with no source it is empty.
+- Which seconds belong to which field comes from the host (see [Protocol additions](#protocol-additions)). Before the layout arrives the cells have no weights, names, or brackets.
+- Drawn in DOM. A second is a twentieth of its row, so a bracket's place is a percentage and the view measures nothing. The type follows the panel's height, not its width: the overview's panel is wide and short, and the focus view's is tall.
 
 ### Decoded frames
 
@@ -296,7 +299,7 @@ Edges arrive in batches every 100 ms and only when the carrier changes, so the p
 - The page discards the anchor when the source resets or stops.
 - At replay speed 0, as fast as possible, there is no usable present: the signal panel stops scrolling and shows a note.
 
-The signal cursor, the cell being received, and the clock digits all read this module.
+The signal cursor and the clock digits read this module. The frame panel's cell being received does not: it follows the last second placed (see [Frame](#frame)).
 
 ### Sync loss
 

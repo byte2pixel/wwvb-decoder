@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { SourceClock } from "@/time/sourceClock";
 import { EdgeLog } from "@/views/edge-log/EdgeLog";
+import { FrameHeaderLine, FrameView } from "@/views/frame/FrameView";
 import {
   LastPulseLine,
   PulseWidthView,
@@ -79,7 +80,18 @@ export function EdgeLogPanel({ className }: Readonly<Placed>) {
   );
 }
 
-// The three below show their no-data state until Step 13 gives them a view.
+export function FramePanel({ className }: Readonly<Placed>) {
+  return (
+    <Panel
+      title="Frame"
+      stages={[4]}
+      state={<FrameHeaderLine />}
+      className={className}
+    >
+      <FrameView />
+    </Panel>
+  );
+}
 
 /** What a panel shows before it has anything to draw. */
 function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
@@ -90,14 +102,7 @@ function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
   );
 }
 
-export function FramePanel({ className }: Readonly<Placed>) {
-  return (
-    <Panel title="Frame" stages={[4]} className={className}>
-      <Placeholder>No symbols placed yet</Placeholder>
-    </Panel>
-  );
-}
-
+// The two below show their no-data state until Step 13 gives them a view.
 export function DecodedFramesPanel({ className }: Readonly<Placed>) {
   return (
     <Panel title="Decoded frames" stages={[5, 6]} className={className}>
