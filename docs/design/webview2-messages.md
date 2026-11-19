@@ -85,6 +85,8 @@ interface Frame { startMicros: number; endMicros: number; symbols: SymbolKind[] 
 
 Pipeline event `EdgeReceived`, batched. The host flushes the batch every 100 ms or when it holds 200 edges, whichever comes first, and never sends an empty batch. Items are in arrival order.
 
+The host also flushes the batch before every `sourceStatus`, so an edge is never sent after a status that it came before. A `stopped` or `error` status is the last message of its run, and no edge from before a source reset follows the reset. The page depends on this: it stops its source clock on such a status, and a batch arriving afterwards would start the clock again.
+
 ```ts
 interface EdgesPayload { items: Edge[] }
 ```
@@ -520,7 +522,7 @@ Cancels the current run and disposes the source. The host answers with `sourceSt
 
 ## Threading
 
-`DecoderPipeline` raises its events synchronously on the pump thread, the thread enumerating the source. The bridge's handlers do only two things there: serialize the event to a string, and queue it. Edges go into the batch; everything else goes straight to the dispatcher. `CoreWebView2.PostWebMessageAsJson` must be called on the WPF dispatcher thread, so the bridge posts through `Dispatcher.BeginInvoke`. The `seq` counter is assigned when a message is queued for the dispatcher, and the dispatcher queue is first in, first out, so sequence numbers match posting order.
+`DecoderPipeline` raises its events synchronously on the pump thread, the thread enumerating the source. The bridge's handlers do only two things there: serialize the event to a string, and queue it. Edges go into the batch; everything else goes straight to the dispatcher, and a `sourceStatus` sends the waiting batch ahead of itself. The batch is taken and queued under the lock that assigns `seq`, so the batch timer cannot queue it behind the status. `CoreWebView2.PostWebMessageAsJson` must be called on the WPF dispatcher thread, so the bridge posts through `Dispatcher.BeginInvoke`. The `seq` counter is assigned when a message is queued for the dispatcher, and the dispatcher queue is first in, first out, so sequence numbers match posting order.
 
 Commands arrive on the dispatcher in `CoreWebView2.WebMessageReceived`. Starting or stopping a source happens there too; the running pipeline is cancelled through its `CancellationTokenSource` and the new run starts on a thread-pool thread. Options changed by `setNoise`, `setReplaySpeed`, and `setReducedCarrierLevel` are written on the dispatcher and read on the pump thread; the Core types make those reads and writes volatile.
 

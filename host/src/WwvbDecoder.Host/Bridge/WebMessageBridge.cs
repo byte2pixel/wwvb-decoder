@@ -79,6 +79,11 @@ public sealed class WebMessageBridge : IMessagePoster, IDisposable
                 return;
             }
 
+            if (payload is SourceStatus)
+            {
+                FlushEdges();
+            }
+
             int seq = ++_sequence;
             string json = MessageJson.Serialize(type, seq, payload);
             _invokeOnUi(() => _postJson(json));
@@ -126,17 +131,20 @@ public sealed class WebMessageBridge : IMessagePoster, IDisposable
     /// <summary>Posts the pending edges as one <c>edges</c> message. Never posts an empty batch.</summary>
     private void FlushEdges()
     {
-        ImmutableArray<Edge> batch;
-        lock (_edgeLock)
+        lock (_postLock)
         {
-            if (_edgeBatch.Count == 0)
+            ImmutableArray<Edge> batch;
+            lock (_edgeLock)
             {
-                return;
+                if (_edgeBatch.Count == 0)
+                {
+                    return;
+                }
+                batch = [.. _edgeBatch];
+                _edgeBatch.Clear();
             }
-            batch = [.. _edgeBatch];
-            _edgeBatch.Clear();
+            Post("edges", new ItemsPayload<Edge>(batch));
         }
-        Post("edges", new ItemsPayload<Edge>(batch));
     }
 
     private void OnPulse(Pulse pulse) => Post("pulse", pulse);
