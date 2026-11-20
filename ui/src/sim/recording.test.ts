@@ -91,7 +91,7 @@ describe("the noisy synthetic fixture", () => {
     });
   });
 
-  it("locks the clock, then holds it through two rejected frames", () => {
+  it("locks the clock, holds it through a rejected frame, locks again, and holds again", () => {
     const statuses = messages.flatMap((message) =>
       message.type === "clock" ? [message.payload.status] : [],
     );
@@ -99,20 +99,46 @@ describe("the noisy synthetic fixture", () => {
     expect(statuses).toEqual([
       "acquiring",
       "locked",
-      "locked",
       "holding",
+      "locked",
       "holding",
     ]);
   });
 
-  it("has three accepted frames, then two rejected for different checks", () => {
+  it("has two frames rejected for different checks, with an accepted one between", () => {
     const results = messages.flatMap((message) =>
       message.type === "validation"
         ? [message.payload.failures.map((failure) => failure.check)]
         : [],
     );
 
-    expect(results).toEqual([[], [], [], ["consecutive"], ["unusedBits"]]);
+    expect(results).toEqual([[], [], ["consecutive"], [], ["unusedBits"]]);
+  });
+
+  it("rejects the frame with a flipped bit that follows the lost one, and keeps the clock right", () => {
+    const frames = messages.flatMap((message) =>
+      message.type === "validation" ? [message.payload] : [],
+    );
+    const clocks = messages.flatMap((message) =>
+      message.type === "clock" ? [message.payload.frameUtc] : [],
+    );
+
+    // Sent as 19:33, two minutes after the last accepted frame, and read as 19:32.
+    expect(frames[2].frame.frame.startMicros).toBe(181_000_000);
+    expect(frames[2].frame.minute).toBe(32);
+    expect(frames[2].failures).toEqual([
+      {
+        check: "consecutive",
+        detail: "expected 2026-12-10T19:33Z, got 2026-12-10T19:32Z",
+      },
+    ]);
+    expect(clocks).toEqual([
+      "2026-12-10T19:30:00Z",
+      "2026-12-10T19:31:00Z",
+      "2026-12-10T19:31:00Z",
+      "2026-12-10T19:34:00Z",
+      "2026-12-10T19:34:00Z",
+    ]);
   });
 
   it("loses frame sync twice, once before a frame is rejected and once after", () => {
@@ -129,8 +155,8 @@ describe("the noisy synthetic fixture", () => {
       "accepted",
       "accepted",
       "gap 2000 ms before second 52",
-      "accepted",
       "rejected",
+      "accepted",
       "rejected",
       "gap 2000 ms before second 15",
     ]);

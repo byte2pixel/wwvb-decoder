@@ -46,16 +46,13 @@ public sealed class HostEnvironment(TimeProvider timeProvider, string capturesDi
     public IEdgeSource CreateReplay(string path, double speed)
     {
         string directory = Path.GetFullPath(capturesDirectory) + Path.DirectorySeparatorChar;
-        if (!Path.GetFullPath(path).StartsWith(directory, StringComparison.OrdinalIgnoreCase))
-        {
-            throw new FileNotFoundException("Not a capture in the captures directory.", path);
-        }
-
-        return new ReplayEdgeSource(Adapters.CaptureFile.Open(path), timeProvider)
-        {
-            Speed = speed,
-            Loop = true,
-        };
+        return !Path.GetFullPath(path).StartsWith(directory, StringComparison.OrdinalIgnoreCase)
+            ? throw new FileNotFoundException("Not a capture in the captures directory.", path)
+            : new ReplayEdgeSource(Adapters.CaptureFile.Open(path), timeProvider)
+            {
+                Speed = speed,
+                Loop = true,
+            };
     }
 
     /// <inheritdoc/>

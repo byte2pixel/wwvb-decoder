@@ -164,7 +164,7 @@ export const stages: readonly Stage[] = [
     number: 6,
     name: "Validate",
     type: "IStage<DecodedFrame, ValidationResult>",
-    rule: "A frame is accepted when it passes all ten checks; the last is that its time is one minute after the frame before.",
+    rule: "A frame is accepted when it passes all ten checks; the last is that its time is the last accepted frame's plus the minutes passed since.",
     view: validateStage,
   },
   {

@@ -37,9 +37,8 @@ export default defineConfig({
         },
       },
     ],
-    // junit for the CI test-results check; test-results/ and coverage/ are git-ignored.
-    reporters: ["default", "junit"],
-    outputFile: { junit: "test-results/junit.xml" },
+    // No reporters are named, so vitest uses its defaults: in GitHub Actions that adds a job
+    // summary and an annotation for each failed test. coverage/ is git-ignored.
     coverage: {
       provider: "v8",
       include: ["src/**"],

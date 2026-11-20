@@ -294,15 +294,29 @@ One `ValidationResult` per frame. Every check runs, in `ValidationCheck` order, 
 
 UT1 tenths are checked by `Ut1Range` only, because UT1 is not one of the BCD fields.
 
-**Consecutive.** The frame's time is `new DateTime(2000 + Year, 1, 1, Hour, Minute, 0, DateTimeKind.Utc).AddDays(DayOfYear - 1)`. Real date arithmetic carries minute, hour, day, and year rollovers. The check compares this frame with the last accepted one, `prev`:
+**Consecutive.** The frame's time is `new DateTime(2000 + Year, 1, 1, Hour, Minute, 0, DateTimeKind.Utc).AddDays(DayOfYear - 1)`. Real date arithmetic carries minute, hour, day, and year rollovers.
 
-- **Skipped**, which is not a failure, when there is no `prev`; when `prev` started more than 90 s before this frame (`StartMicros` difference above 90_000_000); or when `BcdDigits`, `MinuteRange`, `HourRange`, or `DayOfYearRange` failed, because then the time cannot be built.
-- **Passes** when this frame's time is exactly one minute after `prev`'s, and the `StartMicros` difference is 60_000_000 ± 50_000.
-- **Fails** otherwise.
+The check asks whether this frame *follows* an earlier one. The number of minutes between the two comes from their start times, not from what they encode:
 
-A leap second gets no special handling, and `LeapSecondPending` plays no part in this check. `FrameSync` loses sync on the extra marker, so the next frame starts 121 s after `prev` and `Consecutive` is skipped.
+- `gap` is this frame's `StartMicros` minus the earlier frame's.
+- `n` is the number of minutes between them. It is 1 when `gap` is at most 90_000_000. Above that it is `gap` rounded to the nearest multiple of 60_000_000 and divided by 60_000_000.
+- The start is *on the minute* when `gap` is `n` × 60_000_000 ± `n` × 50_000.
+- The frame follows the earlier one when `n` is at most 60, the start is on the minute, and the frame's time is exactly `n` minutes after the earlier frame's.
 
-State: the last accepted `DecodedFrame`, replaced only when a frame is accepted. `Reset()` forgets it; after a source reset, timestamps from before are not comparable.
+The frame is compared with `prev`, the last accepted frame:
+
+- **Skipped**, which is not a failure, when there is no `prev`; when `BcdDigits`, `MinuteRange`, `HourRange`, or `DayOfYearRange` failed, because then the time cannot be built; when `n` is above 60; or when `n` is 2 or more and the start is not on the minute. In the last two cases the start times do not say how many minutes have passed. A `StartMicros` below `prev`'s wraps to a `gap` far above 60 minutes, so that is skipped too.
+- **Passes** when the frame follows `prev`.
+- **Passes** also when the frame follows the *challenger*: the most recent frame whose only failure was `Consecutive`. Two frames that agree with each other outvote a `prev` that agrees with neither.
+- **Fails** otherwise. `Detail` comes from the comparison with `prev`: the expected and the decoded time when they differ, and the start time when only that is off, which can happen only at `n` = 1.
+
+Counting the minutes is what lets the check run after a lost or a rejected frame. `prev` is then two or more minutes back, and the frame is still held to the time `prev` predicts. The tolerance is 50 ms for each minute, so at the limit of 60 minutes a start may be 3 s off, far below the 30 s at which `n` would round to the wrong minute.
+
+The challenger is there because `prev` can be wrong. The first frame after a start, a reset, or a skipped comparison is accepted with nothing to check it against. Without the challenger, every later frame would be compared with that frame and rejected for an hour. With it, the first right frame is rejected and the second is accepted.
+
+A leap second gets no special handling, and `LeapSecondPending` plays no part in this check. `FrameSync` loses sync on the extra marker, so the next frame starts 121 s after `prev`. That is 1 s off two minutes, outside the 100 ms allowed, and `Consecutive` is skipped.
+
+State: `prev`, the last accepted `DecodedFrame`, replaced only when a frame is accepted; and the challenger, set when a frame's only failure is `Consecutive` and cleared when a frame is accepted. `Reset()` forgets both; after a source reset, timestamps from before are not comparable.
 
 ## Stage 7: clock
 
@@ -696,8 +710,10 @@ Noise lengthens the 0.2 s pulse at second 6 into a 1: second 6 reads `One`. Ever
 
 **Stage 5.** Minute units are now `0 1 0 1` (4 + 1), so `DecodedFrame` has `Minute = 35`, `Hour = 19`, `DayOfYear = 344`, `Year = 26`, `Ut1Sign = Plus`, `Ut1Tenths = 0`, both flags false, `Dst = Standard`, and `ErrorSeconds` empty.
 
-**Stage 6.** Every check but the last passes. The markers are in place, the unused seconds are zero, there are no `Error` symbols, every BCD digit is at most 9, and minute 35, hour 19, day 344, the UT1 sign, and 0 tenths are all legal. `Consecutive` runs because `prev` started 60 s earlier, within 90 s. The `StartMicros` difference is exactly 60_000_000, but the frame's time is 19:35, not 19:31. The result is `Accepted = false`, with `Failures = [Consecutive: "expected 2026-12-10T19:31Z, got 2026-12-10T19:35Z"]`.
+**Stage 6.** Every check but the last passes. The markers are in place, the unused seconds are zero, there are no `Error` symbols, every BCD digit is at most 9, and minute 35, hour 19, day 344, the UT1 sign, and 0 tenths are all legal. `Consecutive` compares the frame with `prev`, which started 60 s earlier, so `n` is 1. The `StartMicros` difference is exactly 60_000_000, so the start is on the minute, but the frame's time is 19:35, not 19:31. The result is `Accepted = false`, with `Failures = [Consecutive: "expected 2026-12-10T19:31Z, got 2026-12-10T19:35Z"]`.
 
 This is ADR-0006's case: one flipped bit makes a frame that is legal on its own, and only the comparison with the previous frame catches it. Without a checksum, nothing else can.
 
-The last accepted frame stays 19:30. A clean 19:32 frame at 121_000_000 then starts 120 s after it, so `Consecutive` is skipped and the frame is accepted on the other checks alone. If the clock was `Locked`, it went to `Holding` on the rejection and returns to `Locked` with that frame.
+The last accepted frame stays 19:30, and the rejected frame becomes the challenger. A clean 19:32 frame at 121_000_000 then starts 120 s after `prev`: `n` is 2, the start is on the minute, and 19:32 is two minutes after 19:30, so the frame is accepted. Had noise flipped a bit in that frame as well, it would have been rejected like the one before it. If the clock was `Locked`, it went to `Holding` on the rejection and returns to `Locked` with the accepted frame.
+
+The challenger decides when it is `prev` that is wrong. Suppose the flipped frame, reading 19:35 at 61_000_000, is the first frame after a reset. It is accepted, because there is nothing to compare it with. The clean 19:32 frame at 121_000_000 is then rejected, with `expected 2026-12-10T19:36Z, got 2026-12-10T19:32Z`, and becomes the challenger. The clean 19:33 frame at 181_000_000 does not follow `prev` either, which predicts 19:37. But it follows the challenger: it starts 60 s later and its time is one minute on. It is accepted and becomes `prev`.

@@ -52,9 +52,11 @@ public enum ValidationCheck
     Ut1Range,
 
     /// <summary>
-    /// The frame's time isn't exactly one minute after the last accepted frame,
-    /// or the start times aren't 60 s ± 50 ms apart.
-    /// Skipped when there's no previous frame within 90 s.
+    /// The frame's time isn't as many minutes after the last accepted frame's as passed between
+    /// the two start times, or the frame started within 90 s of it and not 60 s ± 50 ms later.
+    /// A frame passes when it follows the last frame that failed this check alone.
+    /// Skipped when there's no previous frame, or when the start times don't give a whole number
+    /// of minutes up to 60.
     /// </summary>
     Consecutive,
 }
