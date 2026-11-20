@@ -107,7 +107,7 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md`. Each stage also carries the host type and the one-sentence rule that its focus view's header shows |
 | `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone. A click focuses the stage, the focused stage's button is pressed (`aria-pressed`), and a click on it goes back to the overview |
 | `Panel.tsx` | A titled region with a chip per stage, an optional line of state, and an error boundary around its children: a view that throws shows a message in its own panel and the rest of the screen keeps running |
-| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, `DecodedFramesPanel` (three rows unless `rows` says otherwise; a focus view asks for 16, which is what fits a 16:9 window), and `TimePanel`, which shows a no-data state until Step 13. The overview and the focus views lay out the same components |
+| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, `DecodedFramesPanel` (three rows unless `rows` says otherwise; a focus view asks for 16, which is what fits a 16:9 window), and `TimePanel`, which takes the source clock. The overview and the focus views lay out the same components |
 | `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels |
 | `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
 | `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too |
@@ -155,6 +155,13 @@ The frame view sizes its type with `clamp(small, n cqh, large)` inside a contain
 | --- | --- |
 | `model.ts` | `frameRows(validations, frameCount)`: the rows, newest first, each with its number since the source reset, its 60 symbols, the decoded values, and the result in words. `failureLine(failure)` writes one failure as its check in words and the host's detail. Three `Record` tables hold the words for a UT1 sign, a DST status, and a check, so a value the protocol gains later does not compile until it has its text |
 | `FramesTable.tsx` | A `<table>` with fixed column widths in percent, the strip of 60 ticks, a tint on a rejected row, and every failure in the result's tooltip. `maxRows` is how many rows it shows; when they do not fit, the table scrolls under its headings |
+
+**`views/time/`**, the clock the decoder has built, in DOM:
+
+| File | Holds |
+| --- | --- |
+| `model.ts` | `decodedTimeMs(clock, atMicros)`: the last accepted frame's time plus the source time since that frame began. `clockFace` cuts it to the second as digits, date, and day of year. `statusChips` lists the four statuses with the current one marked. `lockRows`, `offsetRow`, and `localTimeRow` are the four rows; under replay the offset comes from the capture's newest `# wall` line |
+| `TimeView.tsx` | `TimeView` reads the source clock on every animation frame and renders when the decoded second changes, so it ticks once a second at any replay speed. One font size from the panel's width and height (`min(19cqw, 22cqh)`) scales the rest, which is sized in `em`. `ClockStatusLine` is the panel's state line |
 
 **`views/edge-log/`**: `EdgeLog.tsx` lists the newest 50 edges, newest first, as `edgeLine` writes them.
 

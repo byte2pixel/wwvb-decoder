@@ -9,6 +9,7 @@ import {
 import { ALL_LANES, type LaneName } from "@/views/signal/model";
 import { SignalView } from "@/views/signal/SignalView";
 import { timeWindowFor } from "@/views/signal/timeWindow";
+import { ClockStatusLine, TimeView } from "@/views/time/TimeView";
 import { Panel } from "./Panel";
 import { useAppStore } from "@/state/store";
 
@@ -109,13 +110,19 @@ export function DecodedFramesPanel({
   );
 }
 
-// The one below shows its no-data state until Step 13 gives it a view.
-export function TimePanel({ className }: Readonly<Placed>) {
+interface TimePanelProps extends Placed {
+  clock: SourceClock;
+}
+
+export function TimePanel({ clock, className }: Readonly<TimePanelProps>) {
   return (
-    <Panel title="Time" stages={[7]} state="No signal" className={className}>
-      <p className="flex h-full items-center justify-center font-mono text-[3.75rem] font-semibold text-muted-foreground">
-        --:--:--
-      </p>
+    <Panel
+      title="Time"
+      stages={[7]}
+      state={<ClockStatusLine />}
+      className={className}
+    >
+      <TimeView clock={clock} />
     </Panel>
   );
 }

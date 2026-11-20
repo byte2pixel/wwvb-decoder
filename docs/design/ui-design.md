@@ -199,11 +199,15 @@ Before the first frame the panel shows its column headings and `No frames yet`.
 ### Time
 
 - The clock digits are `frameUtc` plus the source time elapsed since `frameStartMicros`, so replay at 10× runs the clock at 10×. Before the first accepted frame they read `--:--:--`.
-- Under the digits: the date and day of year.
-- The four statuses in a row, with the current one highlighted in its health color.
-- Four rows: last accepted frame; accepted in a row, or rejected since then out of 3; offset from the PC clock; local time, US Central.
+- The digits tick on the decoded second, read from the source clock on every animation frame. With no present to read, as when the source is stopped, they show the time at the end of the last accepted frame.
+- Under the digits: the date and day of year, `2026-12-10 · day 344`.
+- The four statuses in a row, No signal, Acquiring, Locked, Holding, with the current one outlined in its health color. The panel's header line names it too.
+- Four rows: last accepted frame, `19:30 UTC`; accepted in a row, or rejected since then as `2 of 3`; offset from the PC clock, `+37 ms`; local time, US Central, `13:30:07 CST`.
+- The last accepted frame's time is the frame's own, the time at its first second. A frame is only known when it has ended, so that row and the decoded-frames table read a minute behind the digits. The digits add the source time since the frame began.
+- The status changes only when a frame is validated. A loss of frame sync yields no frame, so the clock stays as it was, Locked included, while the frame panel searches; it goes to Holding on the next rejected frame.
+- One font size, set from the panel's width and height, scales everything in the view.
 - Under replay the offset row reads `Recorded offset` and is computed from the most recent `# wall` line received as `info`. It shows a dash until one arrives.
-- Local time uses the `dst` field. On a `beginsToday` or `endsToday` day it is marked approximate, because the bits do not carry the 02:00 switch.
+- Local time uses the `dst` field. On a `beginsToday` or `endsToday` day it uses the offset the day began with and is marked approximate, because the bits do not carry the 02:00 switch.
 
 ### App bar
 

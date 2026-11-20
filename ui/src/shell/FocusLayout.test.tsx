@@ -133,6 +133,27 @@ describe("FocusLayout", () => {
     },
   );
 
+  it("shows stage 7 as the time panel, with the clock's status and its rows", () => {
+    useAppStore.setState({
+      clock: {
+        status: "holding",
+        frameUtc: "2026-12-10T19:30:00Z",
+        frameStartMicros: 1_000_000,
+        frameEndMicros: 60_800_000,
+        offsetFromPcMs: 37,
+        consecutiveAccepted: 0,
+        rejectedSinceLastAccepted: 2,
+      },
+    });
+    focusOn(7);
+
+    const time = screen.getByRole("region", { name: "Time" });
+    expect(time).toHaveTextContent("19:30 UTC");
+    expect(time).toHaveTextContent("2 of 3");
+    // Once in the panel's header line and once among the four statuses.
+    expect(within(time).getAllByText("Holding")).toHaveLength(2);
+  });
+
   it.each([
     [5, "Decoded frames", "No frames yet"],
     [6, "Decoded frames", "No frames yet"],

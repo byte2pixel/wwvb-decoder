@@ -25,7 +25,7 @@ function Overview({ clock }: Readonly<{ clock: SourceClock }>) {
       <SignalPanel clock={clock} />
       <PulseWidthPanel />
       <FramePanel />
-      <TimePanel className="row-span-2" />
+      <TimePanel clock={clock} className="row-span-2" />
       <DecodedFramesPanel />
     </main>
   );
