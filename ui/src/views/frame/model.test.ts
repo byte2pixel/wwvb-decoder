@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   frameLayoutSchema,
+  hostMessageSchema,
+  type DecodedFrame,
   type FrameSyncEvent,
   type SymbolKind,
   type SecondRole,
@@ -9,9 +12,12 @@ import type { FilledSlot } from "@/state/appState";
 import fixture from "@/sim/fixtures/frameLayout.json";
 import {
   cellState,
+  decodedFrameLine,
   fieldBrackets,
+  fieldValues,
   frameCells,
   frameHeader,
+  frameSymbols,
   placedSymbols,
   receivingSecond,
   ROW_SECONDS,
@@ -20,6 +26,19 @@ import {
 
 /** The host's layout, from the copy of its message example. */
 const layout = frameLayoutSchema.parse(fixture.payload);
+
+/** The host's decodedFrame example: 19:30 on day 344 of 2026. */
+const decoded = ((): DecodedFrame => {
+  const file = new URL(
+    "../../../../docs/design/message-examples/decodedFrame.json",
+    import.meta.url,
+  );
+  const message = hostMessageSchema.parse(
+    JSON.parse(readFileSync(file, "utf8")),
+  );
+  if (message.type !== "decodedFrame") throw new Error("not a decoded frame");
+  return message.payload;
+})();
 
 describe("frameCells", () => {
   it("has 60 cells with no role and no label before the layout arrives", () => {
@@ -315,6 +334,98 @@ describe("frameHeader", () => {
       text: "Sync lost: expected marker at second 9, got Zero",
       progress: null,
     });
+  });
+});
+
+describe("frameSymbols", () => {
+  it("has 60 empty seconds before the first complete frame", () => {
+    const symbols = frameSymbols(null);
+
+    expect(symbols).toHaveLength(60);
+    expect(symbols.every((symbol) => symbol === null)).toBe(true);
+  });
+
+  it("is the frame's own symbols, indexed by second", () => {
+    expect(frameSymbols(decoded)).toEqual(decoded.frame.symbols);
+  });
+});
+
+describe("fieldValues", () => {
+  it("has no values before the first complete frame", () => {
+    expect(fieldValues(null)).toBeNull();
+  });
+
+  it("writes what the host decoded for each field of its example", () => {
+    expect(fieldValues(decoded)).toEqual({
+      minute: "30",
+      hour: "19",
+      dayOfYear: "344",
+      ut1Sign: "+",
+      ut1Correction: "0.0 s",
+      year: "26",
+      leapYear: "no",
+      leapSecondPending: "no",
+      dst: "standard",
+    });
+  });
+
+  it("writes a sign, a correction, the two flags, and the DST status in words", () => {
+    const values = fieldValues({
+      ...decoded,
+      ut1Sign: "minus",
+      ut1Tenths: 7,
+      leapYear: true,
+      leapSecondPending: true,
+      dst: "beginsToday",
+    });
+
+    expect(values).toMatchObject({
+      ut1Sign: "-",
+      ut1Correction: "0.7 s",
+      leapYear: "yes",
+      leapSecondPending: "yes",
+      dst: "begins today",
+    });
+  });
+
+  it("has a value for every field the layout brackets", () => {
+    const values = fieldValues(decoded);
+
+    expect(Object.keys(values ?? {}).toSorted()).toEqual(
+      fieldBrackets(layout)
+        .map((bracket) => bracket.role)
+        .toSorted(),
+    );
+  });
+});
+
+describe("decodedFrameLine", () => {
+  /** The example with an error symbol in each of these seconds. */
+  const withErrors = (...seconds: number[]): DecodedFrame => ({
+    ...decoded,
+    frame: {
+      ...decoded.frame,
+      symbols: decoded.frame.symbols.map((symbol, second) =>
+        seconds.includes(second) ? "error" : symbol,
+      ),
+    },
+  });
+
+  it.each<[string, DecodedFrame | null, string]>([
+    ["before the first frame", null, "No frame yet"],
+    ["for a frame with no error symbol", decoded, "No error symbols"],
+    ["for one", withErrors(17), "Error symbol in second 17"],
+    ["for several", withErrors(17, 42), "Error symbols in seconds 17, 42"],
+  ])("reads %s", (_, frame, text) => {
+    expect(decodedFrameLine(frame)).toBe(text);
+  });
+
+  it("names an error in an unused second, which the host's list leaves out", () => {
+    // Second 44 is unused, so the host does not list it among the field seconds in error.
+    const frame = withErrors(44);
+
+    expect(frame.errorSeconds).toEqual([]);
+    expect(decodedFrameLine(frame)).toBe("Error symbol in second 44");
   });
 });
 

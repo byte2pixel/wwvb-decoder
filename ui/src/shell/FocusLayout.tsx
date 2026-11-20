@@ -4,8 +4,10 @@ import {
   DecodedFramesPanel,
   EdgeLogPanel,
   FramePanel,
+  LastFramePanel,
   PulseWidthPanel,
   SignalPanel,
+  SyncLossPanel,
   TimePanel,
 } from "./panels";
 import type { Stage } from "./stages";
@@ -46,10 +48,16 @@ function StagePanels({ stage, clock }: Readonly<FocusProps>) {
         </div>
       );
     case 4:
-      return <FramePanel className="h-full" />;
+      return (
+        <div className="grid h-full grid-rows-[minmax(0,1fr)_10.5rem] gap-3">
+          <FramePanel />
+          <SyncLossPanel />
+        </div>
+      );
     case 5:
+      return <LastFramePanel className="h-full" />;
     case 6:
-      return <DecodedFramesPanel rows={16} className="h-full" />;
+      return <DecodedFramesPanel rows={16} details className="h-full" />;
     default:
       // Stage 7.
       return <TimePanel clock={clock} className="h-full" />;

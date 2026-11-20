@@ -40,7 +40,7 @@ CI runs `format:check`, `lint`, `test`, and `build`; `../verify.ps1 -Only ui` ru
 | `time/` | The source clock, and the feed that keeps it on the stream's time |
 | `sim/` | The simulator, the recorder, and their fixtures: the recorded stream and a copy of the `frameLayout` example. Development builds only |
 | `shell/` | The frame of the screen: app bar, pipeline rail, panels, focus layout, keyboard map, status bar, protocol log |
-| `views/` | What the panels show, one folder per view: the signal lanes, the pulse-width histogram, the edge log |
+| `views/` | What the panels show, one folder per view: the signal lanes, the pulse-width histogram, the frame, the decoded-frames table, the clock, the edge log |
 | `components/ui/` | Controls written by the shadcn CLI. They are linted and formatted like the rest, and left out of coverage |
 | `lib/` | `cn`, which the generated controls import |
 
@@ -55,6 +55,7 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 | `messages.ts` | zod schemas for every host envelope and page command, and the types inferred from them. The schemas are the source of truth; no type is written by hand. `hostMessageSchema` is a discriminated union on `type`, `commandSchema` on `command`, with the three `selectSource` shapes nested on `source`. |
 | `bridge.ts` | `createBridge(webview)` wraps `window.chrome.webview`: `onMessage` validates each event with `safeParse` and drops, with a `console.warn`, anything that fails; `send` posts a command object. `findWebView()` returns the real one, or `undefined` in a plain browser. `Bridge` is the interface the page depends on; the simulator implements it too. |
 | `edgeLine.ts` | `edgeLine(edge)` writes an edge as the serial protocol does, `H 12345678`. The rail's stage 1 readout and the edge log both call it. |
+| `decodedText.ts` | How the page writes a decoded frame's values that are not plain numbers: `UT1_SIGNS`, `DST_TEXT`, and `ut1Seconds(tenths)`. The decoded-frames table and the last complete frame both read them. Each table is a `Record` over the protocol's type, so a value the protocol gains later does not compile until it has its text. |
 | `*.test.ts` | `messages.test.ts` parses every file in `docs/design/message-examples/` through the schema its file name selects, so the host's serializer tests and these tests assert against the same files. The bridge is tested with a fake webview object, no DOM. |
 
 ## State
@@ -68,6 +69,7 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 | `frameCount`, `lastSeq`, `lostMessages` | Counters. `frameCount` counts `validation` messages; `lostMessages` adds up the gaps in `seq` |
 | `slots` | The newest 120 `slotFilled` events, each with the start of the symbol it placed: the symbol that arrived just before it |
 | `syncLoss` | The latest loss of frame sync, held for 5 s (see "Sync loss" in `ui-design.md`) |
+| `syncLosses` | The newest 5 losses of frame sync, each with its count since the source reset and the host's reason. Only a source reset clears them |
 | `log` | The protocol log: the last 200 messages and a count per type |
 
 A `sourceStatus` whose `detail` starts with `reset:` is a source reset. The reducer goes back to `initialState` and keeps `ports`, `captures`, `frameLayout`, the sequence tracking, and the log. The host sends the layout only in its reply to `hello`, so a reset that dropped it would leave the frame panel without one.
@@ -107,8 +109,8 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md`. Each stage also carries the host type and the one-sentence rule that its focus view's header shows |
 | `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone. A click focuses the stage, the focused stage's button is pressed (`aria-pressed`), and a click on it goes back to the overview |
 | `Panel.tsx` | A titled region with a chip per stage, an optional line of state, and an error boundary around its children: a view that throws shows a message in its own panel and the rest of the screen keeps running |
-| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, `DecodedFramesPanel` (three rows unless `rows` says otherwise; a focus view asks for 16, which is what fits a 16:9 window), and `TimePanel`, which takes the source clock. The overview and the focus views lay out the same components |
-| `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels |
+| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, `SyncLossPanel`, `LastFramePanel`, `DecodedFramesPanel` (three rows unless `rows` says otherwise, and `details` lists every failure in its row; the stage 6 focus view asks for 16 rows, which is what fits a 16:9 window, with the details), and `TimePanel`, which takes the source clock. The overview and the focus views lay out the same components; the edge log, the sync losses, and the last frame appear only in a focus view |
+| `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels. `StagePanels` is the "Baseline" column of the focus-view table in `ui-design.md` as code |
 | `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
 | `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too |
 | `theme.ts` | `toggleTheme()`, for the app bar's button and the `T` key |
@@ -140,21 +142,23 @@ A view is split as ADR-0007 asks: a pure function decides what to show and is te
 | `model.ts` | `pulseWidthHistogram(symbols)`: 40 bins of 25 ms, each with a count, a height against the fullest bin, and the host's class of its newest pulse. The page does not classify a duration. `lastPulseText(last)` writes the panel's state line |
 | `PulseWidthView.tsx` | The bars, the four boundaries, the error zones, and the last-pulse line. Every position is a percentage of the plot, so the view measures nothing. The four boundaries repeat the defaults of the host's `SymbolClassifier`, because no message carries them |
 
-**`views/frame/`**, the frame in progress as three rows of twenty seconds, in DOM:
+**`views/frame/`**, a frame as three rows of twenty seconds, in DOM. The frame in progress and the last complete frame share one grid:
 
 | File | Holds |
 | --- | --- |
-| `model.ts` | Pure functions, each from one slice of the store. `frameCells(layout)`: the 60 seconds with their role and the weight or marker name above each. `fieldBrackets(layout)`: each field's first and last second and its name. `placedSymbols(slots)`: the symbol in each second of the newest frame, which is how a new frame clears the cells. `receivingSecond(frameSync)`: the second after the one just placed. `frameHeader(state)`: the header line's text and the share of the frame placed. `cellState(role, symbol)` names how a cell is drawn |
-| `FrameView.tsx` | `FrameView` puts them together: a list of cells per row over a list of brackets, each bracket placed by a percentage. `CELL_CLASSES` maps a cell state to its classes. `FrameHeaderLine` is the panel's state line, with a `<progress>` bar while symbols are being placed |
+| `model.ts` | Pure functions, each from one slice of the store. `frameCells(layout)`: the 60 seconds with their role and the weight or marker name above each. `fieldBrackets(layout)`: each field's first and last second and its name. `placedSymbols(slots)`: the symbol in each second of the newest frame, which is how a new frame clears the cells. `receivingSecond(frameSync)`: the second after the one just placed. `frameHeader(state)`: the header line's text and the share of the frame placed. `cellState(role, symbol)` names how a cell is drawn. For the last complete frame: `frameSymbols(decodedFrame)`, `fieldValues(decodedFrame)` (each field's decoded value in words, keyed by its role), and `decodedFrameLine(decodedFrame)` (the seconds that hold an error symbol) |
+| `FrameView.tsx` | `FrameGrid` draws a frame from the symbols it is given: a list of cells per row over a list of brackets, each bracket placed by a percentage. With `values` it writes each field's value under its name and makes the bracket strip taller. `CELL_CLASSES` maps a cell state to its classes. `FrameView` is the grid with the symbols frame sync has placed and the second being received. `FrameHeaderLine` is the panel's state line, with a `<progress>` bar while symbols are being placed |
+| `DecodedFrameView.tsx` | `DecodedFrameView` is the grid with the newest `decodedFrame`: its symbols, and the host's decoded value under each field. `DecodedFrameLine` is its panel's state line |
+| `SyncLossList.tsx` | The store's `syncLosses`, newest first, each as its number and the host's reason |
 
-The frame view sizes its type with `clamp(small, n cqh, large)` inside a container of type `size` (`@container-size`), so it follows the panel's height. A width query such as `@2xl:` is wrong here: the overview's frame panel is wide and short, and it would get the focus view's sizes with no height to hold them.
+The frame grid sizes its type with `clamp(small, n cqh, large)` inside a container of type `size` (`@container-size`), so it follows the panel's height. A width query such as `@2xl:` is wrong here: the overview's frame panel is wide and short, and it would get the focus view's sizes with no height to hold them.
 
 **`views/frames-table/`**, one row per validated frame, in DOM:
 
 | File | Holds |
 | --- | --- |
-| `model.ts` | `frameRows(validations, frameCount)`: the rows, newest first, each with its number since the source reset, its 60 symbols, the decoded values, and the result in words. `failureLine(failure)` writes one failure as its check in words and the host's detail. Three `Record` tables hold the words for a UT1 sign, a DST status, and a check, so a value the protocol gains later does not compile until it has its text |
-| `FramesTable.tsx` | A `<table>` with fixed column widths in percent, the strip of 60 ticks, a tint on a rejected row, and every failure in the result's tooltip. `maxRows` is how many rows it shows; when they do not fit, the table scrolls under its headings |
+| `model.ts` | `frameRows(validations, frameCount)`: the rows, newest first, each with its number since the source reset, its 60 symbols, the decoded values, and the result in words. `failureLine(failure)` writes one failure as its check in words and the host's detail. `CHECK_NAMES` holds the words for a check; the words for a UT1 sign and a DST status come from `protocol/decodedText.ts` |
+| `FramesTable.tsx` | A `<table>` with fixed column widths in percent, the strip of 60 ticks, a tint on a rejected row, and every failure in the result's tooltip. `maxRows` is how many rows it shows; when they do not fit, the table scrolls under its headings. With `details` a rejected row reads `Rejected` over one line per failure, in a list named `Failures of frame N`, with no tooltip, and the columns give the result more of the width (`narrow` in `COLUMNS`) |
 
 **`views/time/`**, the clock the decoder has built, in DOM:
 

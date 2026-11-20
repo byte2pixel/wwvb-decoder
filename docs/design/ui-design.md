@@ -181,7 +181,7 @@ The 60 seconds of the frame in progress, in three rows of 20. Every BCD field st
 
 ### Decoded frames
 
-One row per `validation` message, newest first. Three rows in the overview, and the newest 16 in the focus views of stages 5 and 6; the store keeps 20. Sixteen is what a 16:9 window holds without cutting a row, and the page scales with the window, so that is true at 720p and at 1080p alike. In a window with less room the table scrolls under its headings.
+One row per `validation` message, newest first. Three rows in the overview, and the newest 16 in the stage 6 focus view; the store keeps 20. Sixteen is what a 16:9 window holds without cutting a row, and the page scales with the window, so that is true at 720p and at 1080p alike. In a window with less room the table scrolls under its headings.
 
 | Column | Content |
 | --- | --- |
@@ -192,7 +192,7 @@ One row per `validation` message, newest first. Three rows in the overview, and 
 | DST | `standard`, `dst`, `begins today`, `ends today` |
 | Result | `Accepted`, or `Rejected: ` and the first failure's check in words, such as `error symbols` or `BCD digits`. A rejected row has a `bad` tint |
 
-The result's tooltip lists every failure of a rejected frame, one to a line: the check in words, then the host's `detail`. The stage 6 focus view will show the same lines in the table.
+The result's tooltip lists every failure of a rejected frame, one to a line: the check in words, then the host's `detail`. The stage 6 focus view writes the same lines in the table (see [Focus views](#focus-views)).
 
 Before the first frame the panel shows its column headings and `No frames yet`.
 
@@ -242,16 +242,27 @@ Pressing `1` to `7` replaces the panels with one stage, sized to be read from th
 | 1 Edges | The carrier lane enlarged, beside the last 50 edges as the serial protocol writes them | Informational lines too: the banner and `# dropped` |
 | 2 Pulses | The carrier and pulse lanes enlarged | The drop and bridge rules drawn on a real glitch |
 | 3 Symbols | The pulse-width panel enlarged, with the symbol lane | The last pulse landing in its class, as input, rule, output |
-| 4 Frame sync | The frame panel enlarged, with the last sync-lost reasons | The searching and synced states as a diagram |
+| 4 Frame sync | The frame panel enlarged, over the last five sync-lost reasons | The searching and synced states as a diagram |
 | 5 Decode | The last complete frame, with each field's value from `decodedFrame` | The weights of the set bits listed under each field, and the record handed to stage 6 |
-| 6 Validate | The table at 20 rows with every failure's detail | The ten checks as a list for the selected frame |
+| 6 Validate | The table at 16 rows with every failure's detail | The ten checks as a list for the selected frame |
 | 7 Clock | The time panel enlarged | The four statuses as a state diagram with the counters |
 
 In stage 1 the edges are listed newest first, as the protocol log lists its messages, each as the rail writes the last edge. The 50 lines run down three columns, filled one after the other. Before the first edge the list reads `No edges yet`.
 
-In stage 5 the page lists which weights are set; the sum it shows is the host's value.
+In stage 4 a second panel, Sync losses, sits under the frame panel. It lists the newest five losses of frame sync, newest first, each with its count since the source reset and the host's reason: `#2 gap 2000 ms before second 15`. The frame panel's header shows a loss for 5 s; this list keeps it until the source resets. Before the first loss it reads `No sync loss yet`.
 
-A baseline view is built from the overview's panels, each with its header and its error boundary. A signal panel that shows fewer lanes names those lanes and carries only their stage chips. Until Step 13 fills them, stages 4 to 7 show their overview panel in its no-data state, and stages 5 and 6 both show the decoded-frames panel.
+In stage 5 one panel, Last complete frame, shows the newest `decodedFrame`:
+
+- Its 60 symbols are drawn in the frame panel's grid, with the same weights, marker names, and brackets. No cell is marked as being received, because the frame is over.
+- Under each field's name is the value the host decoded: the minute, hour, day, and two-digit year as numbers; the UT1 sign as `+`, `-`, or `?`; the correction as `0.3 s`; `yes` or `no` for LY and LS; and the DST status in the table's words. The page does not add up the bits.
+- The header line names the seconds that hold an error symbol, `Error symbol in second 44`, or reads `No error symbols`. It counts the frame's own symbols, so it names every cell drawn as an error. The host's `errorSeconds` lists field seconds only and leaves out an unused second.
+- Before the first frame the cells are empty, the brackets hold the names alone, and the header line reads `No frame yet`.
+
+The full view (Step 16) will also list which weights are set; the sum it shows stays the host's value.
+
+In stage 6 the table lists every failure in the row. The result of a rejected frame reads `Rejected`, and under it one line per failure: the check in words, then the host's `detail`. The lines replace the tooltip, and the result column is wider than in the overview, at the cost of the symbol strip, so a line such as `consecutive: expected 2026-12-10T19:33Z, got 2026-12-10T19:34Z` fits. Sixteen rows fit a 16:9 window with up to two such lines; past that the table scrolls under its headings. A signal noisy enough to reject frames also loses sync often, so it seldom fills sixteen rows.
+
+A baseline view is built from panels, each with its header and its error boundary. Most are the overview's own. The edge log (stage 1), the sync losses (stage 4), and the last complete frame (stage 5) appear only in a focus view. A signal panel that shows fewer lanes names those lanes and carries only their stage chips.
 
 ### Focus header
 
@@ -286,7 +297,7 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
                               \---->  canvas views       (read buffers every animation frame)
 ```
 
-- **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 120 filled slots, 20 validation results, 50 info lines), the latest message of each type for the rail, and the counters. A filled slot is a `slotFilled` event together with the start time of the symbol that arrived just before it, which is the symbol it placed. The signal panel's second lane and the frame panel both read that buffer.
+- **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 120 filled slots, 20 validation results, 50 info lines, 5 sync losses), the latest message of each type for the rail, and the counters. A filled slot is a `slotFilled` event together with the start time of the symbol that arrived just before it, which is the symbol it placed. The signal panel's second lane and the frame panel both read that buffer.
 - **The page's own state.** The store also holds what the page decides for itself: the focused stage and the open drawer. No message changes them, so they are outside the reducer, and a source reset leaves them alone.
 - **Rendering.** Components subscribe to small slices, so a new edge batch does not re-render the tables. The canvas views do not go through React at all.
 - **View models.** Each custom view has a pure function from buffers, size, and tokens to a list of things to draw, and a thin component that paints the list. Tests cover the function.
@@ -316,6 +327,8 @@ The host sends `searching` in the same push as `syncLost`, so the latest `frameS
 - The timer clears only the loss it was started for, so a second loss inside the 5 s is shown for its own 5 s.
 
 The rail's stage 4 health and the frame panel's header both read this one field.
+
+The reducer also appends each loss to a list of the newest five, with a number that counts from 1 after every source reset. No timer touches the list. The stage 4 focus view reads it.
 
 ## Protocol additions
 

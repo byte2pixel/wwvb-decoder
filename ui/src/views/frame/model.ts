@@ -1,4 +1,6 @@
+import { DST_TEXT, UT1_SIGNS, ut1Seconds } from "@/protocol/decodedText";
 import type {
+  DecodedFrame,
   FrameLayout,
   FrameSyncEvent,
   SecondRole,
@@ -36,7 +38,7 @@ export function frameCells(layout: FrameLayout | null): FrameCell[] {
 }
 
 /** A role that is a field of the time code: every role but a marker and an unused second. */
-type FieldRole = Exclude<SecondRole, "marker" | "unused">;
+export type FieldRole = Exclude<SecondRole, "marker" | "unused">;
 
 const FIELD_NAMES: Record<FieldRole, string> = {
   minute: "Minute",
@@ -149,6 +151,57 @@ export function frameHeader({
         progress: null,
       };
   }
+}
+
+/**
+ * The symbols of the last complete frame, indexed by second.
+ * Every second is empty before the first frame.
+ */
+export function frameSymbols(
+  frame: DecodedFrame | null,
+): ReadonlyArray<SymbolKind | null> {
+  return (
+    frame?.frame.symbols ?? Array.from({ length: FRAME_SECONDS }, () => null)
+  );
+}
+
+/** Each field's decoded value in words, by the role of its seconds. */
+export type FieldValues = Readonly<Record<FieldRole, string>>;
+
+const yesOrNo = (flag: boolean): string => (flag ? "yes" : "no");
+
+/** What the host decoded for each field, or null before the first frame. */
+export function fieldValues(frame: DecodedFrame | null): FieldValues | null {
+  if (!frame) return null;
+
+  return {
+    minute: String(frame.minute),
+    hour: String(frame.hour),
+    dayOfYear: String(frame.dayOfYear),
+    ut1Sign: UT1_SIGNS[frame.ut1Sign],
+    ut1Correction: ut1Seconds(frame.ut1Tenths),
+    year: String(frame.year),
+    leapYear: yesOrNo(frame.leapYear),
+    leapSecondPending: yesOrNo(frame.leapSecondPending),
+    dst: DST_TEXT[frame.dst],
+  };
+}
+
+/**
+ * The last-frame panel's header line: the seconds that hold an error symbol.
+ * It counts the frame's own symbols, so it names every cell drawn as an error. The host's
+ * `errorSeconds` leaves out an unused second.
+ */
+export function decodedFrameLine(frame: DecodedFrame | null): string {
+  if (!frame) return "No frame yet";
+
+  const seconds = frame.frame.symbols.flatMap((symbol, second) =>
+    symbol === "error" ? [second] : [],
+  );
+  if (seconds.length === 0) return "No error symbols";
+  return seconds.length === 1
+    ? `Error symbol in second ${seconds[0]}`
+    : `Error symbols in seconds ${seconds.join(", ")}`;
 }
 
 export type CellState =

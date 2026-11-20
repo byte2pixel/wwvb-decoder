@@ -10,6 +10,7 @@ import {
   receivingSecond,
   ROW_SECONDS,
   type CellState,
+  type FieldValues,
 } from "./model";
 
 /** A second's share of a row's width, in percent. */
@@ -42,16 +43,25 @@ const SYMBOL_NAMES: Record<SymbolKind, string> = {
   error: "error",
 };
 
-/** The frame in progress: three rows of twenty seconds. */
-export function FrameView() {
+interface FrameGridProps {
+  /** The symbol in each second, indexed by second. Null where the second is empty. */
+  symbols: ReadonlyArray<SymbolKind | null>;
+  /** The second to mark as the one being received, when there is one. */
+  receiving?: number | null;
+  /** Each field's value, written under its name. Without them a bracket holds the name alone. */
+  values?: FieldValues | null;
+}
+
+/** A frame as three rows of twenty seconds, with a bracket under each field. */
+export function FrameGrid({
+  symbols,
+  receiving = null,
+  values = null,
+}: Readonly<FrameGridProps>) {
   const layout = useAppStore((state) => state.frameLayout);
-  const slots = useAppStore((state) => state.slots);
-  const frameSync = useAppStore((state) => state.frameSync);
 
   const cells = frameCells(layout);
   const brackets = fieldBrackets(layout);
-  const symbols = placedSymbols(slots);
-  const receiving = receivingSecond(frameSync);
   const rowStarts = Array.from(
     { length: cells.length / ROW_SECONDS },
     (_, row) => row * ROW_SECONDS,
@@ -98,7 +108,12 @@ export function FrameView() {
             </ol>
             <ul
               aria-label={`Fields in seconds ${seconds}`}
-              className="relative h-[clamp(1rem,8cqh,1.75rem)] flex-none"
+              className={cn(
+                "relative flex-none",
+                values
+                  ? "h-[clamp(2rem,17cqh,3.75rem)]"
+                  : "h-[clamp(1rem,8cqh,1.75rem)]",
+              )}
             >
               {brackets
                 .filter(
@@ -117,6 +132,11 @@ export function FrameView() {
                     <span className="mt-0.5 block truncate rounded-b-sm border-x border-b border-input text-center text-[clamp(0.65625rem,5cqh,1rem)] leading-tight text-muted-foreground">
                       {name}
                     </span>
+                    {values && (
+                      <span className="block truncate text-center text-[clamp(0.75rem,6cqh,1.25rem)] leading-tight font-semibold">
+                        {values[role]}
+                      </span>
+                    )}
                   </li>
                 ))}
             </ul>
@@ -124,6 +144,19 @@ export function FrameView() {
         );
       })}
     </div>
+  );
+}
+
+/** The frame in progress: the symbols frame sync has placed, and the second being received. */
+export function FrameView() {
+  const slots = useAppStore((state) => state.slots);
+  const frameSync = useAppStore((state) => state.frameSync);
+
+  return (
+    <FrameGrid
+      symbols={placedSymbols(slots)}
+      receiving={receivingSecond(frameSync)}
+    />
   );
 }
 

@@ -1,7 +1,6 @@
+import { DST_TEXT, UT1_SIGNS, ut1Seconds } from "@/protocol/decodedText";
 import type {
-  DstStatus,
   SymbolKind,
-  Ut1Sign,
   ValidationCheck,
   ValidationFailure,
   ValidationResult,
@@ -26,19 +25,6 @@ export interface FrameRow {
   /** Every failure, with its detail. Empty for an accepted frame. */
   failures: readonly ValidationFailure[];
 }
-
-const UT1_SIGNS: Record<Ut1Sign, string> = {
-  plus: "+",
-  minus: "-",
-  invalid: "?",
-};
-
-const DST_TEXT: Record<DstStatus, string> = {
-  standard: "standard",
-  dst: "dst",
-  beginsToday: "begins today",
-  endsToday: "ends today",
-};
 
 const CHECK_NAMES: Record<ValidationCheck, string> = {
   markers: "markers",
@@ -81,7 +67,7 @@ export function frameRows(
       hour: frame.hour,
       dayOfYear: frame.dayOfYear,
       year: frame.year,
-      ut1: `${UT1_SIGNS[frame.ut1Sign]}${(frame.ut1Tenths / 10).toFixed(1)} s`,
+      ut1: `${UT1_SIGNS[frame.ut1Sign]}${ut1Seconds(frame.ut1Tenths)}`,
       dst: DST_TEXT[frame.dst],
       accepted,
       result: resultText(accepted, failures),

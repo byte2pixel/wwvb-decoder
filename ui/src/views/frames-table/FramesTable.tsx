@@ -3,16 +3,20 @@ import type { SymbolKind } from "@/protocol/messages";
 import { useAppStore } from "@/state/store";
 import { failureLine, frameRows } from "./model";
 
+/**
+ * Each column's heading and its width; the result takes what is left.
+ * `narrow` is the width beside the failure details, which need the room.
+ */
 const COLUMNS = [
-  "Frame",
-  "Symbols 0 to 59",
-  "Min",
-  "Hour",
-  "Day",
-  "Year",
-  "UT1",
-  "DST",
-  "Result",
+  { name: "Frame", width: "w-[7%]", narrow: "w-[6%]" },
+  { name: "Symbols 0 to 59", width: "w-[36%]", narrow: "w-[28%]" },
+  { name: "Min", width: "w-[5%]", narrow: "w-[4%]" },
+  { name: "Hour", width: "w-[5%]", narrow: "w-[4%]" },
+  { name: "Day", width: "w-[5%]", narrow: "w-[5%]" },
+  { name: "Year", width: "w-[5%]", narrow: "w-[4%]" },
+  { name: "UT1", width: "w-[8%]", narrow: "w-[7%]" },
+  { name: "DST", width: "w-[10%]", narrow: "w-[9%]" },
+  { name: "Result", width: "", narrow: "" },
 ];
 
 /** A tick's height and color, the pulse-width bars' colors again. */
@@ -52,8 +56,18 @@ function SymbolStrip({
   );
 }
 
+interface FramesTableProps {
+  /** How many rows to show at most. */
+  maxRows: number;
+  /** Lists every failure of a rejected frame in its row. Without it the row names the first. */
+  details?: boolean;
+}
+
 /** One row per validated frame, newest first, and no more than `maxRows` of them. */
-export function FramesTable({ maxRows }: Readonly<{ maxRows: number }>) {
+export function FramesTable({
+  maxRows,
+  details = false,
+}: Readonly<FramesTableProps>) {
   const validations = useAppStore((state) => state.validations);
   const frameCount = useAppStore((state) => state.frameCount);
   const rows = frameRows(validations, frameCount).slice(0, maxRows);
@@ -62,62 +76,71 @@ export function FramesTable({ maxRows }: Readonly<{ maxRows: number }>) {
     <div className="flex h-full flex-col px-3 pb-1 overflow-y-auto">
       <table className="w-full table-fixed border-collapse text-xs">
         <colgroup>
-          <col className="w-[7%]" />
-          <col className="w-[36%]" />
-          <col className="w-[5%]" />
-          <col className="w-[5%]" />
-          <col className="w-[5%]" />
-          <col className="w-[5%]" />
-          <col className="w-[8%]" />
-          <col className="w-[10%]" />
-          <col />
+          {COLUMNS.map(({ name, width, narrow }) => (
+            <col key={name} className={details ? narrow : width} />
+          ))}
         </colgroup>
         <thead className="sticky top-0 bg-card">
           <tr>
-            {COLUMNS.map((column) => (
+            {COLUMNS.map(({ name }) => (
               <th
-                key={column}
+                key={name}
                 scope="col"
                 className="px-1.5 py-1 text-left text-[0.65625rem] font-normal text-muted-foreground"
               >
-                {column}
+                {name}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody className="font-mono">
-          {rows.map((row) => (
-            <tr
-              key={row.number}
-              className={cn("border-t", !row.accepted && "bg-bad/10")}
-            >
-              <td className="px-1.5 py-1 text-muted-foreground">
-                #{row.number}
-              </td>
-              <td className="px-1.5 py-1">
-                <SymbolStrip symbols={row.symbols} />
-              </td>
-              <td className="px-1.5 py-1">{row.minute}</td>
-              <td className="px-1.5 py-1">{row.hour}</td>
-              <td className="px-1.5 py-1">{row.dayOfYear}</td>
-              <td className="px-1.5 py-1">{row.year}</td>
-              <td className="px-1.5 py-1">{row.ut1}</td>
-              <td className="px-1.5 py-1">{row.dst}</td>
-              <td
-                title={
-                  row.accepted
-                    ? undefined
-                    : row.failures.map(failureLine).join("\n")
-                }
-                className={cn(
-                  "truncate px-1.5 py-1 font-sans",
-                  !row.accepted && "text-bad",
-                )}
+        <tbody className="align-top font-mono">
+          {rows.map((row) => {
+            const listed = details && !row.accepted;
+            return (
+              <tr
+                key={row.number}
+                className={cn("border-t", !row.accepted && "bg-bad/10")}
               >
-                {row.result}
-              </td>
-            </tr>
-          ))}
+                <td className="px-1.5 py-1 text-muted-foreground">
+                  #{row.number}
+                </td>
+                <td className="px-1.5 py-1">
+                  <SymbolStrip symbols={row.symbols} />
+                </td>
+                <td className="px-1.5 py-1">{row.minute}</td>
+                <td className="px-1.5 py-1">{row.hour}</td>
+                <td className="px-1.5 py-1">{row.dayOfYear}</td>
+                <td className="px-1.5 py-1">{row.year}</td>
+                <td className="px-1.5 py-1">{row.ut1}</td>
+                <td className="px-1.5 py-1">{row.dst}</td>
+                <td
+                  title={
+                    row.accepted || listed
+                      ? undefined
+                      : row.failures.map(failureLine).join("\n")
+                  }
+                  className={cn(
+                    "px-1.5 py-1 font-sans",
+                    !listed && "truncate",
+                    !row.accepted && "text-bad",
+                  )}
+                >
+                  {listed ? (
+                    <>
+                      Rejected
+                      <ul aria-label={`Failures of frame ${row.number}`}>
+                        {row.failures.map((failure) => (
+                          <li key={failure.check}>{failureLine(failure)}</li>
+                        ))}
+                      </ul>
+                    </>
+                  ) : (
+                    row.result
+                  )}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
       {rows.length === 0 && (

@@ -1,7 +1,12 @@
 import type { SourceClock } from "@/time/sourceClock";
 import { EdgeLog } from "@/views/edge-log/EdgeLog";
 import { FramesTable } from "@/views/frames-table/FramesTable";
+import {
+  DecodedFrameLine,
+  DecodedFrameView,
+} from "@/views/frame/DecodedFrameView";
 import { FrameHeaderLine, FrameView } from "@/views/frame/FrameView";
+import { SyncLossList } from "@/views/frame/SyncLossList";
 import {
   LastPulseLine,
   PulseWidthView,
@@ -94,18 +99,47 @@ export function FramePanel({ className }: Readonly<Placed>) {
   );
 }
 
+export function SyncLossPanel({ className }: Readonly<Placed>) {
+  return (
+    <Panel
+      title="Sync losses"
+      stages={[4]}
+      state="Newest first"
+      className={className}
+    >
+      <SyncLossList />
+    </Panel>
+  );
+}
+
+export function LastFramePanel({ className }: Readonly<Placed>) {
+  return (
+    <Panel
+      title="Last complete frame"
+      stages={[5]}
+      state={<DecodedFrameLine />}
+      className={className}
+    >
+      <DecodedFrameView />
+    </Panel>
+  );
+}
+
 interface DecodedFramesPanelProps extends Placed {
   /** How many frames to list. The overview has room for three. */
   rows?: number;
+  /** Lists every failure of a rejected frame in its row, as the stage 6 focus view does. */
+  details?: boolean;
 }
 
 export function DecodedFramesPanel({
   rows = 3,
+  details = false,
   className,
 }: Readonly<DecodedFramesPanelProps>) {
   return (
     <Panel title="Decoded frames" stages={[5, 6]} className={className}>
-      <FramesTable maxRows={rows} />
+      <FramesTable maxRows={rows} details={details} />
     </Panel>
   );
 }

@@ -140,6 +140,60 @@ describe("FramesTable", () => {
     expect(result).not.toHaveAttribute("title");
   });
 
+  it("lists every failure in a rejected row when it is asked for the details", () => {
+    given([rejected("errorSymbols", "consecutive")]);
+    render(<FramesTable maxRows={3} details />);
+
+    const failures = screen.getByRole("list", { name: "Failures of frame 1" });
+    const result = failures.closest("td")!;
+
+    expect(
+      within(failures)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual([
+      "error symbols: errorSymbols detail",
+      "consecutive: consecutive detail",
+    ]);
+    // The lines say which check failed, so the result does not name the first again.
+    expect(result.firstChild).toHaveTextContent(/^Rejected$/);
+    expect(result).toHaveClass("text-bad");
+    expect(result).not.toHaveClass("truncate");
+    expect(result).not.toHaveAttribute("title");
+    expect(result.closest("tr")).toHaveClass("bg-bad/10");
+  });
+
+  it("lists nothing under an accepted row, with or without the details", () => {
+    given([accepted()]);
+    render(<FramesTable maxRows={3} details />);
+
+    expect(screen.getByRole("cell", { name: "Accepted" })).toHaveClass(
+      "truncate",
+    );
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
+  });
+
+  it("gives the result more of the width beside the details", () => {
+    const widths = (container: HTMLElement) =>
+      [...container.querySelectorAll("col")].map((col) => col.className);
+
+    const plain = render(<FramesTable maxRows={3} />);
+    const detailed = render(<FramesTable maxRows={3} details />);
+
+    expect(widths(plain.container)).toEqual([
+      "w-[7%]",
+      "w-[36%]",
+      "w-[5%]",
+      "w-[5%]",
+      "w-[5%]",
+      "w-[5%]",
+      "w-[8%]",
+      "w-[10%]",
+      "",
+    ]);
+    expect(widths(detailed.container)[1]).toBe("w-[28%]");
+  });
+
   it("shows the newest frames first, and no more rows than it is given room for", () => {
     given([
       accepted(),
