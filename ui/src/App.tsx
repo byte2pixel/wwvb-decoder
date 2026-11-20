@@ -21,7 +21,7 @@ import type { SourceClock } from "./time/sourceClock";
 /** The whole pipeline at a glance: the panels ordered by time scale. */
 function Overview({ clock }: Readonly<{ clock: SourceClock }>) {
   return (
-    <main className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_21.5rem] grid-rows-[11.625rem_14.625rem_minmax(0,1fr)] gap-3 p-3">
+    <main className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_21.5rem] grid-rows-[11.125rem_14.125rem_minmax(0,1fr)] gap-3 p-3">
       <SignalPanel clock={clock} />
       <PulseWidthPanel />
       <FramePanel />

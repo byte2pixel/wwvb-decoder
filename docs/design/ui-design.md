@@ -25,9 +25,9 @@ The design baseline is 1280 by 720 CSS pixels. Sizes below are at the baseline.
 | Pipeline rail: 1 Edges  2 Pulses  3 Symbols  4 Frame sync  5 Decode      |
 |                6 Validate  7 Clock                                   58  |
 +----------------------------------------------------+---------------------+
-| Signal (stages 1 to 4, lanes on one time axis) 186 | Pulse width (3) 186 |
+| Signal (stages 1 to 4, lanes on one time axis) 178 | Pulse width (3) 178 |
 +----------------------------------------------------+---------------------+
-| Frame (stage 4): 3 rows of 20 cells            234 | Time (stage 7)      |
+| Frame (stage 4): 3 rows of 20 cells            226 | Time (stage 7)      |
 +----------------------------------------------------+                     |
 | Decoded frames (stages 5 and 6): table       fills |               fills |
 +----------------------------------------------------+---------------------+
@@ -35,7 +35,7 @@ The design baseline is 1280 by 720 CSS pixels. Sizes below are at the baseline.
 +--------------------------------------------------------------------------+
 ```
 
-The right column is 344 wide. Panels are 12 apart, with 12 of padding around the content area.
+The right column is 344 wide. Panels are 12 apart, with 12 of padding around the content area. The two fixed rows leave the decoded-frames panel 140 at the baseline, which is what its heading row and three frames need.
 
 ### Scaling
 
