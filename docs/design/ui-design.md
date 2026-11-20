@@ -181,18 +181,20 @@ The 60 seconds of the frame in progress, in three rows of 20. Every BCD field st
 
 ### Decoded frames
 
-One row per `validation` message, newest first. Three rows in the overview; the store keeps 20.
+One row per `validation` message, newest first. Three rows in the overview, and the newest 16 in the focus views of stages 5 and 6; the store keeps 20. Sixteen is what a 16:9 window holds without cutting a row, and the page scales with the window, so that is true at 720p and at 1080p alike. In a window with less room the table scrolls under its headings.
 
 | Column | Content |
 | --- | --- |
-| Frame | A count since the last source reset, `#41` |
-| Symbols 0 to 59 | Sixty ticks: tall accent for a 1, short and dim for a 0, tall neutral for a marker, `bad` for an error |
+| Frame | A count since the last source reset, `#41`. It keeps counting past the 20 frames the store holds |
+| Symbols 0 to 59 | Sixty ticks: tall accent for a 1, short and dim for a 0, tall neutral for a marker, `bad` for an error. The strip's tooltip writes the symbols out: `M`, `0`, `1`, and `×` |
 | Min, Hour, Day, Year | The decoded values as received, with no correction |
-| UT1 | Sign and tenths, `+0.0 s` |
+| UT1 | Sign and seconds, `+0.3 s` or `-0.7 s`. An invalid sign is written `?` |
 | DST | `standard`, `dst`, `begins today`, `ends today` |
-| Result | `Accepted`, or `Rejected: ` and the first failure's check. A rejected row has a `bad` tint |
+| Result | `Accepted`, or `Rejected: ` and the first failure's check in words, such as `error symbols` or `BCD digits`. A rejected row has a `bad` tint |
 
-The full `detail` of every failure shows in a tooltip and in the stage 6 focus view.
+The result's tooltip lists every failure of a rejected frame, one to a line: the check in words, then the host's `detail`. The stage 6 focus view will show the same lines in the table.
+
+Before the first frame the panel shows its column headings and `No frames yet`.
 
 ### Time
 

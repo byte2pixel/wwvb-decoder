@@ -49,7 +49,7 @@ function StagePanels({ stage, clock }: Readonly<FocusProps>) {
       return <FramePanel className="h-full" />;
     case 5:
     case 6:
-      return <DecodedFramesPanel className="h-full" />;
+      return <DecodedFramesPanel rows={16} className="h-full" />;
     default:
       // Stage 7.
       return <TimePanel className="h-full" />;

@@ -2,7 +2,11 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bridge } from "@/protocol/bridge";
-import type { Command, HostMessage } from "@/protocol/messages";
+import type {
+  Command,
+  HostMessage,
+  ValidationResult,
+} from "@/protocol/messages";
 import { useAppStore } from "@/state/store";
 import { createSourceClock } from "@/time/sourceClock";
 import App from "./App";
@@ -34,6 +38,29 @@ const overnight = {
   path: String.raw`C:\captures\2026-11-09T0434Z-overnight.edges.txt`,
   recorded: "2026-11-09T04:34:28Z",
   minutes: 524.9,
+};
+
+/** A validated frame. Only the table's own tests look at what is in one. */
+const validation: ValidationResult = {
+  frame: {
+    frame: {
+      startMicros: 0,
+      endMicros: 60_000_000,
+      symbols: Array.from({ length: 60 }, () => "zero"),
+    },
+    minute: 35,
+    hour: 19,
+    dayOfYear: 344,
+    year: 26,
+    ut1Sign: "plus",
+    ut1Tenths: 0,
+    leapYear: false,
+    leapSecondPending: false,
+    dst: "standard",
+    errorSeconds: [],
+  },
+  accepted: true,
+  failures: [],
 };
 
 /** The overview's panels, in document order. */
@@ -235,6 +262,23 @@ describe("App", () => {
     expect(
       screen.getByRole("dialog", { name: "Keyboard shortcuts" }),
     ).toBeInTheDocument();
+  });
+
+  it("lists the newest three frames in the overview", () => {
+    useAppStore.setState({
+      validations: Array.from({ length: 5 }, () => validation),
+      frameCount: 5,
+    });
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
+
+    const rows = within(
+      screen.getByRole("region", { name: "Decoded frames" }),
+    ).getAllByRole("row");
+
+    // The heading row, then frames 5, 4, and 3.
+    expect(rows).toHaveLength(4);
+    expect(rows[1]).toHaveTextContent("#5");
+    expect(rows[3]).toHaveTextContent("#3");
   });
 
   it("leaves the keys to an open capture list, Esc included", async () => {

@@ -1,6 +1,6 @@
-import type { ReactNode } from "react";
 import type { SourceClock } from "@/time/sourceClock";
 import { EdgeLog } from "@/views/edge-log/EdgeLog";
+import { FramesTable } from "@/views/frames-table/FramesTable";
 import { FrameHeaderLine, FrameView } from "@/views/frame/FrameView";
 import {
   LastPulseLine,
@@ -93,24 +93,23 @@ export function FramePanel({ className }: Readonly<Placed>) {
   );
 }
 
-/** What a panel shows before it has anything to draw. */
-function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
-  return (
-    <p className="flex h-full items-center justify-center text-xs text-muted-foreground">
-      {children}
-    </p>
-  );
+interface DecodedFramesPanelProps extends Placed {
+  /** How many frames to list. The overview has room for three. */
+  rows?: number;
 }
 
-// The two below show their no-data state until Step 13 gives them a view.
-export function DecodedFramesPanel({ className }: Readonly<Placed>) {
+export function DecodedFramesPanel({
+  rows = 3,
+  className,
+}: Readonly<DecodedFramesPanelProps>) {
   return (
     <Panel title="Decoded frames" stages={[5, 6]} className={className}>
-      <Placeholder>No frames yet</Placeholder>
+      <FramesTable maxRows={rows} />
     </Panel>
   );
 }
 
+// The one below shows its no-data state until Step 13 gives it a view.
 export function TimePanel({ className }: Readonly<Placed>) {
   return (
     <Panel title="Time" stages={[7]} state="No signal" className={className}>

@@ -1,9 +1,33 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
+import type { ValidationResult } from "@/protocol/messages";
 import { useAppStore } from "@/state/store";
 import { createSourceClock } from "@/time/sourceClock";
 import { FocusLayout } from "./FocusLayout";
 import { stages } from "./stages";
+
+/** A validated frame. Only the table's own tests look at what is in one. */
+const validation: ValidationResult = {
+  frame: {
+    frame: {
+      startMicros: 0,
+      endMicros: 60_000_000,
+      symbols: Array.from({ length: 60 }, () => "zero"),
+    },
+    minute: 35,
+    hour: 19,
+    dayOfYear: 344,
+    year: 26,
+    ut1Sign: "plus",
+    ut1Tenths: 0,
+    leapYear: false,
+    leapSecondPending: false,
+    dst: "standard",
+    errorSeconds: [],
+  },
+  accepted: true,
+  failures: [],
+};
 
 /** Renders the focus view of the stage with this number. */
 const focusOn = (number: number) =>
@@ -88,6 +112,26 @@ describe("FocusLayout", () => {
       within(frame).getByRole("list", { name: "Seconds 0 to 19" }),
     ).toBeInTheDocument();
   });
+
+  it.each([5, 6])(
+    "lists every frame the store holds for stage %d, 16 at most",
+    (number) => {
+      useAppStore.setState({
+        validations: Array.from({ length: 16 }, () => validation),
+        frameCount: 25,
+      });
+      focusOn(number);
+
+      const rows = within(
+        screen.getByRole("region", { name: "Decoded frames" }),
+      ).getAllByRole("row");
+
+      // The heading row, then frames 25 down to 6.
+      expect(rows).toHaveLength(17);
+      expect(rows[1]).toHaveTextContent("#25");
+      expect(rows[16]).toHaveTextContent("#10");
+    },
+  );
 
   it.each([
     [5, "Decoded frames", "No frames yet"],

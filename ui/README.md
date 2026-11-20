@@ -107,7 +107,7 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md`. Each stage also carries the host type and the one-sentence rule that its focus view's header shows |
 | `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone. A click focuses the stage, the focused stage's button is pressed (`aria-pressed`), and a click on it goes back to the overview |
 | `Panel.tsx` | A titled region with a chip per stage, an optional line of state, and an error boundary around its children: a view that throws shows a message in its own panel and the rest of the screen keeps running |
-| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, and the two that show a no-data state until Step 13. The overview and the focus views lay out the same components |
+| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, `DecodedFramesPanel` (three rows unless `rows` says otherwise; a focus view asks for 16, which is what fits a 16:9 window), and `TimePanel`, which shows a no-data state until Step 13. The overview and the focus views lay out the same components |
 | `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels |
 | `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
 | `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too |
@@ -148,6 +148,13 @@ A view is split as ADR-0007 asks: a pure function decides what to show and is te
 | `FrameView.tsx` | `FrameView` puts them together: a list of cells per row over a list of brackets, each bracket placed by a percentage. `CELL_CLASSES` maps a cell state to its classes. `FrameHeaderLine` is the panel's state line, with a `<progress>` bar while symbols are being placed |
 
 The frame view sizes its type with `clamp(small, n cqh, large)` inside a container of type `size` (`@container-size`), so it follows the panel's height. A width query such as `@2xl:` is wrong here: the overview's frame panel is wide and short, and it would get the focus view's sizes with no height to hold them.
+
+**`views/frames-table/`**, one row per validated frame, in DOM:
+
+| File | Holds |
+| --- | --- |
+| `model.ts` | `frameRows(validations, frameCount)`: the rows, newest first, each with its number since the source reset, its 60 symbols, the decoded values, and the result in words. `failureLine(failure)` writes one failure as its check in words and the host's detail. Three `Record` tables hold the words for a UT1 sign, a DST status, and a check, so a value the protocol gains later does not compile until it has its text |
+| `FramesTable.tsx` | A `<table>` with fixed column widths in percent, the strip of 60 ticks, a tint on a rejected row, and every failure in the result's tooltip. `maxRows` is how many rows it shows; when they do not fit, the table scrolls under its headings |
 
 **`views/edge-log/`**: `EdgeLog.tsx` lists the newest 50 edges, newest first, as `edgeLine` writes them.
 
@@ -246,6 +253,8 @@ There is no `baseUrl`: TypeScript 7 rejects it (TS5102), and `paths` works witho
 The editor underlines the `import/extensions` rule in that file with "Array has too many items". Leave it. The schema accepts either a plain map of extensions or a settings object with that map under `pattern`, and the file mixes the two: `css`, `json`, `jsonl`, and `checkTypeImports` side by side. In oxlint 1.90.0 the schema's own form, with the map under `pattern`, stops checking `import type` lines. The mixed form checks them.
 
 After an oxlint upgrade it is worth one try: move the map under `pattern`, add `.ts` to an `import type` line, and run `npm run lint`. If the line is reported, keep the schema's form.
+
+One rule is silenced on one line of the app's own code. A tick in `FramesTable.tsx` takes its array index as its React key, because a tick has no identity but its second and the seconds of a frame never move. The line carries `oxlint-disable-next-line react/no-array-index-key` with that reason, and `NOSONAR` for the same rule in Sonar. A new directive needs a reason as plain as that one, written beside it.
 
 ## Tests
 
