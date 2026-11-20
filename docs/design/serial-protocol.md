@@ -10,6 +10,8 @@ The Pico 2 edge logger reports every edge on the receiver's data pin as one text
 
 The same lines, with a header, form a capture file. See [`capture-format.md`](capture-format.md).
 
+A second Pico, the desk-top transmitter, takes commands from the host. Its contract is the last section, [Transmitter commands](#transmitter-commands). Every section before that one is about the edge logger only.
+
 ## Transport
 
 | Item | Value | Note |
@@ -124,3 +126,155 @@ L 16800390
 Reading it: each `H` starts a reduced-carrier pulse at the top of a second, each `L` ends it. The first pulse lasts 200 ms (a 0), the second 800 ms (a marker), the third 500 ms (a 1), the fourth 200 ms (a 0), the fifth 800 ms (a marker).
 
 **Polarity.** Measured 2026-11-02 with the USB logic analyzer on the T pin of receiver #1 (`captures/pulseview/`): the output idles **low** during full carrier and goes **high** for the reduced-carrier pulse, so `H` starts a pulse and `L` ends it. The host default for `ReducedCarrierLevel` is therefore `High`. The setting stays switchable from the UI in case another module is inverted; the protocol does not change either way.
+
+## Transmitter commands
+
+The desk-top transmitter is a second Pico 2 (construction plan Step 14). It sends a 60 kHz carrier, keyed with WWVB frames, into a small coil beside the receiver's antenna, for a room where the real station cannot be received. The PC gives it the time and a few commands over USB serial. This section is the contract between the two sides:
+
+| Side | Implemented in | Role |
+| --- | --- | --- |
+| Firmware | `firmware/transmitter/` (Step 14) | Keeps the time, keys the carrier, obeys the commands |
+| Host tool | `WwvbDecoder.Tools`, `tx-sync` (Step 14) | Sends the PC's time and prints the reply |
+
+The decoder never talks to the transmitter. It hears it through the receiver and the edge logger, as it hears the real station.
+
+### Transport and encoding
+
+The transport is the edge logger's (see Transport), with three differences:
+
+| Item | Value | Note |
+| --- | --- | --- |
+| Product string | `wwvb-transmitter` | |
+| USB VID / PID | 0xC0DE / 0xCAFF | The logger's PID plus one, so the two Picos differ when both are plugged in |
+| Direction | Both ways | The host sends command lines. The transmitter answers each with one line |
+
+Lines from the transmitter follow Encoding: ASCII, one line feed at the end, at most 64 bytes, each in one USB packet.
+
+Command lines, from the host, have their own rules:
+
+- ASCII. A line is a command word in upper case. `TIME` and `FRAME` are followed by exactly one space and one argument. There is nothing else on the line: no leading space, no trailing space.
+- A line ends at a line feed or at a carriage return. An empty line is ignored and gets no reply. So a line feed, a carriage return, or both together end a command, and a serial terminal, which sends a carriage return for the Enter key, works as it is.
+- A line is at most 66 bytes, not counting its end. That is the length of a `FRAME` command. A longer line is discarded up to its end and answered with `ERR line too long`.
+- There is no echo, no flow control, and no timeout: an unfinished line waits for its end.
+
+### Session
+
+- A session starts when the host asserts DTR, as with the logger. The transmitter writes `# session` and then its banner, `# wwvb-transmitter <semver> pin=<gpio>`, where `<gpio>` is the pin that drives the coil. For example `# wwvb-transmitter 0.1.0 pin=16`.
+- The banner tells the host which Pico it has opened. `tx-sync` waits for it before it sends anything, and stops with a message when the banner is the edge logger's.
+- A session starts with an empty command line. Bytes of an unfinished line from before the session are discarded.
+- A host must assert DTR. What the transmitter does with bytes sent without DTR is not defined.
+- After the banner the transmitter writes only replies: one line for each command, and nothing by itself.
+- The session and the signal are independent. The transmitter keeps its time and keeps transmitting after the host closes the port. Only a power loss or a reset clears its state.
+
+### State
+
+The transmitter holds three things, and each command reads or changes them:
+
+| State | At power-up | Changed by |
+| --- | --- | --- |
+| Clock | Not set | `TIME` sets it. It then runs on the Pico's crystal |
+| Carrier switch | On | `ON` and `OFF` |
+| Custom frame | None | `FRAME` sets one. The minute it is sent in uses it up |
+
+What the transmitter sends in a minute follows from the three at the start of that minute:
+
+| Carrier switch | Clock | Custom frame | The minute's signal |
+| --- | --- | --- | --- |
+| Off | Any | Any | None. A custom frame is still used up |
+| On | Not set | None | None |
+| On | Set | None | The frame that says that minute of the clock |
+| On | Set | Waiting | The custom frame |
+
+So after power-up the transmitter is silent until its first `TIME`.
+
+### Commands
+
+| Command | Effect |
+| --- | --- |
+| `TIME <unix_seconds>` | Sets the clock |
+| `STATUS` | Changes nothing |
+| `ON` | Switches the carrier on |
+| `OFF` | Switches the carrier off |
+| `FRAME <symbols>` | Sets the custom frame for the next minute |
+
+`TIME <unix_seconds>`:
+
+- `<unix_seconds>` is decimal digits only: the seconds since 1970-01-01T00:00:00Z, from 946684800 (2000-01-01T00:00:00Z) to 4102444799 (2099-12-31T23:59:59Z). Those are the years that a frame's two digits of year can say.
+- The moment the transmitter reads the end of the line is the start of that second. So the host sends the line at the top of a second by its own clock. The error is the PC clock's error plus a few milliseconds of USB.
+- It takes effect at once. The second in progress is cut short and the new second begins, with its reduced carrier. The frame in progress is abandoned, custom or not, and the transmitter goes on from that second of the new minute's frame. The decoder sees one second of the wrong length and then part of a frame, which it handles as it handles noise. A custom frame that is waiting keeps waiting.
+- Unix time has no leap seconds, and the transmitter never sends one.
+
+`ON` and `OFF`:
+
+- `OFF` stops the carrier at once, and `ON` lets it through again at once, in the middle of a second if that is where it is.
+- They switch the output only. The clock runs on and the minutes pass as they would, which is why a custom frame whose minute passes while the carrier is off is used up unsent.
+
+`FRAME <symbols>`:
+
+- `<symbols>` is exactly 60 characters, each `0`, `1`, or `M` for a marker, for seconds 0 to 59 in that order.
+- Nothing else about the frame is checked. A marker may be missing or out of place, and a field may hold any bits: the command exists to send a frame that is wrong on purpose.
+- It is refused with `ERR clock not set` before the first `TIME`.
+- The custom frame takes the place of the next minute's frame, from that minute's second 0, once. The minute after it has its normal frame again. Seconds and minutes fall where the clock puts them, so the stream stays in step.
+- A `FRAME` that arrives while another is waiting replaces it. A `FRAME` that arrives while a custom frame is being sent waits for the minute after.
+
+### Replies
+
+The transmitter answers every command line that is not empty with exactly one line, in the order of the commands, after the command has taken effect.
+
+A command that succeeded is answered with the status line, which holds the three things of the State table as they are after the command:
+
+```text
+OK time=<unix_seconds> carrier=<on|off> custom=<none|waiting>
+```
+
+| Field | Values | Meaning |
+| --- | --- | --- |
+| `time` | Decimal digits, or `unset` | The clock's current second, as Unix seconds. `unset` before the first `TIME` |
+| `carrier` | `on` or `off` | The carrier switch. `on` does not mean there is a signal: with the clock unset there is none |
+| `custom` | `none` or `waiting` | Whether a custom frame is waiting for the next minute. It goes back to `none` when that minute starts and the frame is being sent |
+
+A command that failed changes nothing and is answered with `ERR` and a reason:
+
+| Reply | When |
+| --- | --- |
+| `ERR unknown command` | The command word is not one of the five. Lower case counts as unknown |
+| `ERR unexpected argument` | Anything follows `STATUS`, `ON`, or `OFF` |
+| `ERR time is not a number` | The argument of `TIME` is missing or holds anything but decimal digits |
+| `ERR time is outside 2000 to 2099` | The argument of `TIME` is a number outside the range |
+| `ERR frame needs 60 symbols of 0, 1 or M` | The argument of `FRAME` is missing, has another length, or holds another character |
+| `ERR clock not set` | `FRAME` before the first `TIME` |
+| `ERR line too long` | The line passed 66 bytes |
+
+A program reads the first word, `OK` or `ERR`. The reason is for a person, and a program shows it as it is.
+
+### Signal
+
+- The carrier is a 60 kHz square wave from one GPIO: the 150 MHz system clock divided by 2,500, at 50 percent duty. Reduced carrier is no carrier at all. The station lowers its carrier by 17 dB; the transmitter switches it off.
+- Each second starts with reduced carrier: 0.2 s for a 0, 0.5 s for a 1, 0.8 s for a marker. The carrier is full for the rest of the second.
+- Each minute is one frame, with second 0 at the clock's minute, and the frame says the minute it is sent in, as the station's does. The layout is the host's `WwvbFrameLayout`, ported to `firmware/wwvb-frame/` and held to it by a test.
+- The time does not give the frame's other fields, so they are fixed: a UT1 correction of plus 0.0, no leap second pending, and standard time. In summer the station says daylight time and the transmitter does not. A custom frame can say anything.
+
+### Example
+
+A session from power-up. `>` marks a line the host sends and `<` a line from the transmitter. The marks are not on the wire.
+
+```text
+< # session
+< # wwvb-transmitter 0.1.0 pin=16
+> STATUS
+< OK time=unset carrier=on custom=none
+> TIME 1796931000
+< OK time=1796931000 carrier=on custom=none
+> STATUS
+< OK time=1796931017 carrier=on custom=none
+> FRAME M01100000M000101001M001100100M010000101M000000010M011000000M
+< OK time=1796931042 carrier=on custom=waiting
+> STATUS
+< OK time=1796931075 carrier=on custom=none
+> time 1796931000
+< ERR unknown command
+> OFF
+< OK time=1796931090 carrier=off custom=none
+```
+
+Reading it: the transmitter starts silent, with no time. `TIME` arrives at 2026-12-10T19:30:00Z and the 19:30 frame starts with it. Seventeen seconds later `STATUS` shows the clock running. The `FRAME` at 19:30:42 holds the frame for 19:30 once more, and it waits. At 19:31:00 it is sent in place of the 19:31 frame, so the transmitter sends a frame with the wrong minute, on purpose; by 19:31:15 it is no longer waiting. The command in lower case is refused and changes nothing. `OFF` stops the carrier at 19:31:30, in the middle of that frame, and the clock runs on.
