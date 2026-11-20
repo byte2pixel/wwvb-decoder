@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["edge-logger"]
+members = ["edge-logger", "wwvb-frame"]
 
 # Profiles belong to the workspace root; cargo ignores them in a member.
 [profile.release]

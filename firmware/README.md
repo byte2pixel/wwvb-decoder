@@ -11,6 +11,17 @@ The WWVB edge logger: it timestamps every edge on the receiver's data pin with a
 | Folder | Package | What it is |
 | --- | --- | --- |
 | `edge-logger/` | `wwvb-edge-logger` | The edge logger, with its own `build.rs` and `memory.x` |
+| `wwvb-frame/` | `wwvb-frame` | The frame layout (which second carries what), the encoder that builds a frame from its fields, and the fields for a time given in Unix seconds. A `no_std` library with no dependencies, shared by the firmware crates |
+
+## Tests
+
+Only `wwvb-frame` has tests. They run on the PC, not on the Pico, so the command names the PC's target in place of the default one:
+
+```powershell
+cargo test -p wwvb-frame --target x86_64-pc-windows-msvc
+```
+
+The layout test reads `docs/design/message-examples/frameLayout.json`, the example of the host's `frameLayout` message. The host's tests hold `WwvbFrameLayout` to that file and the page's simulator plays a copy of it, so the three layouts cannot drift apart. `serde_json` is there to read it, as a development dependency: it is never part of a firmware image.
 
 ## Build and flash
 

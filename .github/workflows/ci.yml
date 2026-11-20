@@ -89,6 +89,9 @@ jobs:
       - run: cargo fmt --check
       - run: cargo build --release --locked # Cargo.lock must already match
       - run: cargo clippy --release --locked -- -D warnings
+      # wwvb-frame's tests run on the runner, not on the Pico, so these two name the runner's target.
+      - run: cargo test --locked -p wwvb-frame --target x86_64-unknown-linux-gnu
+      - run: cargo clippy --locked -p wwvb-frame --target x86_64-unknown-linux-gnu --all-targets -- -D warnings
 
   sonarcloud:
     # Uploads analysis, coverage, and test results to SonarQube Cloud. Not a required check.
