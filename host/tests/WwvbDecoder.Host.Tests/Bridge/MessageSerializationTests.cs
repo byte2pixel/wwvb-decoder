@@ -313,6 +313,19 @@ public class MessageSerializationTests
     }
 
     [Fact]
+    public void Serialize_FrameLayout_MatchesExample()
+    {
+        // Arrange
+        FrameLayoutPayload layout = FrameLayoutPayload.Create();
+
+        // Act
+        string json = MessageJson.Serialize("frameLayout", seq: 6, layout);
+
+        // Assert
+        JsonNode.DeepEquals(JsonNode.Parse(json), Examples.Read("frameLayout")).ShouldBeTrue(json);
+    }
+
+    [Fact]
     public void Serialize_Info_MatchesExample()
     {
         // Arrange

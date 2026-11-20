@@ -38,9 +38,9 @@ CI runs `format:check`, `lint`, `test`, and `build`; `../verify.ps1 -Only ui` ru
 | `protocol/` | The page's half of the message contract: schemas, types, and the bridge to the host |
 | `state/` | `AppState`, its reducer, and the store |
 | `time/` | The source clock, and the feed that keeps it on the stream's time |
-| `sim/` | The simulator, the recorder, and the recorded fixture. Development builds only |
+| `sim/` | The simulator, the recorder, and their fixtures: the recorded stream and a copy of the `frameLayout` example. Development builds only |
 | `shell/` | The frame of the screen: app bar, pipeline rail, panels, focus layout, keyboard map, status bar, protocol log |
-| `views/` | What the panels show, one folder per view: the signal lanes, the pulse-width histogram, the edge log |
+| `views/` | What the panels show, one folder per view: the signal lanes, the pulse-width histogram, the frame, the decoded-frames table, the clock, the edge log |
 | `components/ui/` | Controls written by the shadcn CLI. They are linted and formatted like the rest, and left out of coverage |
 | `lib/` | `cn`, which the generated controls import |
 
@@ -55,6 +55,7 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 | `messages.ts` | zod schemas for every host envelope and page command, and the types inferred from them. The schemas are the source of truth; no type is written by hand. `hostMessageSchema` is a discriminated union on `type`, `commandSchema` on `command`, with the three `selectSource` shapes nested on `source`. |
 | `bridge.ts` | `createBridge(webview)` wraps `window.chrome.webview`: `onMessage` validates each event with `safeParse` and drops, with a `console.warn`, anything that fails; `send` posts a command object. `findWebView()` returns the real one, or `undefined` in a plain browser. `Bridge` is the interface the page depends on; the simulator implements it too. |
 | `edgeLine.ts` | `edgeLine(edge)` writes an edge as the serial protocol does, `H 12345678`. The rail's stage 1 readout and the edge log both call it. |
+| `decodedText.ts` | How the page writes a decoded frame's values that are not plain numbers: `UT1_SIGNS`, `DST_TEXT`, and `ut1Seconds(tenths)`. The decoded-frames table and the last complete frame both read them. Each table is a `Record` over the protocol's type, so a value the protocol gains later does not compile until it has its text. |
 | `*.test.ts` | `messages.test.ts` parses every file in `docs/design/message-examples/` through the schema its file name selects, so the host's serializer tests and these tests assert against the same files. The bridge is tested with a fake webview object, no DOM. |
 
 ## State
@@ -64,13 +65,14 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 | Fields | Keep |
 | --- | --- |
 | `edges`, `pulses`, `symbols`, `validations`, `infoLines` | The newest 2,000, 300, 600, 20, and 50 |
-| `clock`, `decodedFrame`, `frameSync`, `sourceStatus`, `ports`, `captures` | The latest message of that type |
+| `clock`, `decodedFrame`, `frameSync`, `sourceStatus`, `ports`, `captures`, `frameLayout` | The latest message of that type |
 | `frameCount`, `lastSeq`, `lostMessages` | Counters. `frameCount` counts `validation` messages; `lostMessages` adds up the gaps in `seq` |
 | `slots` | The newest 120 `slotFilled` events, each with the start of the symbol it placed: the symbol that arrived just before it |
 | `syncLoss` | The latest loss of frame sync, held for 5 s (see "Sync loss" in `ui-design.md`) |
+| `syncLosses` | The newest 5 losses of frame sync, each with its count since the source reset and the host's reason. Only a source reset clears them |
 | `log` | The protocol log: the last 200 messages and a count per type |
 
-A `sourceStatus` whose `detail` starts with `reset:` is a source reset. The reducer goes back to `initialState` and keeps `ports`, `captures`, the sequence tracking, and the log.
+A `sourceStatus` whose `detail` starts with `reset:` is a source reset. The reducer goes back to `initialState` and keeps `ports`, `captures`, `frameLayout`, the sequence tracking, and the log. The host sends the layout only in its reply to `hello`, so a reset that dropped it would leave the frame panel without one.
 
 `state/store.ts` wraps the reducer in one Zustand store, `useAppStore`. `dispatch(message)` runs the reducer, and starts the 5 s timer when the message is a `syncLost`.
 
@@ -83,9 +85,11 @@ The store also holds what the page decides for itself, `UiState`, beside the red
 
 No host message changes these, and a source reset leaves them alone: the reducer never returns them, and `set` merges what it does return.
 
+One more value is the page's own and is kept the same way: `reducedLevel`, the pin level that means reduced carrier, `"high"` until `setReducedLevel` says otherwise. The signal settings set it and the signal view reads it. It sits beside `UiState` and not in it, because `UiState` is what the keyboard map takes.
+
 - A component subscribes to the slice it shows: `useAppStore((state) => state.lastSeq)`.
 - Zustand compares a selector's result by identity. A selector that builds a new object on every call goes through `useShallow`, as the rail's buttons do.
-- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus` and `drawer` keep their values. A test file that touches those two replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
+- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus`, `drawer`, and `reducedLevel` keep their values. A test file that touches any of those replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
 
 ## Time
 
@@ -94,9 +98,9 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | File | Holds |
 | --- | --- |
 | `sourceClock.ts` | `createSourceClock(wallMs)` returns a `SourceClock`: `now()`, `sync(micros)`, `setSpeed(speed)`, `speed()`, and `reset()`. `slewMs` and `pullBack` at the top are the two tuning values |
-| `clockFeed.ts` | `feedClock(clock)` returns a function of one message. An `edges` message syncs the clock to its newest edge; a source reset, or a status that is not `running`, resets it |
+| `clockFeed.ts` | `feedClock(clock)` returns a function of one message. An `edges` message syncs the clock to its newest edge. A `sourceStatus` sets the clock's speed from its `speed`, 1 when it has none; a source reset, or a status that is not `running`, also resets the clock |
 
-`main.tsx` creates the one clock and hands it to `App`. In a browser it also sets the clock's speed from the simulator's `?speed=`.
+`main.tsx` creates the one clock and hands it to `App`. Nothing on the page chooses the clock's speed. The host says it in every `sourceStatus`: the replay speed while a replay runs, 1 otherwise. The Signal panel's `12 s window` or `60 s window` line reads the same field from the store.
 
 ## Shell
 
@@ -105,12 +109,13 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md`. Each stage also carries the host type and the one-sentence rule that its focus view's header shows |
 | `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone. A click focuses the stage, the focused stage's button is pressed (`aria-pressed`), and a click on it goes back to the overview |
 | `Panel.tsx` | A titled region with a chip per stage, an optional line of state, and an error boundary around its children: a view that throws shows a message in its own panel and the rest of the screen keeps running |
-| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, and the three that show a no-data state until Step 13. The overview and the focus views lay out the same components |
-| `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels |
+| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, `SyncLossPanel`, `LastFramePanel`, `DecodedFramesPanel` (three rows unless `rows` says otherwise, and `details` lists every failure in its row; the stage 6 focus view asks for 16 rows, which is what fits a 16:9 window, with the details), and `TimePanel`, which takes the source clock. The overview and the focus views lay out the same components; the edge log, the sync losses, and the last frame appear only in a focus view |
+| `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels. `StagePanels` is the "Baseline" column of the focus-view table in `ui-design.md` as code |
 | `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
-| `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, for Ctrl, Alt, and the Windows key, and for a key that is held down |
+| `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too |
 | `theme.ts` | `toggleTheme()`, for the app bar's button and the `T` key |
-| `AppBar.tsx` | The name, the source toggle, the noise slider, Start, Stop, the theme button, and the button for the shortcut list |
+| `AppBar.tsx` | The name, the source control with each source's own controls (the port list, the capture list and speed buttons, the noise slider), Start, Stop, and the buttons for the signal settings, the theme, and the shortcut list. `PickList`, `SpeedButtons`, and `SignalSettings` are components local to the file. The rules are under "App bar" in `ui-design.md` |
+| `captures.ts` | `captureLabel(entry)`: what the capture list shows for one capture, built from `formatRecorded` and `formatLength` |
 | `StatusBar.tsx`, `ProtocolLog.tsx` | The run state, the source's name and detail, the last `seq`, the lost count, the key hints, and the Log button. The protocol log is a sheet that opens when the store's `drawer` is `"log"` |
 | `ShortcutList.tsx` | The shortcut list, a sheet that opens when `drawer` is `"shortcuts"`. Its rows are written out by hand, so a key added to the map is added here too |
 
@@ -137,6 +142,31 @@ A view is split as ADR-0007 asks: a pure function decides what to show and is te
 | `model.ts` | `pulseWidthHistogram(symbols)`: 40 bins of 25 ms, each with a count, a height against the fullest bin, and the host's class of its newest pulse. The page does not classify a duration. `lastPulseText(last)` writes the panel's state line |
 | `PulseWidthView.tsx` | The bars, the four boundaries, the error zones, and the last-pulse line. Every position is a percentage of the plot, so the view measures nothing. The four boundaries repeat the defaults of the host's `SymbolClassifier`, because no message carries them |
 
+**`views/frame/`**, a frame as three rows of twenty seconds, in DOM. The frame in progress and the last complete frame share one grid:
+
+| File | Holds |
+| --- | --- |
+| `model.ts` | Pure functions, each from one slice of the store. `frameCells(layout)`: the 60 seconds with their role and the weight or marker name above each. `fieldBrackets(layout)`: each field's first and last second and its name. `placedSymbols(slots)`: the symbol in each second of the newest frame, which is how a new frame clears the cells. `receivingSecond(frameSync)`: the second after the one just placed. `frameHeader(state)`: the header line's text and the share of the frame placed. `cellState(role, symbol)` names how a cell is drawn. For the last complete frame: `frameSymbols(decodedFrame)`, `fieldValues(decodedFrame)` (each field's decoded value in words, keyed by its role), and `decodedFrameLine(decodedFrame)` (the seconds that hold an error symbol) |
+| `FrameView.tsx` | `FrameGrid` draws a frame from the symbols it is given: a list of cells per row over a list of brackets, each bracket placed by a percentage. With `values` it writes each field's value under its name and makes the bracket strip taller. `CELL_CLASSES` maps a cell state to its classes. `FrameView` is the grid with the symbols frame sync has placed and the second being received. `FrameHeaderLine` is the panel's state line, with a `<progress>` bar while symbols are being placed |
+| `DecodedFrameView.tsx` | `DecodedFrameView` is the grid with the newest `decodedFrame`: its symbols, and the host's decoded value under each field. `DecodedFrameLine` is its panel's state line |
+| `SyncLossList.tsx` | The store's `syncLosses`, newest first, each as its number and the host's reason |
+
+The frame grid sizes its type with `clamp(small, n cqh, large)` inside a container of type `size` (`@container-size`), so it follows the panel's height. A width query such as `@2xl:` is wrong here: the overview's frame panel is wide and short, and it would get the focus view's sizes with no height to hold them.
+
+**`views/frames-table/`**, one row per validated frame, in DOM:
+
+| File | Holds |
+| --- | --- |
+| `model.ts` | `frameRows(validations, frameCount)`: the rows, newest first, each with its number since the source reset, its 60 symbols, the decoded values, and the result in words. `failureLine(failure)` writes one failure as its check in words and the host's detail. `CHECK_NAMES` holds the words for a check; the words for a UT1 sign and a DST status come from `protocol/decodedText.ts` |
+| `FramesTable.tsx` | A `<table>` with fixed column widths in percent, the strip of 60 ticks, a tint on a rejected row, and every failure in the result's tooltip. `maxRows` is how many rows it shows; when they do not fit, the table scrolls under its headings. With `details` a rejected row reads `Rejected` over one line per failure, in a list named `Failures of frame N`, with no tooltip, and the columns give the result more of the width (`narrow` in `COLUMNS`) |
+
+**`views/time/`**, the clock the decoder has built, in DOM:
+
+| File | Holds |
+| --- | --- |
+| `model.ts` | `decodedTimeMs(clock, atMicros)`: the last accepted frame's time plus the source time since that frame began. `clockFace` cuts it to the second as digits, date, and day of year. `statusChips` lists the four statuses with the current one marked. `lockRows`, `offsetRow`, and `localTimeRow` are the four rows; under replay the offset comes from the capture's newest `# wall` line |
+| `TimeView.tsx` | `TimeView` reads the source clock on every animation frame and renders when the decoded second changes, so it ticks once a second at any replay speed. One font size from the panel's width and height (`min(19cqw, 22cqh)`) scales the rest, which is sized in `em`. `ClockStatusLine` is the panel's state line |
+
 **`views/edge-log/`**: `EdgeLog.tsx` lists the newest 50 edges, newest first, as `edgeLine` writes them.
 
 ## Styling
@@ -150,27 +180,46 @@ A view is split as ADR-0007 asks: a pure function decides what to show and is te
 
 When a development build finds no `window.chrome.webview`, `main.tsx` loads `sim/simulatorBridge.ts` by dynamic import and uses it as the bridge. `npm run dev` and http://localhost:5173 in a browser is all it takes.
 
-It plays `sim/fixtures/synthetic-noise-0.jsonl`, a recording of the host's synthetic source at noise 0: 1,141 messages over 225 s of signal, three accepted frames, and a clock that is `acquiring` after the first frame and `locked` after the second.
+It plays one of two recordings of the host's synthetic source, and the noise slider picks which:
+
+| Start with | Recording | What it holds |
+| --- | --- | --- |
+| Noise 0, or the Live or Replay source | `sim/fixtures/synthetic-noise-0.jsonl` | 1,141 messages over 225 s of signal: three accepted frames, and a clock that is `acquiring` after the first frame and `locked` after the second |
+| Synthetic with any noise above 0 | `sim/fixtures/synthetic-noise-0.06.jsonl` | 1,965 messages over 388 s of signal at noise 0.06: the faults below |
+
+The noisy recording is there to show what the clean one cannot: a rejected row, a lost sync, an error symbol, and a clock that is holding.
+
+| At | What happens |
+| --- | --- |
+| 1:01 and 2:01 | The frames of 19:30 and 19:31 are accepted, and the clock locks |
+| 2:55 | Sync is lost in second 52, `gap 2000 ms before second 52`, so the frame of 19:32 never completes |
+| 4:01 | The frame of 19:33 arrives with one bit of its minute flipped. It reads 19:32 and is accepted, because the frame before it was lost and the host compares a frame only with one that started within 90 s. The clock stays locked, a minute behind |
+| 5:01 | The frame of 19:34 is right, and is rejected as `consecutive`: the host expected 19:33. The clock goes to holding |
+| 6:01 | The frame of 19:35 holds an error symbol in second 44, which is unused, and is rejected for `unused bits`. Rejected 2 of 3 |
+| 6:18 | Sync is lost again, in second 15 |
 
 | Command | The simulator's answer |
 | --- | --- |
-| `hello` | `sourceStatus` stopped, then empty `ports` and `captures` |
-| `selectSource` | Plays the recording from the top, whichever source and noise were asked for |
+| `hello` | `sourceStatus` stopped, empty `ports` and `captures`, then `frameLayout` from `sim/fixtures/frameLayout.json` |
+| `selectSource` | Plays a recording from the top: the noisy one for the synthetic source with noise above 0, the clean one otherwise |
 | `stop` | Stops playing and sends `sourceStatus` stopped |
 | Anything else | Nothing |
 
 - Each message is sent at the time it arrived when it was recorded, so the stream has the host's real timing, late edges included.
 - One second after the last message the recording starts again. It opens with the host's `reset: start` status, so the page clears at the top of every pass.
 - `seq` is renumbered from 1 as messages go out, so the count never shows a gap.
-- `?speed=10` on the address plays ten times faster: http://localhost:5173/?speed=10. Any positive number works, fractions too; anything else means 1. Only the arrival times shrink. The timestamps inside the messages are untouched, so at 10 the source runs at ten times wall time.
+- Both recordings were made with High as the reduced-carrier level, and no command changes a recording while it plays. The noise slider picks the recording when Start is pressed and does nothing after that, whatever level it is set to; the speed buttons and the signal settings still move on the page, but the stream does not follow them, and the port and capture lists are empty. With the level set to Low the page reads the carrier the other way while the recorded pulses stay as they were, so the signal panel draws a pending bar over every stretch the recording did not measure. That is the simulator, not a fault. Check these controls in the host.
+- `?speed=10` on the address plays ten times faster: http://localhost:5173/?speed=10. Any positive number works, fractions too; anything else means 1. Only the arrival times shrink. The timestamps inside the messages are untouched, so at 10 the source runs at ten times wall time. The simulator writes that speed into every `sourceStatus` it sends, as the host does for a replay, and that is how the page's clock learns it.
 
-The simulator and the recorder sit behind `import.meta.env.DEV`, so `npm run build` leaves both out, and the fixture with them. A production build opened without the host gets a bridge that only logs a warning, and the status bar reads `no host`.
+`sim/fixtures/frameLayout.json` is a copy of `docs/design/message-examples/frameLayout.json`, because the simulator has no host to build the layout for it. Two tests keep the copy true. In the host, `Serialize_FrameLayout_MatchesExample` holds the example equal to the layout table in C#. Here, the `hello` test in `sim/simulator.test.ts` holds the fixture equal to the example. When the layout changes in C#, change the example, copy it over the fixture, and run `npx prettier --write src/sim/fixtures/frameLayout.json`.
+
+The simulator and the recorder sit behind `import.meta.env.DEV`, so `npm run build` leaves both out, and all three fixtures with them. In the host, the only layout the page has is the one the host sends. A production build opened without the host gets a bridge that only logs a warning, and the status bar reads `no host`.
 
 A development build runs under React's StrictMode, which mounts `App` twice. `hello` goes out twice and the log opens with two sets of answers. That is expected, in the host as well.
 
 ## Recording a fixture
 
-A fixture is recorded from the real host, so it cannot drift from the protocol. In a development build `main.tsx` subscribes a recorder to the bridge and puts it on `window.wwvbRecorder`.
+The stream fixture is recorded from the real host, so it cannot drift from the protocol. In a development build `main.tsx` subscribes a recorder to the bridge and puts it on `window.wwvbRecorder`.
 
 1. Run `npm run dev`, then start the host in Debug. It loads the page from the dev server, which is the build that has the recorder.
 2. Open the dev tools in the host window (F12, or right-click and Inspect) and run `wwvbRecorder.start()` in the console.
@@ -180,6 +229,18 @@ A fixture is recorded from the real host, so it cannot drift from the protocol. 
 6. Point the import in `sim/simulatorBridge.ts` at the new file, and the fixture test in `sim/recording.test.ts` with it.
 
 Each line is the envelope as the host sent it plus `t`, the milliseconds since `start()`. `parseRecording` checks every line against `hostMessageSchema` and names the first line that fails.
+
+### The noisy recording
+
+`synthetic-noise-0.06.jsonl` was not recorded in the window. What a noisy run does depends on the minute it starts in, because the host starts the synthetic source at the current UTC minute and the same noise then lands on different bits. A recording that must hold a lock, a rejected frame, and a lost sync inside a few minutes needs a start time that is chosen, and the window cannot choose one.
+
+It was made on 2026-11-19 by running the host's own classes without the window, in a throwaway test:
+
+- `DecoderPipeline`, `WebMessageBridge`, `SourceController`, and `HostEnvironment`, wired as `App.xaml.cs` wires them, on a `TimeProvider` whose UTC clock starts at 2026-12-10 19:30:07 and whose timers are the system's. Nothing else was replaced, so the stream has the host's pacing, its 100 ms edge batches, and its JSON.
+- One command, parsed by `CommandJson` as the window's would be: `{"command":"selectSource","source":"synthetic","noise":0.06}`. The run lasted 388 s in real time.
+- Each posted message went through `hostMessageSchema` and then `createRecorder`, with its arrival time as the recorder's clock. That is the path a message takes in the page, so the file is what `wwvbRecorder.dump()` would have returned.
+
+The synthetic source's faults come from a seeded generator, and the host always uses seed 0. So the run repeats: an unpaced run of the same start time and noise gave the same frames and the same losses at the same seconds before the paced one was made. To make another, search unpaced runs for a start time and a noise level that give the events wanted, then record that one paced.
 
 ## Adding a shadcn component
 
@@ -200,10 +261,16 @@ The controls are built on Base UI, and most examples online are for the Radix ve
 - `Slider` and `ToggleGroup` take `value` as an array, even for one value: `value={[noise]}`. A slider given a bare number draws two thumbs.
 - A class passed from outside does not beat one the component sets under a variant: `w-32` loses to the slider's `data-horizontal:w-full`. Put the control in a sized wrapper.
 - jsdom hides the slider's thumb. A test finds the real input with `screen.getByLabelText("Noise", { selector: "input" })` and changes it with `fireEvent.change`.
+- A `Select` shows the raw value on its button unless its root gets `items` of `{ value, label }`. An empty list draws as a hairline, so `PickList` gives it one disabled row.
+- A `Select` also reports changes it makes itself, with the reason `"none"`: it resets the value when the picked item leaves the list, and it picks by typeahead when a key is typed on the closed list. `PickList` takes only a pick the user made and leaves the rest to the page's own rule.
+- A list opens a moment after the click, and the focus arrives inside it a moment after that. A test finds what is inside with `findByRole`, and before it types it waits for the focus: `await waitFor(() => expect(option).toHaveFocus())`. A list with nothing to pick puts the focus on its own box, not on a row.
+- While a list is open the rest of the page is hidden from role queries, so the next control is found with `findByRole` too.
+
+One generated file is changed by hand. In `toggle.tsx` a pressed toggle is `aria-pressed:bg-primary aria-pressed:text-primary-foreground` where the CLI wrote `aria-pressed:bg-muted`. `--muted` is also the popover's background, so a pressed button inside a popover could not be seen, and it was faint on the app bar. If the CLI ever writes the file again, put the edit back.
 
 ## Imports
 
-- A local import carries no file extension: `import { reduce } from "./appState"`. A stylesheet and the raw fixture keep theirs (`./index.css`, `./fixtures/synthetic-noise-0.jsonl?raw`).
+- A local import carries no file extension: `import { reduce } from "./appState"`. A stylesheet, a JSON file, and the raw fixture keep theirs (`./index.css`, `./fixtures/frameLayout.json`, `./fixtures/synthetic-noise-0.jsonl?raw`).
 - The same folder or below is relative (`./stages`). Another folder goes through the alias (`@/state/store`). Never `../`.
 
 The linter enforces the first rule and not the second.
@@ -222,9 +289,11 @@ There is no `baseUrl`: TypeScript 7 rejects it (TS5102), and `paths` works witho
 
 `.oxlintrc.json` turns on the `react`, `typescript`, `oxc`, `jsx-a11y`, and `import` plugins, with the correctness, suspicious, and perf categories as errors.
 
-The editor underlines the `import/extensions` rule in that file with "Array has too many items". Leave it. The schema accepts either a plain map of extensions or a settings object with that map under `pattern`, and the file mixes the two: `css`, `jsonl`, and `checkTypeImports` side by side. In oxlint 1.90.0 the schema's own form, with the map under `pattern`, stops checking `import type` lines. The mixed form checks them.
+The editor underlines the `import/extensions` rule in that file with "Array has too many items". Leave it. The schema accepts either a plain map of extensions or a settings object with that map under `pattern`, and the file mixes the two: `css`, `json`, `jsonl`, and `checkTypeImports` side by side. In oxlint 1.90.0 the schema's own form, with the map under `pattern`, stops checking `import type` lines. The mixed form checks them.
 
 After an oxlint upgrade it is worth one try: move the map under `pattern`, add `.ts` to an `import type` line, and run `npm run lint`. If the line is reported, keep the schema's form.
+
+One rule is silenced on one line of the app's own code. A tick in `FramesTable.tsx` takes its array index as its React key, because a tick has no identity but its second and the seconds of a frame never move. The line carries `oxlint-disable-next-line react/no-array-index-key` with that reason, and `NOSONAR` for the same rule in Sonar. A new directive needs a reason as plain as that one, written beside it.
 
 ## Tests
 
@@ -235,11 +304,13 @@ After an oxlint upgrade it is worth one try: move the map under `pattern`, add `
 | `unit` | `*.test.ts` | Node |
 | `dom` | `*.test.tsx` | jsdom, with `src/test-setup.ts` |
 
-One jsdom environment for everything does not work: jsdom replaces the global `URL`, which `messages.test.ts` uses to find the example files. So a test that needs a DOM is named `.test.tsx`, whether or not it contains JSX.
+One jsdom environment for everything does not work: jsdom replaces the global `URL`, which `messages.test.ts` and `sim/simulator.test.ts` use to find the example files. So a test that needs a DOM is named `.test.tsx`, whether or not it contains JSX.
 
 `test-setup.ts` adds the `jest-dom` matchers and unmounts after each test. Testing Library cannot register that cleanup itself, because there are no vitest globals: test files import `describe`, `it`, and `expect` from `vitest`.
 
 jsdom lays nothing out and has no canvas, so `test-setup.ts` also gives every dom test a `ResizeObserver` that never reports and a `getContext` that returns `null`. A view that sizes itself or paints then renders and does nothing more. A test that needs sizes or painting stubs its own, as `SignalView.test.tsx` does: a fake observer the test drives with `reportSize(width, height)`, and the recording context from `views/signal/recordingContext.ts`.
+
+Because jsdom lays nothing out, a test cannot see cells that collapse or text that overlaps. A view drawn in DOM is looked at in the app at both of its sizes, in the overview and in its focus view, before it is called done.
 
 jsdom also shows focus on every focused element: it matches `:focus-visible` wherever `:focus` matches. What a mouse click leaves behind, focus without a focus ring, can only be seen in a browser.
 

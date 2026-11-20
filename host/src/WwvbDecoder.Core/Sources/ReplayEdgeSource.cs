@@ -17,6 +17,8 @@ public sealed class ReplayEdgeSource : IEdgeSource
     private const string WallLinePrefix = "# wall";
     private readonly IReadOnlyList<string> _lines;
     private readonly TimeProvider _timeProvider;
+    private readonly long _origin;
+    private TimeSpan _due;
     private ulong? _baseline;
 
     /// <summary>
@@ -32,6 +34,7 @@ public sealed class ReplayEdgeSource : IEdgeSource
         _lines = lines;
         _timeProvider = timeProvider;
         Info = CaptureInfo.Parse(lines);
+        _origin = timeProvider.GetTimestamp();
     }
 
     /// <inheritdoc/>
@@ -153,6 +156,8 @@ public sealed class ReplayEdgeSource : IEdgeSource
         }
 
         EdgeEvent.Reset? backwards = null;
+        TimeSpan now = _timeProvider.GetElapsedTime(_origin);
+        TimeSpan due = now;
         if (_baseline is { } baseline)
         {
             if (sample.Edge.Micros < baseline)
@@ -161,13 +166,15 @@ public sealed class ReplayEdgeSource : IEdgeSource
             }
             else if (speed > 0.0)
             {
-                await Task.Delay(
-                    TimeSpan.FromMicroseconds((sample.Edge.Micros - baseline) / speed),
-                    _timeProvider,
-                    ct
-                );
+                due = _due + TimeSpan.FromMicroseconds((sample.Edge.Micros - baseline) / speed);
             }
         }
+
+        if (due > now)
+        {
+            await Task.Delay(due - now, _timeProvider, ct);
+        }
+        _due = due;
         _baseline = sample.Edge.Micros;
         return backwards;
     }

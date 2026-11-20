@@ -71,6 +71,22 @@ describe("useAppStore", () => {
     expect(useAppStore.getState().drawer).toBeNull();
   });
 
+  it("takes high as the reduced-carrier level until the page sets another", () => {
+    expect(useAppStore.getState().reducedLevel).toBe("high");
+
+    useAppStore.getState().setReducedLevel("low");
+
+    expect(useAppStore.getState().reducedLevel).toBe("low");
+  });
+
+  it("keeps the reduced-carrier level through a source reset", () => {
+    useAppStore.getState().setReducedLevel("low");
+
+    useAppStore.getState().dispatch(reset);
+
+    expect(useAppStore.getState().reducedLevel).toBe("low");
+  });
+
   it("keeps the focus and the drawer through a source reset", () => {
     useAppStore.getState().dispatch(info(1));
     useAppStore.getState().setFocus(2);

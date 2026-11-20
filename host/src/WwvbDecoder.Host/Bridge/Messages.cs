@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using WwvbDecoder.Core;
 
 namespace WwvbDecoder.Host.Bridge;
 
@@ -49,10 +50,40 @@ public enum SourceState
 }
 
 /// <summary>Posted whenever the source changes state. <paramref name="Detail"/> is display text.</summary>
-public sealed record SourceStatus(SourceKind Source, string Name, SourceState State, string Detail);
+public sealed record SourceStatus(
+    SourceKind Source,
+    string Name,
+    SourceState State,
+    string Detail,
+    double Speed = 1.0
+);
 
 /// <summary>One capture file. <paramref name="Path"/> is what <c>selectSource</c> takes back.</summary>
 public sealed record CaptureEntry(string Path, DateTimeOffset Recorded, double Minutes);
 
 /// <summary>A <c>#</c> line from the source, verbatim.</summary>
 public sealed record InfoPayload(string Line);
+
+/// <summary>The frame layout as the page draws it: a role and a bit weight for each second.</summary>
+/// <param name="Roles">What each second carries, indexed by second.</param>
+/// <param name="Weights">The weight of each second's bit, or <c>null</c> where it has none.</param>
+public sealed record FrameLayoutPayload(
+    ImmutableArray<SecondRole> Roles,
+    ImmutableArray<int?> Weights
+)
+{
+    /// <summary>Builds the payload from <see cref="WwvbFrameLayout"/>.</summary>
+    public static FrameLayoutPayload Create()
+    {
+        var weights = new int?[WwvbFrameLayout.FrameSeconds];
+        var bits = WwvbFrameLayout
+            .Digits.SelectMany(digit => digit.Bits)
+            .Concat(WwvbFrameLayout.Ut1Correction);
+        foreach (LayoutBit bit in bits)
+        {
+            weights[bit.Second] = bit.Weight;
+        }
+
+        return new FrameLayoutPayload(WwvbFrameLayout.Roles, [.. weights]);
+    }
+}

@@ -15,7 +15,12 @@
     "import/extensions": [
       "error",
       "never",
-      { "css": "always", "jsonl": "always", "checkTypeImports": true }
+      {
+        "css": "always",
+        "json": "always",
+        "jsonl": "always",
+        "checkTypeImports": true
+      }
     ],
     "import/no-unassigned-import": "off"
   },

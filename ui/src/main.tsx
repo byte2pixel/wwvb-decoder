@@ -19,7 +19,6 @@ const bridge = simulator
   : createBridge(webview);
 
 const clock = createSourceClock(() => performance.now());
-if (simulator) clock.setSpeed(simulator.speedFrom(location.search));
 bridge.onMessage(feedClock(clock));
 
 if (import.meta.env.DEV) {

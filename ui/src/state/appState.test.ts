@@ -10,6 +10,7 @@ import type {
   ClockState,
   DecodedFrame,
   Edge,
+  FrameLayout,
   FrameSyncEvent,
   HostMessage,
   SourceStatus,
@@ -53,6 +54,17 @@ const validation = (minute: number): ValidationResult => ({
   },
   accepted: true,
   failures: [],
+});
+
+const layout: FrameLayout = {
+  roles: Array(60).fill("unused"),
+  weights: Array(60).fill(null),
+};
+
+const frameLayout = (seq: number): HostMessage => ({
+  type: "frameLayout",
+  seq,
+  payload: layout,
 });
 
 describe("reduce", () => {
@@ -276,6 +288,13 @@ describe("reduce", () => {
     expect(state.captures).toEqual(captures);
   });
 
+  it("remembers the frame layout", () => {
+    const state = reduce(initialState, frameLayout(1));
+
+    expect(initialState.frameLayout).toBeNull();
+    expect(state.frameLayout).toEqual(layout);
+  });
+
   it("clears the stream on a source reset and keeps the lists", () => {
     const before: HostMessage[] = [
       {
@@ -335,6 +354,12 @@ describe("reduce", () => {
       lastSeq: 7,
       log: state.log,
     });
+  });
+
+  it("keeps the frame layout across a source reset", () => {
+    const state = [frameLayout(1), reset(2)].reduce(reduce, initialState);
+
+    expect(state.frameLayout).toEqual(layout);
   });
 
   it("keeps the stream on a source status that is not a reset", () => {
@@ -453,6 +478,58 @@ describe("reduce", () => {
       reason: "expected marker at second 9, got Zero",
       seq: 7,
     });
+  });
+
+  /** A loss of frame sync in the given second. */
+  const syncLost = (seq: number, second: number): HostMessage => ({
+    type: "frameSync",
+    seq,
+    payload: {
+      kind: "syncLost",
+      reason: `gap 2000 ms before second ${second}`,
+    },
+  });
+
+  it("lists each sync loss with its number, oldest first", () => {
+    const state = [syncLost(7, 42), syncLost(30, 9)].reduce(
+      reduce,
+      initialState,
+    );
+
+    expect(initialState.syncLosses).toEqual([]);
+    expect(state.syncLosses).toEqual([
+      { number: 1, reason: "gap 2000 ms before second 42" },
+      { number: 2, reason: "gap 2000 ms before second 9" },
+    ]);
+  });
+
+  it("keeps a listed sync loss when the held one expires", () => {
+    const state = expireSyncLoss(reduce(initialState, syncLost(7, 42)), 7);
+
+    expect(state.syncLoss).toBeNull();
+    expect(state.syncLosses).toHaveLength(1);
+  });
+
+  it("keeps only the newest five sync losses, and keeps counting", () => {
+    const state = Array.from({ length: 7 }, (_, i) =>
+      syncLost(i + 1, i),
+    ).reduce(reduce, initialState);
+
+    expect(state.syncLosses.map((loss) => loss.number)).toEqual([
+      3, 4, 5, 6, 7,
+    ]);
+    expect(state.syncLosses.at(-1)?.reason).toBe("gap 2000 ms before second 6");
+  });
+
+  it("starts the list of sync losses again after a source reset", () => {
+    const state = [syncLost(1, 42), reset(2), syncLost(3, 9)].reduce(
+      reduce,
+      initialState,
+    );
+
+    expect(state.syncLosses).toEqual([
+      { number: 1, reason: "gap 2000 ms before second 9" },
+    ]);
   });
 
   it("records each filled slot with the start of the symbol placed in it", () => {

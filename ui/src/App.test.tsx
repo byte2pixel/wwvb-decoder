@@ -1,8 +1,12 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bridge } from "@/protocol/bridge";
-import type { Command, HostMessage } from "@/protocol/messages";
+import type {
+  Command,
+  HostMessage,
+  ValidationResult,
+} from "@/protocol/messages";
 import { useAppStore } from "@/state/store";
 import { createSourceClock } from "@/time/sourceClock";
 import App from "./App";
@@ -30,6 +34,35 @@ function fakeBridge() {
 /** A clock no edge has synced: it has a speed and no present. */
 const idleClock = () => createSourceClock(() => 0);
 
+const overnight = {
+  path: String.raw`C:\captures\2026-11-09T0434Z-overnight.edges.txt`,
+  recorded: "2026-11-09T04:34:28Z",
+  minutes: 524.9,
+};
+
+/** A validated frame. Only the table's own tests look at what is in one. */
+const validation: ValidationResult = {
+  frame: {
+    frame: {
+      startMicros: 0,
+      endMicros: 60_000_000,
+      symbols: Array.from({ length: 60 }, () => "zero"),
+    },
+    minute: 35,
+    hour: 19,
+    dayOfYear: 344,
+    year: 26,
+    ut1Sign: "plus",
+    ut1Tenths: 0,
+    leapYear: false,
+    leapSecondPending: false,
+    dst: "standard",
+    errorSeconds: [],
+  },
+  accepted: true,
+  failures: [],
+};
+
 /** The overview's panels, in document order. */
 const overviewPanels = [
   "Signal",
@@ -49,6 +82,10 @@ describe("App", () => {
   // The store is one module-level object shared by every test.
   beforeEach(() => {
     useAppStore.setState(useAppStore.getInitialState(), true);
+  });
+
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
   });
 
   it("lays out the bar, the rail, five panels, and the status bar", () => {
@@ -113,9 +150,20 @@ describe("App", () => {
   });
 
   it("names the 60 s window when the source runs faster than 1x", () => {
-    const clock = idleClock();
-    clock.setSpeed(10);
-    render(<App bridge={fakeBridge().bridge} clock={clock} />);
+    const { bridge, emit } = fakeBridge();
+    render(<App bridge={bridge} clock={idleClock()} />);
+
+    emit({
+      type: "sourceStatus",
+      seq: 1,
+      payload: {
+        source: "replay",
+        name: "replay",
+        state: "running",
+        detail: "",
+        speed: 10,
+      },
+    });
 
     expect(screen.getByRole("region", { name: "Signal" })).toHaveTextContent(
       "60 s window",
@@ -214,6 +262,122 @@ describe("App", () => {
     expect(
       screen.getByRole("dialog", { name: "Keyboard shortcuts" }),
     ).toBeInTheDocument();
+  });
+
+  it("lists the newest three frames in the overview", () => {
+    useAppStore.setState({
+      validations: Array.from({ length: 5 }, () => validation),
+      frameCount: 5,
+    });
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
+
+    const rows = within(
+      screen.getByRole("region", { name: "Decoded frames" }),
+    ).getAllByRole("row");
+
+    // The heading row, then frames 5, 4, and 3.
+    expect(rows).toHaveLength(4);
+    expect(rows[1]).toHaveTextContent("#5");
+    expect(rows[3]).toHaveTextContent("#3");
+  });
+
+  it("leaves the keys to an open capture list, Esc included", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({ captures: [overnight] });
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
+    await user.keyboard("3");
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+    await user.click(screen.getByRole("combobox", { name: "Capture" }));
+    const option = await screen.findByRole("option");
+    // The focus moves into the list a moment after it opens.
+    await waitFor(() => expect(option).toHaveFocus());
+
+    await user.keyboard("2tl{PageDown}{ArrowRight}{Escape}");
+
+    expect(
+      await screen.findByRole("combobox", { name: "Capture" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(useAppStore.getState()).toMatchObject({ focus: 3, drawer: null });
+    expect(document.documentElement).not.toHaveClass("dark");
+  });
+
+  it("leaves the keys to an open list that has nothing to pick", async () => {
+    const user = userEvent.setup();
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
+    await user.keyboard("3");
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+    const capture = screen.getByRole("combobox", { name: "Capture" });
+    await user.click(capture);
+    await screen.findByRole("option", { name: "No captures found" });
+    // With no row to highlight, the focus moves from the button to the list's own box.
+    await waitFor(() => expect(capture).not.toHaveFocus());
+
+    await user.keyboard("2tl{PageDown}{ArrowRight}{Escape}");
+
+    expect(
+      await screen.findByRole("combobox", { name: "Capture" }),
+    ).toHaveAttribute("aria-expanded", "false");
+    expect(useAppStore.getState()).toMatchObject({ focus: 3, drawer: null });
+    expect(document.documentElement).not.toHaveClass("dark");
+  });
+
+  it("leaves the keys to the open signal settings, Esc included", async () => {
+    const user = userEvent.setup();
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
+    await user.keyboard("3");
+    await user.click(screen.getByRole("button", { name: "Signal settings" }));
+    const high = await screen.findByRole("button", { name: "High" });
+    // The focus moves into the popover a moment after it opens.
+    await waitFor(() => expect(high).toHaveFocus());
+
+    await user.keyboard("2tl{PageDown}{ArrowRight}");
+
+    // The arrow key went to the level buttons: it moved the focus from High to Low.
+    expect(screen.getByRole("button", { name: "Low" })).toHaveFocus();
+    expect(useAppStore.getState()).toMatchObject({ focus: 3, drawer: null });
+    expect(document.documentElement).not.toHaveClass("dark");
+
+    await user.keyboard("{Escape}");
+
+    await waitFor(() => expect(high).not.toBeInTheDocument());
+    expect(useAppStore.getState().focus).toBe(3);
+  });
+
+  it("acts once on an arrow key pressed on a source button", async () => {
+    const user = userEvent.setup();
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+
+    await user.keyboard("{ArrowRight}");
+
+    expect(useAppStore.getState().focus).toBe(1);
+    // The key was the page's alone, so the focus did not walk on to Synthetic.
+    expect(document.body).toHaveFocus();
+    expect(
+      screen.getByRole("button", { name: "Replay", pressed: true }),
+    ).toBeInTheDocument();
+  });
+
+  it("acts on a stage key pressed on a closed list or the settings button, and leaves both closed", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({ captures: [overnight] });
+    render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+    const capture = screen.getByRole("combobox", { name: "Capture" });
+    const settings = screen.getByRole("button", { name: "Signal settings" });
+
+    capture.focus();
+    await user.keyboard("2");
+    settings.focus();
+    await user.keyboard("{PageDown}");
+
+    expect(useAppStore.getState().focus).toBe(3);
+    expect(capture).toHaveAttribute("aria-expanded", "false");
+    expect(settings).toHaveAttribute("aria-expanded", "false");
+
+    await user.click(capture);
+
+    expect(await screen.findByRole("option")).toBeInTheDocument();
   });
 
   it("leaves a key pressed in the noise slider to the slider", async () => {

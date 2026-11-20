@@ -3,6 +3,7 @@ import type {
   ClockState,
   DecodedFrame,
   Edge,
+  FrameLayout,
   FrameSyncEvent,
   HostMessage,
   Pulse,
@@ -20,6 +21,7 @@ const maxSymbols = 600;
 const maxValidations = 20;
 const maxInfos = 50;
 const maxSlots = 120;
+const maxSyncLosses = 5;
 
 const appendCapped = <T>(
   array: ReadonlyArray<T>,
@@ -34,6 +36,14 @@ export interface FilledSlot {
   frameStartMicros: number;
   second: number;
   symbol: SymbolKind;
+}
+
+/** A loss of frame sync, as the stage 4 focus view lists it. */
+export interface SyncLossEntry {
+  /** The loss's count since the last source reset. The newest has the highest. */
+  number: number;
+  /** The host's reason, as it sent it. */
+  reason: string;
 }
 
 export interface AppState {
@@ -53,8 +63,12 @@ export interface AppState {
   lostMessages: number;
   log: ProtocolLog;
   slots: ReadonlyArray<FilledSlot>;
+  /** Comes from the hello reply. A reset does not clear it. */
+  frameLayout: Readonly<FrameLayout> | null;
   /** The latest loss of frame sync. The store clears it 5 s later. */
   syncLoss: Readonly<{ reason: string; seq: number }> | null;
+  /** The newest losses of frame sync, oldest first. Nothing but a source reset clears them. */
+  syncLosses: ReadonlyArray<SyncLossEntry>;
 }
 
 export const initialState: AppState = {
@@ -74,7 +88,9 @@ export const initialState: AppState = {
   lostMessages: 0,
   log: emptyLog,
   slots: [],
+  frameLayout: null,
   syncLoss: null,
+  syncLosses: [],
 };
 
 export const reduce = (state: AppState, message: HostMessage): AppState => {
@@ -135,6 +151,11 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
         ...state,
         decodedFrame: message.payload,
       };
+    case "frameLayout":
+      return {
+        ...state,
+        frameLayout: message.payload,
+      };
     case "frameSync": {
       const placed = state.symbols.at(-1);
       const slots =
@@ -152,13 +173,21 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
               maxSlots,
             )
           : state.slots;
+      if (message.payload.kind !== "syncLost") {
+        return { ...state, frameSync: message.payload, slots };
+      }
+
+      const { reason } = message.payload;
+      const number = (state.syncLosses.at(-1)?.number ?? 0) + 1;
       return {
         ...state,
         frameSync: message.payload,
-        syncLoss:
-          message.payload.kind === "syncLost"
-            ? { reason: message.payload.reason, seq: message.seq }
-            : state.syncLoss,
+        syncLoss: { reason, seq: message.seq },
+        syncLosses: appendCapped(
+          state.syncLosses,
+          [{ number, reason }],
+          maxSyncLosses,
+        ),
         slots,
       };
     }
@@ -168,6 +197,7 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
           ...initialState,
           ports: state.ports,
           captures: state.captures,
+          frameLayout: state.frameLayout,
           sourceStatus: message.payload,
         };
       }

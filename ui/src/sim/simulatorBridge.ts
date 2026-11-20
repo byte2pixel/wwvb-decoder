@@ -1,4 +1,5 @@
-import fixture from "./fixtures/synthetic-noise-0.jsonl?raw";
+import noisy from "./fixtures/synthetic-noise-0.06.jsonl?raw";
+import clean from "./fixtures/synthetic-noise-0.jsonl?raw";
 import { parseRecording } from "./recording";
 import { createSimulator } from "./simulator";
 
@@ -13,5 +14,8 @@ export const speedFrom = (search: string): number => {
 
 export const createSimulatorBridge = (search: string) => {
   const speed = speedFrom(search);
-  return createSimulator(parseRecording(fixture), { speed });
+  return createSimulator(parseRecording(clean), {
+    speed,
+    noisy: parseRecording(noisy),
+  });
 };

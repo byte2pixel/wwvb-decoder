@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HostMessage } from "@/protocol/messages";
 import { createSimulator } from "./simulator";
 import type { RecordedMessage } from "./recording";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const line = (t: number, text: string): RecordedMessage => ({
   t,
@@ -13,6 +15,19 @@ const summary = (messages: HostMessage[]) =>
   messages.map((message) =>
     message.type === "info" ? message.payload.line : message.type,
   );
+
+/** The message example. The host's tests hold it equal to the host's layout table. */
+const layoutExample: object = JSON.parse(
+  readFileSync(
+    fileURLToPath(
+      new URL(
+        "../../../docs/design/message-examples/frameLayout.json",
+        import.meta.url,
+      ),
+    ),
+    "utf8",
+  ),
+);
 
 const select = {
   command: "selectSource",
@@ -29,7 +44,7 @@ describe("createSimulator", () => {
     vi.useRealTimers();
   });
 
-  it("answers hello with the source status, the ports, and the captures", () => {
+  it("answers hello with the source status, the ports, the captures, and the frame layout", () => {
     // Arrange
     const simulator = createSimulator([]);
     const received: HostMessage[] = [];
@@ -44,10 +59,17 @@ describe("createSimulator", () => {
       {
         type: "sourceStatus",
         seq: 1,
-        payload: { source: "none", name: "", state: "stopped", detail: "" },
+        payload: {
+          source: "none",
+          name: "",
+          state: "stopped",
+          detail: "",
+          speed: 1,
+        },
       },
       { type: "ports", seq: 2, payload: { items: [] } },
       { type: "captures", seq: 3, payload: { items: [] } },
+      { ...layoutExample, seq: 4 },
     ]);
   });
 
@@ -90,7 +112,7 @@ describe("createSimulator", () => {
     vi.advanceTimersByTime(10);
 
     // Assert
-    expect(received.map((message) => message.seq)).toEqual([1, 2, 3, 4, 5]);
+    expect(received.map((message) => message.seq)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 
   it("stops playing and reports stopped", () => {
@@ -145,6 +167,61 @@ describe("createSimulator", () => {
     expect(summary(received)).toEqual(["A", "B", "A", "B"]);
   });
 
+  it("plays the noisy recording when the synthetic source is asked for with noise", () => {
+    const simulator = createSimulator([line(0, "clean")], {
+      noisy: [line(0, "noisy"), line(100, "still noisy")],
+    });
+    const received: HostMessage[] = [];
+    simulator.onMessage((message) => received.push(message));
+
+    simulator.send({ ...select, noise: 0.05 });
+    vi.advanceTimersByTime(100);
+    expect(summary(received)).toEqual(["noisy", "still noisy"]);
+
+    // One second after its last line it is the noisy recording that starts over.
+    vi.advanceTimersByTime(1_050);
+    expect(summary(received)).toEqual(["noisy", "still noisy", "noisy"]);
+  });
+
+  it.each([
+    ["the synthetic source at noise 0", select],
+    [
+      "a replay",
+      {
+        command: "selectSource",
+        source: "replay",
+        path: "a.edges.txt",
+        speed: 1,
+      },
+    ],
+    [
+      "a serial port",
+      { command: "selectSource", source: "serial", port: "COM3" },
+    ],
+  ] as const)("plays the first recording for %s", (_, command) => {
+    const simulator = createSimulator([line(0, "clean")], {
+      noisy: [line(0, "noisy")],
+    });
+    const received: HostMessage[] = [];
+    simulator.onMessage((message) => received.push(message));
+
+    simulator.send(command);
+    vi.advanceTimersByTime(0);
+
+    expect(summary(received)).toEqual(["clean"]);
+  });
+
+  it("plays its one recording at any noise when it has no noisy one", () => {
+    const simulator = createSimulator([line(0, "A")]);
+    const received: HostMessage[] = [];
+    simulator.onMessage((message) => received.push(message));
+
+    simulator.send({ ...select, noise: 0.4 });
+    vi.advanceTimersByTime(0);
+
+    expect(summary(received)).toEqual(["A"]);
+  });
+
   it("plays faster at a higher speed", () => {
     const simulator = createSimulator([line(0, "A"), line(100, "B")], {
       speed: 10,
@@ -164,6 +241,34 @@ describe("createSimulator", () => {
 
     vi.advanceTimersByTime(15); // past it
     expect(summary(received)).toEqual(["A", "B", "A"]);
+  });
+
+  it("says its speed in every source status it sends", () => {
+    const running: RecordedMessage = {
+      t: 0,
+      message: {
+        type: "sourceStatus",
+        seq: 99,
+        payload: {
+          source: "synthetic",
+          name: "synthetic",
+          state: "running",
+          detail: "",
+        },
+      },
+    };
+    const simulator = createSimulator([running, line(10, "A")], { speed: 10 });
+    const received: HostMessage[] = [];
+    simulator.onMessage((message) => received.push(message));
+
+    simulator.send({ command: "hello", protocol: 1 });
+    simulator.send(select);
+    vi.advanceTimersByTime(1);
+
+    const speeds = received.flatMap((message) =>
+      message.type === "sourceStatus" ? [message.payload.speed] : [],
+    );
+    expect(speeds).toEqual([10, 10]);
   });
 
   it("stops delivering to a handler that unsubscribed", () => {

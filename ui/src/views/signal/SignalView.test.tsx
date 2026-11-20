@@ -1,7 +1,6 @@
 import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Edge, SourceStatus } from "@/protocol/messages";
-import { initialState } from "@/state/appState";
 import { useAppStore } from "@/state/store";
 import type { SourceClock } from "@/time/sourceClock";
 import type { LaneName } from "./model";
@@ -85,7 +84,7 @@ describe("SignalView", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.stubGlobal("ResizeObserver", FakeResizeObserver);
-    useAppStore.setState(initialState);
+    useAppStore.setState(useAppStore.getInitialState(), true);
     // 16 px to the rem, and each color the view asserts on holds its variable's name.
     const sheet = document.createElement("style");
     sheet.textContent = `
@@ -133,6 +132,22 @@ describe("SignalView", () => {
       path: ["M 1200 0", "L 1200 100"],
       strokeStyle: "signal",
       lineWidth: 1,
+    });
+  });
+
+  it("reads the carrier with the level the page names as reduced", () => {
+    useAppStore.setState({ edges });
+    const { frame } = mount();
+    reportSize(1212, 100);
+
+    useAppStore.getState().setReducedLevel("low");
+
+    // The same edges the other way up: full carrier from 100 to 180, reduced after it.
+    expect(frame()).toContainEqual({
+      op: "stroke",
+      path: ["M 100 6", "L 180 6", "L 180 34", "L 1200 34"],
+      strokeStyle: "signal",
+      lineWidth: 1.5,
     });
   });
 

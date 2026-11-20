@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using WwvbDecoder.Core;
 using WwvbDecoder.Host.Bridge;
 
@@ -20,6 +21,9 @@ public sealed class SourceController(
 {
     private static readonly SourceStatus Idle = new(SourceKind.None, "", SourceState.Stopped, "");
 
+    // How the edge logger's banner line starts: "# wwvb-edge-logger 0.1.0 pin=2".
+    private const string BannerPrefix = "# wwvb-edge-logger ";
+
     /// <summary>
     /// The current source status.
     /// </summary>
@@ -38,13 +42,14 @@ public sealed class SourceController(
                 {
                     Trace.TraceWarning("Protocol mismatch: client {0} vs host 1", hello.Protocol);
                 }
-                // send the status, ports, and captures in order
+                // send the status, ports, captures, and frame layout in order
                 poster.Post("sourceStatus", Status);
                 poster.Post("ports", new ItemsPayload<string>([.. environment.ListPorts()]));
                 poster.Post(
                     "captures",
                     new ItemsPayload<CaptureEntry>([.. environment.ListCaptures()])
                 );
+                poster.Post("frameLayout", FrameLayoutPayload.Create());
                 break;
             case Command.ListPorts:
                 poster.Post("ports", new ItemsPayload<string>([.. environment.ListPorts()]));
@@ -58,28 +63,26 @@ public sealed class SourceController(
                 break;
             case Command.SelectSynthetic synthetic:
                 await StopRunAsync();
-                StartRun(environment.CreateSynthetic(synthetic.Noise), SourceKind.Synthetic);
+                StartOrReport(
+                    SourceKind.Synthetic,
+                    "synthetic",
+                    () => environment.CreateSynthetic(synthetic.Noise)
+                );
                 break;
             case Command.SelectSerial serial:
                 await StopRunAsync();
-                SetStatus(
-                    new SourceStatus(
-                        SourceKind.Serial,
-                        $"serial {serial.Port}",
-                        SourceState.Error,
-                        "not available yet"
-                    )
+                StartOrReport(
+                    SourceKind.Serial,
+                    $"serial {serial.Port}",
+                    () => environment.CreateSerial(serial.Port)
                 );
                 break;
-            case Command.SelectReplay:
+            case Command.SelectReplay replay:
                 await StopRunAsync();
-                SetStatus(
-                    new SourceStatus(
-                        SourceKind.Replay,
-                        "replay",
-                        SourceState.Error,
-                        "not available yet"
-                    )
+                StartOrReport(
+                    SourceKind.Replay,
+                    "replay",
+                    () => environment.CreateReplay(replay.Path, replay.Speed)
                 );
                 break;
             case Command.SetNoise noise:
@@ -91,8 +94,12 @@ public sealed class SourceController(
             case Command.SetReducedCarrierLevel level:
                 pipeline.PulseMeasurement.ReducedCarrierLevel = level.Level;
                 break;
-            case Command.SetReplaySpeed:
-                // Replay arrives later.
+            case Command.SetReplaySpeed speed:
+                if (_run?.Source is ReplayEdgeSource replaying)
+                {
+                    replaying.Speed = speed.Speed;
+                    SetStatus(Status with { Detail = "" });
+                }
                 break;
             case Command.Stop:
                 await StopRunAsync();
@@ -121,6 +128,32 @@ public sealed class SourceController(
 
     private volatile Run? _run;
 
+    /// <summary>
+    /// Creates the source and starts a run on it. A source that cannot be created, such as a
+    /// capture that cannot be read, is answered with an error status, and nothing runs.
+    /// </summary>
+    private void StartOrReport(SourceKind kind, string name, Func<IEdgeSource> create)
+    {
+        IEdgeSource source;
+        try
+        {
+            source = create();
+        }
+        catch (Exception e)
+            when (e
+                    is IOException
+                        or UnauthorizedAccessException
+                        or FormatException
+                        or ArgumentException
+            )
+        {
+            SetStatus(new SourceStatus(kind, name, SourceState.Error, e.Message));
+            return;
+        }
+
+        StartRun(source, kind);
+    }
+
     private void StartRun(IEdgeSource source, SourceKind kind)
     {
         var run = new Run(source, new CancellationTokenSource());
@@ -133,6 +166,7 @@ public sealed class SourceController(
     private async Task RunAndReportAsync(Run run)
     {
         pipeline.SourceReset += OnReset;
+        pipeline.InfoReceived += OnInfo;
         try
         {
             await pipeline.RunAsync(run.Source, run.Cts.Token);
@@ -155,6 +189,7 @@ public sealed class SourceController(
         finally
         {
             pipeline.SourceReset -= OnReset;
+            pipeline.InfoReceived -= OnInfo;
         }
 
         return;
@@ -164,6 +199,19 @@ public sealed class SourceController(
             if (ReferenceEquals(_run, run))
             {
                 SetStatus(Status with { Detail = $"reset: {reason}" });
+            }
+        }
+
+        // The banner is the logger's own word that the port is the right device, so the page shows it.
+        void OnInfo(string line)
+        {
+            if (
+                ReferenceEquals(_run, run)
+                && Status.Source == SourceKind.Serial
+                && line.StartsWith(BannerPrefix, StringComparison.Ordinal)
+            )
+            {
+                SetStatus(Status with { Detail = line });
             }
         }
     }
@@ -183,9 +231,17 @@ public sealed class SourceController(
         run.Cts.Dispose();
     }
 
+    private readonly Lock _statusGate = new();
+
     private void SetStatus(SourceStatus status)
     {
-        Status = status;
-        poster.Post("sourceStatus", status);
+        lock (_statusGate)
+        {
+            Status = status with
+            {
+                Speed = _run?.Source is ReplayEdgeSource replay ? replay.Speed : 1.0,
+            };
+            poster.Post("sourceStatus", Status);
+        }
     }
 }

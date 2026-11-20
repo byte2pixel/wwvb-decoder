@@ -25,12 +25,38 @@ internal sealed class FakeSourceEnvironment : ISourceEnvironment
     /// <summary>Swap in a throwing or completing source for the run-ending tests.</summary>
     public Func<double, IEdgeSource> Synthetic { get; set; }
 
-    public FakeSourceEnvironment() =>
+    /// <summary>The paths asked for, in order.</summary>
+    public List<string> ReplayPaths { get; } = [];
+
+    /// <summary>Swap in a throwing factory for the cannot-read tests.</summary>
+    public Func<string, double, IEdgeSource> Replay { get; set; }
+
+    /// <summary>The ports asked for, in order.</summary>
+    public List<string> SerialPorts { get; } = [];
+
+    /// <summary>Swap in a faulting or scripted source for the serial tests.</summary>
+    public Func<string, IEdgeSource> Serial { get; set; }
+
+    private static readonly string[] Capture =
+    [
+        "# capture v1",
+        "# recorded 2026-11-02T03:10:27Z",
+        "# source test",
+        "H 1000000",
+        "L 1200000",
+        "H 2000000",
+    ];
+
+    public FakeSourceEnvironment()
+    {
         Synthetic = noise => new SyntheticEdgeSource(Time)
         {
             StartUtc = Time.GetUtcNow(),
             Noise = noise,
         };
+        Replay = (_, speed) => new ReplayEdgeSource(Capture, Time) { Speed = speed, Loop = true };
+        Serial = port => new FakeEdgeSource { Name = $"serial {port}" };
+    }
 
     public IReadOnlyList<string> ListPorts() => Ports;
 
@@ -39,6 +65,22 @@ internal sealed class FakeSourceEnvironment : ISourceEnvironment
     public IEdgeSource CreateSynthetic(double noise)
     {
         IEdgeSource source = Synthetic(noise);
+        Created.Add(source);
+        return source;
+    }
+
+    public IEdgeSource CreateReplay(string path, double speed)
+    {
+        ReplayPaths.Add(path);
+        IEdgeSource source = Replay(path, speed);
+        Created.Add(source);
+        return source;
+    }
+
+    public IEdgeSource CreateSerial(string port)
+    {
+        SerialPorts.Add(port);
+        IEdgeSource source = Serial(port);
         Created.Add(source);
         return source;
     }

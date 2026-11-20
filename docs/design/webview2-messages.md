@@ -39,7 +39,7 @@ Unknown properties are ignored on both sides, so either side can add a field wit
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `type` | string | One of the eleven types below |
+| `type` | string | One of the twelve types below |
 | `seq` | number | Monotonic, starting at 1 when the host starts, shared by every type. A gap means a message was lost; the page may log it |
 | `payload` | object | The shape the type selects |
 
@@ -59,6 +59,7 @@ type Envelope =
   | { type: "sourceStatus"; seq: number; payload: SourceStatus }
   | { type: "ports"; seq: number; payload: { items: string[] } }
   | { type: "captures"; seq: number; payload: { items: CaptureEntry[] } }
+  | { type: "frameLayout"; seq: number; payload: FrameLayout }
   | { type: "info"; seq: number; payload: { line: string } };
 ```
 
@@ -83,6 +84,8 @@ interface Frame { startMicros: number; endMicros: number; symbols: SymbolKind[] 
 ### `edges` (stage 1)
 
 Pipeline event `EdgeReceived`, batched. The host flushes the batch every 100 ms or when it holds 200 edges, whichever comes first, and never sends an empty batch. Items are in arrival order.
+
+The host also flushes the batch before every `sourceStatus`, so an edge is never sent after a status that it came before. A `stopped` or `error` status is the last message of its run, and no edge from before a source reset follows the reset. The page depends on this: it stops its source clock on such a status, and a batch arriving afterwards would start the clock again.
 
 ```ts
 interface EdgesPayload { items: Edge[] }
@@ -296,7 +299,7 @@ interface ClockState {
 
 ### `sourceStatus`
 
-Not a stage output. The host posts it whenever the source changes state: in reply to `hello`, after every `selectSource` and `stop`, when a run ends on its own or fails, and on every source reset.
+Not a stage output. The host posts it whenever the source changes state: in reply to `hello`, after every `selectSource` and `stop`, when a run ends on its own or fails, on every source reset, and when `setReplaySpeed` changes the speed of a running replay.
 
 ```ts
 interface SourceStatus {
@@ -304,6 +307,7 @@ interface SourceStatus {
   name: string;
   state: "stopped" | "running" | "error";
   detail: string;
+  speed: number;
 }
 ```
 
@@ -313,8 +317,9 @@ interface SourceStatus {
 | `name` | The source's display name: `serial COM5`, `replay`, `synthetic`, or empty for `none` |
 | `state` | `running` while the pipeline is pumping; `stopped` after `stop` or when a replay without looping reaches its end; `error` when the source could not start or the run faulted |
 | `detail` | Display text. For a serial source the banner line once seen; for an error the exception message; on a source reset `reset: <reason>` with the reason from the contracts document (`open`, `start`, `session`, `loop`, `timestamp went backwards`); otherwise empty or a short description |
+| `speed` | How fast the source's time runs against real time. While a replay is the source it is the replay's speed, 0 for as fast as possible. In every other status it is 1. The page runs its source clock at this speed |
 
-Step 8 wires only the synthetic source. Until Steps 10 and 11 land, `selectSource` with `serial` or `replay` answers `state: "error"` and `detail: "not available yet"`.
+The page has no other way to learn the speed, and a reloaded page gets it back with the reply to `hello`. A page that receives a status without `speed` takes it as 1.
 
 ```json
 {
@@ -324,7 +329,8 @@ Step 8 wires only the synthetic source. Until Steps 10 and 11 land, `selectSourc
     "source": "serial",
     "name": "serial COM5",
     "state": "running",
-    "detail": "# wwvb-edge-logger 0.1.0 pin=2"
+    "detail": "# wwvb-edge-logger 0.1.0 pin=2",
+    "speed": 1
   }
 }
 ```
@@ -352,6 +358,51 @@ interface CaptureEntry { path: string; recorded: string; minutes: number }
   "payload": {
     "items": [
       { "path": "captures/2026-11-02T0310Z-home-west-window.edges.txt", "recorded": "2026-11-02T03:10:27Z", "minutes": 487.5 }
+    ]
+  }
+}
+```
+
+### `frameLayout`
+
+Not a stage output. Sent once after `hello`, as the last message of the reply. It carries the frame layout of the contracts document as `WwvbFrameLayout` holds it, so the page can draw bit weights and field brackets without a copy of the layout in TypeScript. No command asks for it again, and the layout does not change while the host runs, so the page keeps it across source resets.
+
+```ts
+type SecondRole =
+  | "marker" | "unused" | "minute" | "hour" | "dayOfYear" | "ut1Sign"
+  | "ut1Correction" | "year" | "leapYear" | "leapSecondPending" | "dst";
+
+/** Both arrays hold exactly 60 items, indexed by second. */
+interface FrameLayout { roles: SecondRole[]; weights: (number | null)[] }
+```
+
+| Field | Meaning |
+| --- | --- |
+| `roles` | `WwvbFrameLayout.Roles`: what each second carries. A field is the seconds that share its role, and they need not be adjacent: the day of year runs from second 22 to second 33 across an unused second and a marker |
+| `weights` | The weight of the second's bit as the layout table writes it: 40, not 4, for the first minute bit. The UT1 correction's weights, 8 4 2 1, are tenths of a second. `null` for a second without a weight: the markers, the unused seconds, the UT1 sign, the two flags, and the DST pair |
+
+The payload is not one of the pipeline's records. The host builds it from `WwvbFrameLayout`: `roles` is `Roles`, and `weights` takes each `LayoutBit` in `Digits` and `Ut1Correction` and puts its `Weight` at its `Second`.
+
+```json
+{
+  "type": "frameLayout",
+  "seq": 6,
+  "payload": {
+    "roles": [
+      "marker", "minute", "minute", "minute", "unused", "minute", "minute", "minute", "minute", "marker",
+      "unused", "unused", "hour", "hour", "unused", "hour", "hour", "hour", "hour", "marker",
+      "unused", "unused", "dayOfYear", "dayOfYear", "unused", "dayOfYear", "dayOfYear", "dayOfYear", "dayOfYear", "marker",
+      "dayOfYear", "dayOfYear", "dayOfYear", "dayOfYear", "unused", "unused", "ut1Sign", "ut1Sign", "ut1Sign", "marker",
+      "ut1Correction", "ut1Correction", "ut1Correction", "ut1Correction", "unused", "year", "year", "year", "year", "marker",
+      "year", "year", "year", "year", "unused", "leapYear", "leapSecondPending", "dst", "dst", "marker"
+    ],
+    "weights": [
+      null, 40, 20, 10, null, 8, 4, 2, 1, null,
+      null, null, 20, 10, null, 8, 4, 2, 1, null,
+      null, null, 200, 100, null, 80, 40, 20, 10, null,
+      8, 4, 2, 1, null, null, null, null, null, null,
+      8, 4, 2, 1, null, 80, 40, 20, 10, null,
+      8, 4, 2, 1, null, null, null, null, null, null
     ]
   }
 }
@@ -385,7 +436,7 @@ type Command =
 
 ### `hello`
 
-Sent once when the page has loaded and subscribed. `protocol` is the version of this document the page was built against, currently 1. The host logs a mismatch and carries on. It answers with `sourceStatus`, `ports`, and `captures`, in that order, so a reloaded page recovers the host's state.
+Sent once when the page has loaded and subscribed. `protocol` is the version of this document the page was built against, currently 1. The host logs a mismatch and carries on. It answers with `sourceStatus`, `ports`, `captures`, and `frameLayout`, in that order, so a reloaded page recovers the host's state.
 
 ```json
 { "command": "hello", "protocol": 1 }
@@ -401,6 +452,14 @@ Stops the current run, if any, builds the requested source, and starts the pipel
 | `replay` | `path`: a path from `captures`; `speed`: 0 for as fast as possible, otherwise a multiple of real time | Replays the capture, looping at the end |
 | `synthetic` | `noise`: 0 to 1 | Generates a clean or noisy signal starting at the current UTC minute |
 
+A source that cannot start leaves nothing running, and the answer is a `sourceStatus` in `state: "error"` whose `detail` says why:
+
+- **`replay`.** The file must be inside the host's captures directory, as every `path` in `captures` is. A path outside it is refused with `Not a capture in the captures directory.` A file that cannot be read, or is not a valid capture, is refused with the reader's message. A `speed` below 0 is refused too.
+- **`serial`.** The port opens when the run starts to read it, so `sourceStatus` first says `running`, and a port that cannot open follows as `error` a moment later. Once the logger's banner line arrives, `detail` holds it: `# wwvb-edge-logger 0.1.0 pin=2`. It confirms that the port belongs to the logger.
+- **`synthetic`.** A `noise` outside 0 to 1 is refused.
+
+The host does not apply a capture's `# reduced-carrier-level` line. `setReducedCarrierLevel` is the only thing that changes the level.
+
 ```json
 { "command": "selectSource", "source": "serial", "port": "COM5" }
 ```
@@ -415,7 +474,7 @@ Stops the current run, if any, builds the requested source, and starts the pipel
 
 ### `setReplaySpeed`
 
-Changes the replay speed while running; takes effect on the next edge. Ignored unless the current source is replay.
+Changes the replay speed while running; takes effect on the next edge. The host answers with `sourceStatus` carrying the new `speed`. That status has an empty `detail`, so the page does not take it for a source reset. Ignored unless the current source is replay, and then there is no answer.
 
 ```json
 { "command": "setReplaySpeed", "speed": 10 }
@@ -463,8 +522,10 @@ Cancels the current run and disposes the source. The host answers with `sourceSt
 
 ## Threading
 
-`DecoderPipeline` raises its events synchronously on the pump thread, the thread enumerating the source. The bridge's handlers do only two things there: serialize the event to a string, and queue it. Edges go into the batch; everything else goes straight to the dispatcher. `CoreWebView2.PostWebMessageAsJson` must be called on the WPF dispatcher thread, so the bridge posts through `Dispatcher.BeginInvoke`. The `seq` counter is assigned when a message is queued for the dispatcher, and the dispatcher queue is first in, first out, so sequence numbers match posting order.
+`DecoderPipeline` raises its events synchronously on the pump thread, the thread enumerating the source. The bridge's handlers do only two things there: serialize the event to a string, and queue it. Edges go into the batch; everything else goes straight to the dispatcher, and a `sourceStatus` sends the waiting batch ahead of itself. The batch is taken and queued under the lock that assigns `seq`, so the batch timer cannot queue it behind the status. `CoreWebView2.PostWebMessageAsJson` must be called on the WPF dispatcher thread, so the bridge posts through `Dispatcher.BeginInvoke`. The `seq` counter is assigned when a message is queued for the dispatcher, and the dispatcher queue is first in, first out, so sequence numbers match posting order.
 
 Commands arrive on the dispatcher in `CoreWebView2.WebMessageReceived`. Starting or stopping a source happens there too; the running pipeline is cancelled through its `CancellationTokenSource` and the new run starts on a thread-pool thread. Options changed by `setNoise`, `setReplaySpeed`, and `setReducedCarrierLevel` are written on the dispatcher and read on the pump thread; the Core types make those reads and writes volatile.
+
+While a replay runs, `sourceStatus` is posted from both threads: a source reset from the pump thread, and the answer to `setReplaySpeed` from the dispatcher. The controller reads the source's speed and posts the status under one lock, so the last status posted always carries the current speed.
 
 On the page, `window.chrome.webview` delivers `message` events on the main thread, one per posted message, with the parsed object in `event.data`. The page should validate each envelope against its schema and drop, with a console warning, any it cannot parse.

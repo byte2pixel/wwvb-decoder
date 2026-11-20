@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { HostMessage } from "@/protocol/messages";
+import type { HostMessage, PinLevel } from "@/protocol/messages";
 import {
   expireSyncLoss,
   initialState,
@@ -24,10 +24,13 @@ export interface UiState {
 }
 
 interface AppStore extends AppState, UiState {
+  /** The pin level that means reduced carrier. The page picks it, high is the host's default. */
+  reducedLevel: PinLevel;
   /** Feeds one host message through the reducer. */
   dispatch: (message: HostMessage) => void;
   setFocus: (focus: number | null) => void;
   setDrawer: (drawer: Drawer | null) => void;
+  setReducedLevel: (level: PinLevel) => void;
 }
 
 /**
@@ -38,6 +41,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   ...initialState,
   focus: null,
   drawer: null,
+  reducedLevel: "high",
   // set() merges, so what the reducer does not return survives every update, a source
   // reset included: dispatch and the setters, the focus, and the drawer.
   dispatch: (message) => {
@@ -52,4 +56,5 @@ export const useAppStore = create<AppStore>()((set) => ({
   },
   setFocus: (focus) => set({ focus }),
   setDrawer: (drawer) => set({ drawer }),
+  setReducedLevel: (reducedLevel) => set({ reducedLevel }),
 }));

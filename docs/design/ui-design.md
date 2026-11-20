@@ -25,9 +25,9 @@ The design baseline is 1280 by 720 CSS pixels. Sizes below are at the baseline.
 | Pipeline rail: 1 Edges  2 Pulses  3 Symbols  4 Frame sync  5 Decode      |
 |                6 Validate  7 Clock                                   58  |
 +----------------------------------------------------+---------------------+
-| Signal (stages 1 to 4, lanes on one time axis) 186 | Pulse width (3) 186 |
+| Signal (stages 1 to 4, lanes on one time axis) 178 | Pulse width (3) 178 |
 +----------------------------------------------------+---------------------+
-| Frame (stage 4): 3 rows of 20 cells            234 | Time (stage 7)      |
+| Frame (stage 4): 3 rows of 20 cells            226 | Time (stage 7)      |
 +----------------------------------------------------+                     |
 | Decoded frames (stages 5 and 6): table       fills |               fills |
 +----------------------------------------------------+---------------------+
@@ -35,7 +35,7 @@ The design baseline is 1280 by 720 CSS pixels. Sizes below are at the baseline.
 +--------------------------------------------------------------------------+
 ```
 
-The right column is 344 wide. Panels are 12 apart, with 12 of padding around the content area.
+The right column is 344 wide. Panels are 12 apart, with 12 of padding around the content area. The two fixed rows leave the decoded-frames panel 140 at the baseline, which is what its heading row and three frames need.
 
 ### Scaling
 
@@ -169,48 +169,65 @@ A histogram of the last 600 symbol durations from 0 to 1,000 ms.
 
 The 60 seconds of the frame in progress, in three rows of 20. Every BCD field stays inside one row, and the position markers line up in the 10th and 20th columns.
 
-- A cell shows the symbol placed by `slotFilled`. Cell states: empty, empty marker slot (stronger border), `0` in a field, `0` in an unused second (no fill), `1`, `M`, error, and the cell being received now (accent border).
-- Above each cell: its bit weight, or the marker's name (`Pr`, `P1` to `P5`, `P0`). Below each row: a bracket under each field with its name.
+- A cell shows the symbol placed by `slotFilled`, written as the signal panel's chips write it: `0`, `1`, `M`, and `×` for an error. Cell states: empty, empty marker slot (stronger border), `0` in a field, `1`, `M`, error, and the cell being received now (accent border).
+- An unused second has a dashed border, empty or holding its 0, and its 0 has no fill. The time code leaves these seconds at 0, so without the dashes they read as part of the field beside them.
+- Above each cell: its bit weight, or the marker's name (`Pr`, `P1` to `P5`, `P0`). Below each row: a bracket under each field with its name: Minute, Hour, Day of year, UT1 sign, UT1, Year, LY, LS, DST. A bracket runs from the field's first second to its last, across a marker or an unused second between them.
+- The cell being received is the second after the last one placed. Frame sync places a second at the moment the next one begins, so no clock is needed. After second 59, and while frame sync is searching, no cell is marked.
 - The overview shows bits only. Values appear in the decoded-frames table, because the host decodes only a complete frame.
-- A `slotFilled` with a new `frameStartMicros` clears the cells first.
-- Header line: `Synced, 37 of 60 symbols` with a progress bar; `Searching, 1 of 2 markers`; or, for 5 s after `syncLost`, the host's reason.
-- Which seconds belong to which field comes from the host (see [Protocol additions](#protocol-additions)).
+- A `slotFilled` with a new `frameStartMicros` clears the cells first. A loss of sync does not: the cells keep what was placed, so the place where it broke stays on screen until the next frame starts.
+- Header line: `Synced, 37 of 60 symbols` with a progress bar; `Searching, 1 of 2 markers`; or, for 5 s after `syncLost`, `Sync lost: ` and the host's reason, in the fault color. With a source running and no event yet it reads `Searching`; with no source it is empty.
+- Which seconds belong to which field comes from the host (see [Protocol additions](#protocol-additions)). Before the layout arrives the cells have no weights, names, or brackets.
+- Drawn in DOM. A second is a twentieth of its row, so a bracket's place is a percentage and the view measures nothing. The type follows the panel's height, not its width: the overview's panel is wide and short, and the focus view's is tall.
 
 ### Decoded frames
 
-One row per `validation` message, newest first. Three rows in the overview; the store keeps 20.
+One row per `validation` message, newest first. Three rows in the overview, and the newest 16 in the stage 6 focus view; the store keeps 20. Sixteen is what a 16:9 window holds without cutting a row, and the page scales with the window, so that is true at 720p and at 1080p alike. In a window with less room the table scrolls under its headings.
 
 | Column | Content |
 | --- | --- |
-| Frame | A count since the last source reset, `#41` |
-| Symbols 0 to 59 | Sixty ticks: tall accent for a 1, short and dim for a 0, tall neutral for a marker, `bad` for an error |
+| Frame | A count since the last source reset, `#41`. It keeps counting past the 20 frames the store holds |
+| Symbols 0 to 59 | Sixty ticks: tall accent for a 1, short and dim for a 0, tall neutral for a marker, `bad` for an error. The strip's tooltip writes the symbols out: `M`, `0`, `1`, and `×` |
 | Min, Hour, Day, Year | The decoded values as received, with no correction |
-| UT1 | Sign and tenths, `+0.0 s` |
+| UT1 | Sign and seconds, `+0.3 s` or `-0.7 s`. An invalid sign is written `?` |
 | DST | `standard`, `dst`, `begins today`, `ends today` |
-| Result | `Accepted`, or `Rejected: ` and the first failure's check. A rejected row has a `bad` tint |
+| Result | `Accepted`, or `Rejected: ` and the first failure's check in words, such as `error symbols` or `BCD digits`. A rejected row has a `bad` tint |
 
-The full `detail` of every failure shows in a tooltip and in the stage 6 focus view.
+The result's tooltip lists every failure of a rejected frame, one to a line: the check in words, then the host's `detail`. The stage 6 focus view writes the same lines in the table (see [Focus views](#focus-views)).
+
+Before the first frame the panel shows its column headings and `No frames yet`.
 
 ### Time
 
 - The clock digits are `frameUtc` plus the source time elapsed since `frameStartMicros`, so replay at 10× runs the clock at 10×. Before the first accepted frame they read `--:--:--`.
-- Under the digits: the date and day of year.
-- The four statuses in a row, with the current one highlighted in its health color.
-- Four rows: last accepted frame; accepted in a row, or rejected since then out of 3; offset from the PC clock; local time, US Central.
+- The digits tick on the decoded second, read from the source clock on every animation frame. With no present to read, as when the source is stopped, they show the time at the end of the last accepted frame.
+- Under the digits: the date and day of year, `2026-12-10 · day 344`.
+- The four statuses in a row, No signal, Acquiring, Locked, Holding, with the current one outlined in its health color. The panel's header line names it too.
+- Four rows: last accepted frame, `19:30 UTC`; accepted in a row, or rejected since then as `2 of 3`; offset from the PC clock, `+37 ms`; local time, US Central, `13:30:07 CST`.
+- The last accepted frame's time is the frame's own, the time at its first second. A frame is only known when it has ended, so that row and the decoded-frames table read a minute behind the digits. The digits add the source time since the frame began.
+- The status changes only when a frame is validated. A loss of frame sync yields no frame, so the clock stays as it was, Locked included, while the frame panel searches; it goes to Holding on the next rejected frame.
+- One font size, set from the panel's width and height, scales everything in the view.
 - Under replay the offset row reads `Recorded offset` and is computed from the most recent `# wall` line received as `info`. It shows a dash until one arrives.
-- Local time uses the `dst` field. On a `beginsToday` or `endsToday` day it is marked approximate, because the bits do not carry the 02:00 switch.
+- Local time uses the `dst` field. On a `beginsToday` or `endsToday` day it uses the offset the day began with and is marked approximate, because the bits do not carry the 02:00 switch.
 
 ### App bar
 
-Name; a three-way source control (Live, Replay, Synthetic); the selected source's own controls; Stop; and three icon buttons for signal settings, theme, and keyboard shortcuts.
+Name; a three-way source control (Live, Replay, Synthetic); the selected source's own controls; Start and Stop; and three icon buttons for signal settings, theme, and keyboard shortcuts.
 
 | Source | Controls | Commands |
 | --- | --- | --- |
 | Live | Port list, refreshed on open | `selectSource` serial, `listPorts` |
-| Replay | Capture list with date and length; speed 1×, 10×, 60× | `selectSource` replay, `setReplaySpeed`, `listCaptures` |
+| Replay | Capture list with date and length, refreshed on open; speed 1×, 10×, 60× | `selectSource` replay, `setReplaySpeed`, `listCaptures` |
 | Synthetic | Noise slider, 0 to 1 | `selectSource` synthetic, `setNoise` |
 
-Signal settings holds the reduced-carrier level (`setReducedCarrierLevel`).
+- **Start.** Choosing a source, a port, a capture, a speed, or a noise level changes nothing in the host until Start is pressed. Start sends `selectSource` for the source on show. It is disabled while that source has nothing to start: no port is listed, or no capture.
+- **The default pick.** With nothing picked, the first port and the newest capture count as picked. A picked port or capture that leaves its list gives way to that default and is picked again when it comes back, so a logger that is unplugged and plugged in again is still the one selected.
+- **While its source runs.** A speed button sends `setReplaySpeed` at once while a replay is running, and the noise slider sends `setNoise` on each step while the synthetic source is running. With another source running, or none, they only set what the next Start sends.
+- **A capture row** reads `2026-11-09 04:34 UTC · 8 h 45 min`: when the capture was recorded, in UTC, and how long it runs.
+- **An empty list** reads `No ports found` or `No captures found`, on its button and as its only row.
+- **Signal settings** is a popover with the reduced-carrier level, High or Low. A pick is sent as `setReducedCarrierLevel` at once, whether or not a source runs, because the host keeps the level from one run to the next. The signal panel reads the carrier with the same level.
+- **The pressed button** of the source, the speed, and the level is drawn in the accent color, so the choice can be read from the back of the room.
+
+The host does not report the port, the capture, the noise, or the level, so a reloaded page shows its defaults: Synthetic, the first port, the newest capture, 1×, noise 0, and High. The clock still runs at the host's speed, because every `sourceStatus` carries it; the speed buttons do not follow it. Step 16 Task 9 holds what is left to polish here.
 
 ### Status bar and protocol log
 
@@ -225,16 +242,27 @@ Pressing `1` to `7` replaces the panels with one stage, sized to be read from th
 | 1 Edges | The carrier lane enlarged, beside the last 50 edges as the serial protocol writes them | Informational lines too: the banner and `# dropped` |
 | 2 Pulses | The carrier and pulse lanes enlarged | The drop and bridge rules drawn on a real glitch |
 | 3 Symbols | The pulse-width panel enlarged, with the symbol lane | The last pulse landing in its class, as input, rule, output |
-| 4 Frame sync | The frame panel enlarged, with the last sync-lost reasons | The searching and synced states as a diagram |
+| 4 Frame sync | The frame panel enlarged, over the last five sync-lost reasons | The searching and synced states as a diagram |
 | 5 Decode | The last complete frame, with each field's value from `decodedFrame` | The weights of the set bits listed under each field, and the record handed to stage 6 |
-| 6 Validate | The table at 20 rows with every failure's detail | The ten checks as a list for the selected frame |
+| 6 Validate | The table at 16 rows with every failure's detail | The ten checks as a list for the selected frame |
 | 7 Clock | The time panel enlarged | The four statuses as a state diagram with the counters |
 
 In stage 1 the edges are listed newest first, as the protocol log lists its messages, each as the rail writes the last edge. The 50 lines run down three columns, filled one after the other. Before the first edge the list reads `No edges yet`.
 
-In stage 5 the page lists which weights are set; the sum it shows is the host's value.
+In stage 4 a second panel, Sync losses, sits under the frame panel. It lists the newest five losses of frame sync, newest first, each with its count since the source reset and the host's reason: `#2 gap 2000 ms before second 15`. The frame panel's header shows a loss for 5 s; this list keeps it until the source resets. Before the first loss it reads `No sync loss yet`.
 
-A baseline view is built from the overview's panels, each with its header and its error boundary. A signal panel that shows fewer lanes names those lanes and carries only their stage chips. Until Step 13 fills them, stages 4 to 7 show their overview panel in its no-data state, and stages 5 and 6 both show the decoded-frames panel.
+In stage 5 one panel, Last complete frame, shows the newest `decodedFrame`:
+
+- Its 60 symbols are drawn in the frame panel's grid, with the same weights, marker names, and brackets. No cell is marked as being received, because the frame is over.
+- Under each field's name is the value the host decoded: the minute, hour, day, and two-digit year as numbers; the UT1 sign as `+`, `-`, or `?`; the correction as `0.3 s`; `yes` or `no` for LY and LS; and the DST status in the table's words. The page does not add up the bits.
+- The header line names the seconds that hold an error symbol, `Error symbol in second 44`, or reads `No error symbols`. It counts the frame's own symbols, so it names every cell drawn as an error. The host's `errorSeconds` lists field seconds only and leaves out an unused second.
+- Before the first frame the cells are empty, the brackets hold the names alone, and the header line reads `No frame yet`.
+
+The full view (Step 16) will also list which weights are set; the sum it shows stays the host's value.
+
+In stage 6 the table lists every failure in the row. The result of a rejected frame reads `Rejected`, and under it one line per failure: the check in words, then the host's `detail`. The lines replace the tooltip, and the result column is wider than in the overview, at the cost of the symbol strip, so a line such as `consecutive: expected 2026-12-10T19:33Z, got 2026-12-10T19:34Z` fits. Sixteen rows fit a 16:9 window with up to two such lines; past that the table scrolls under its headings. A signal noisy enough to reject frames also loses sync often, so it seldom fills sixteen rows.
+
+A baseline view is built from panels, each with its header and its error boundary. Most are the overview's own. The edge log (stage 1), the sync losses (stage 4), and the last complete frame (stage 5) appear only in a focus view. A signal panel that shows fewer lanes names those lanes and carries only their stage chips.
 
 ### Focus header
 
@@ -269,7 +297,7 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
                               \---->  canvas views       (read buffers every animation frame)
 ```
 
-- **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 120 filled slots, 20 validation results, 50 info lines), the latest message of each type for the rail, and the counters. A filled slot is a `slotFilled` event together with the start time of the symbol that arrived just before it, which is the symbol it placed. The signal panel's second lane and the frame panel both read that buffer.
+- **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 120 filled slots, 20 validation results, 50 info lines, 5 sync losses), the latest message of each type for the rail, and the counters. A filled slot is a `slotFilled` event together with the start time of the symbol that arrived just before it, which is the symbol it placed. The signal panel's second lane and the frame panel both read that buffer.
 - **The page's own state.** The store also holds what the page decides for itself: the focused stage and the open drawer. No message changes them, so they are outside the reducer, and a source reset leaves them alone.
 - **Rendering.** Components subscribe to small slices, so a new edge batch does not re-render the tables. The canvas views do not go through React at all.
 - **View models.** Each custom view has a pure function from buffers, size, and tokens to a list of things to draw, and a thin component that paints the list. Tests cover the function.
@@ -279,7 +307,7 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
 
 Edges arrive in batches every 100 ms and only when the carrier changes, so the present has to be estimated between them. One module does this for every view:
 
-- It maps `performance.now()` to source microseconds, anchored on the first edge and advancing at the source's speed (1 for live and synthetic, the replay speed for replay).
+- It maps `performance.now()` to source microseconds, anchored on the first edge and advancing at the source's speed (1 for live and synthetic, the replay speed for replay). The speed is the `speed` of the latest `sourceStatus`, so it changes when the host says it has, not when the page asks.
 - Every later batch corrects it with the timestamp of its newest edge:
   - An edge later than the estimate proves the clock is behind. The whole difference is made up.
   - An edge earlier than the estimate is the normal case, because edges arrive late. A tenth of the difference is taken back. This keeps the clock with a stream that runs slower than its nominal speed, which a paced source can (see Step 13, Task 1 in the construction plan), and with a Pico whose crystal runs slower than the PC's.
@@ -288,7 +316,7 @@ Edges arrive in batches every 100 ms and only when the carrier changes, so the p
 - The page discards the anchor when the source resets or stops.
 - At replay speed 0, as fast as possible, there is no usable present: the signal panel stops scrolling and shows a note.
 
-The signal cursor, the cell being received, and the clock digits all read this module.
+The signal cursor and the clock digits read this module. The frame panel's cell being received does not: it follows the last second placed (see [Frame](#frame)).
 
 ### Sync loss
 
@@ -300,30 +328,25 @@ The host sends `searching` in the same push as `syncLost`, so the latest `frameS
 
 The rail's stage 4 health and the frame panel's header both read this one field.
 
+The reducer also appends each loss to a list of the newest five, with a number that counts from 1 after every source reset. No timer touches the list. The stage 4 focus view reads it.
+
 ## Protocol additions
 
-Neither exists yet. Each lands with its example file and both test suites, in the step that needs it.
+Each lands with its example file and both test suites, in the step that needs it.
 
-**`frameLayout` (needed by the frame panel, Step 13).** The frame layout is written down in exactly two places in code, `WwvbFrameLayout` and the Rust crate. A TypeScript copy would be a third, so the host sends it once after `hello`. Proposed shape:
+**`frameLayout` (the frame panel, Step 13).** The frame layout is written down in exactly two places in code, `WwvbFrameLayout` and the Rust crate. A TypeScript copy would be a third, so the host sends it once, at the end of its reply to `hello`. The payload is specified in [`webview2-messages.md`](webview2-messages.md#framelayout): a role and a bit weight for each of the 60 seconds.
 
-```ts
-type SecondRole =
-  | "marker" | "unused" | "minute" | "hour" | "dayOfYear" | "ut1Sign"
-  | "ut1Correction" | "year" | "leapYear" | "leapSecondPending" | "dst";
+- The page derives a field's bracket from the first and last second with its role.
+- The message carries no marker names. The page names the marker seconds in order: `Pr`, `P1` to `P5`, `P0`.
+- The store keeps the layout across a source reset, because the host does not send it again.
 
-interface FrameLayout {
-  roles: SecondRole[];          // 60, indexed by second
-  weights: (number | null)[];   // 60; the bit weight as the layout table writes it, or null
-}
-```
-
-The page derives a field's bracket from the first and last second with its role. Adding a message type does not change an existing one, so the protocol number stays 1.
+Adding a message type does not change an existing one, so the protocol number stays 1.
 
 **Pulse statistics (optional, Step 16).** `PulseMeasurement` counts `GlitchesDropped` and `GapsBridged`, but no message carries them. The stage 2 focus view can show them only if a message does. Until then the page shows the dips in the carrier lane and no count.
 
 ## Keyboard
 
-Keys are ignored while a text field or slider has focus.
+Keys are left to the control while a text field or slider has focus, and while a list or the signal settings are open.
 
 | Key | Action |
 | --- | --- |
@@ -340,6 +363,9 @@ Keys are ignored while a text field or slider has focus.
 - A key pressed with Ctrl, Alt, or the Windows key is left to the browser, and a key that is held down acts once.
 - The protocol log and the shortcut list are drawers, and one is open at a time: `L` and `?` each open theirs and close it again, and opening one closes the other. The app bar's keyboard button opens the shortcut list too.
 - While a drawer is open no other key acts on the page. `Esc` closes the drawer and leaves the view behind it as it was.
+- An open list and the open signal settings have the keyboard too, from the moment they open. No key acts on the page: letters and digits search the list, the arrows move in it or between High and Low, and `Esc` closes the control and leaves the view as it was. This holds for a list with nothing to pick as well.
+- A closed list and the signal settings button are buttons like any other. A stage key pressed on one acts on the page, and the control stays closed.
+- A key the page acts on goes no further. An arrow key pressed on a source or speed button changes the stage and does not also move the focus along the buttons.
 - When a key acts, the control that has focus gives it up. A button clicked with the mouse keeps focus, and the browser draws its focus ring on the next key press, so a stage key would light up the Start button. Tab carries on from the control that had focus.
 
 ## Motion

@@ -1,6 +1,12 @@
-import type { ReactNode } from "react";
 import type { SourceClock } from "@/time/sourceClock";
 import { EdgeLog } from "@/views/edge-log/EdgeLog";
+import { FramesTable } from "@/views/frames-table/FramesTable";
+import {
+  DecodedFrameLine,
+  DecodedFrameView,
+} from "@/views/frame/DecodedFrameView";
+import { FrameHeaderLine, FrameView } from "@/views/frame/FrameView";
+import { SyncLossList } from "@/views/frame/SyncLossList";
 import {
   LastPulseLine,
   PulseWidthView,
@@ -8,7 +14,9 @@ import {
 import { ALL_LANES, type LaneName } from "@/views/signal/model";
 import { SignalView } from "@/views/signal/SignalView";
 import { timeWindowFor } from "@/views/signal/timeWindow";
+import { ClockStatusLine, TimeView } from "@/views/time/TimeView";
 import { Panel } from "./Panel";
+import { useAppStore } from "@/state/store";
 
 // The screen's panels, each a view inside its Panel. The overview and the focus views
 // lay out the same ones.
@@ -37,7 +45,8 @@ export function SignalPanel({
   lanes = ALL_LANES,
   className,
 }: Readonly<SignalPanelProps>) {
-  const { windowMicros } = timeWindowFor(clock.speed());
+  const speed = useAppStore((state) => state.sourceStatus?.speed ?? 1);
+  const { windowMicros } = timeWindowFor(speed);
 
   return (
     <Panel
@@ -77,39 +86,77 @@ export function EdgeLogPanel({ className }: Readonly<Placed>) {
   );
 }
 
-// The three below show their no-data state until Step 13 gives them a view.
-
-/** What a panel shows before it has anything to draw. */
-function Placeholder({ children }: Readonly<{ children: ReactNode }>) {
-  return (
-    <p className="flex h-full items-center justify-center text-xs text-muted-foreground">
-      {children}
-    </p>
-  );
-}
-
 export function FramePanel({ className }: Readonly<Placed>) {
   return (
-    <Panel title="Frame" stages={[4]} className={className}>
-      <Placeholder>No symbols placed yet</Placeholder>
+    <Panel
+      title="Frame"
+      stages={[4]}
+      state={<FrameHeaderLine />}
+      className={className}
+    >
+      <FrameView />
     </Panel>
   );
 }
 
-export function DecodedFramesPanel({ className }: Readonly<Placed>) {
+export function SyncLossPanel({ className }: Readonly<Placed>) {
+  return (
+    <Panel
+      title="Sync losses"
+      stages={[4]}
+      state="Newest first"
+      className={className}
+    >
+      <SyncLossList />
+    </Panel>
+  );
+}
+
+export function LastFramePanel({ className }: Readonly<Placed>) {
+  return (
+    <Panel
+      title="Last complete frame"
+      stages={[5]}
+      state={<DecodedFrameLine />}
+      className={className}
+    >
+      <DecodedFrameView />
+    </Panel>
+  );
+}
+
+interface DecodedFramesPanelProps extends Placed {
+  /** How many frames to list. The overview has room for three. */
+  rows?: number;
+  /** Lists every failure of a rejected frame in its row, as the stage 6 focus view does. */
+  details?: boolean;
+}
+
+export function DecodedFramesPanel({
+  rows = 3,
+  details = false,
+  className,
+}: Readonly<DecodedFramesPanelProps>) {
   return (
     <Panel title="Decoded frames" stages={[5, 6]} className={className}>
-      <Placeholder>No frames yet</Placeholder>
+      <FramesTable maxRows={rows} details={details} />
     </Panel>
   );
 }
 
-export function TimePanel({ className }: Readonly<Placed>) {
+interface TimePanelProps extends Placed {
+  clock: SourceClock;
+}
+
+export function TimePanel({ clock, className }: Readonly<TimePanelProps>) {
   return (
-    <Panel title="Time" stages={[7]} state="No signal" className={className}>
-      <p className="flex h-full items-center justify-center font-mono text-[3.75rem] font-semibold text-muted-foreground">
-        --:--:--
-      </p>
+    <Panel
+      title="Time"
+      stages={[7]}
+      state={<ClockStatusLine />}
+      className={className}
+    >
+      <TimeView clock={clock} />
     </Panel>
   );
 }

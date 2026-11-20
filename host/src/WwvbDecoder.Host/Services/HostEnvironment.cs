@@ -14,6 +14,7 @@ public sealed class HostEnvironment(TimeProvider timeProvider, string capturesDi
     : ISourceEnvironment
 {
     private const string CapturesFolderName = "captures";
+    private const string CapturesOption = "--captures";
 
     /// <inheritdoc/>
     public IReadOnlyList<string> ListPorts() => Adapters.SerialPorts.ListPortNames();
@@ -39,6 +40,43 @@ public sealed class HostEnvironment(TimeProvider timeProvider, string capturesDi
             StartUtc = new DateTimeOffset(minuteTicks, TimeSpan.Zero),
             Noise = noise,
         };
+    }
+
+    /// <inheritdoc/>
+    public IEdgeSource CreateReplay(string path, double speed)
+    {
+        string directory = Path.GetFullPath(capturesDirectory) + Path.DirectorySeparatorChar;
+        if (!Path.GetFullPath(path).StartsWith(directory, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new FileNotFoundException("Not a capture in the captures directory.", path);
+        }
+
+        return new ReplayEdgeSource(Adapters.CaptureFile.Open(path), timeProvider)
+        {
+            Speed = speed,
+            Loop = true,
+        };
+    }
+
+    /// <inheritdoc/>
+    public IEdgeSource CreateSerial(string port) => new Adapters.SerialEdgeSource(port);
+
+    /// <summary>
+    /// The captures directory for a command line: the one named after <c>--captures</c> when
+    /// that is given, and otherwise the one <see cref="FindCapturesDirectory()"/> finds.
+    /// </summary>
+    /// <param name="args">The command-line arguments.</param>
+    public static string FindCapturesDirectory(IReadOnlyList<string> args)
+    {
+        ArgumentNullException.ThrowIfNull(args);
+        for (int i = 0; i < args.Count - 1; i++)
+        {
+            if (string.Equals(args[i], CapturesOption, StringComparison.OrdinalIgnoreCase))
+            {
+                return Path.GetFullPath(args[i + 1]);
+            }
+        }
+        return FindCapturesDirectory();
     }
 
     /// <summary>

@@ -13,6 +13,7 @@ public sealed class WebMessageBridgeTests : IDisposable
     private readonly FakeTimeProvider _time = new();
     private readonly List<string> _posted = [];
     private readonly WebMessageBridge _bridge;
+    private readonly CancellationTokenSource _cts = new();
     private Action<string>? _onPost;
 
     public WebMessageBridgeTests() =>
@@ -27,7 +28,11 @@ public sealed class WebMessageBridgeTests : IDisposable
             }
         );
 
-    public void Dispose() => _bridge.Dispose();
+    public void Dispose()
+    {
+        _bridge.Dispose();
+        _cts.Dispose();
+    }
 
     private IReadOnlyList<JsonNode> Messages => [.. _posted.Select(j => JsonNode.Parse(j)!)];
 
@@ -108,13 +113,12 @@ public sealed class WebMessageBridgeTests : IDisposable
     [Fact]
     public async Task EveryStageOutput_ReachesThePage()
     {
-        // Arrange: an unpaced synthetic source, cancelled by the first clock message
-        using CancellationTokenSource cts = new();
+        // Arrange: an unpaced synthetic source, canceled by the first clock message
         _onPost = json =>
         {
             if (json.Contains("\"type\":\"clock\""))
             {
-                cts.Cancel();
+                _cts.Cancel();
             }
         };
         var source = new SyntheticEdgeSource(TimeProvider.System)
@@ -125,7 +129,7 @@ public sealed class WebMessageBridgeTests : IDisposable
 
         // Act
         await Should.ThrowAsync<OperationCanceledException>(() =>
-            _pipeline.RunAsync(source, cts.Token)
+            _pipeline.RunAsync(source, _cts.Token)
         );
         _time.Advance(Tick); // the first frame is under 200 edges, so the batch flushes on the timer
 
@@ -163,6 +167,39 @@ public sealed class WebMessageBridgeTests : IDisposable
         EdgeBatches.ShouldBe([200]);
         _time.Advance(Tick);
         EdgeBatches.ShouldBe([200, 1]);
+    }
+
+    [Fact]
+    public async Task SourceStatus_IsPostedAfterTheEdgesStillWaiting()
+    {
+        // Arrange: three edges read, and the timer has not fired yet
+        await RunScriptAsync(Edges(3));
+
+        // Act
+        _bridge.Post(
+            "sourceStatus",
+            new SourceStatus(SourceKind.None, "", SourceState.Stopped, "")
+        );
+        _time.Advance(Tick);
+
+        // Assert
+        Types.ShouldBe(["edges", "sourceStatus"]);
+        EdgeBatches.ShouldBe([3]);
+    }
+
+    [Fact]
+    public async Task AnotherMessage_LeavesTheEdgesWaiting()
+    {
+        // Arrange
+        await RunScriptAsync(Edges(3));
+
+        // Act
+        _bridge.Post("info", new InfoPayload("# a"));
+
+        // Assert
+        Types.ShouldBe(["info"]);
+        _time.Advance(Tick);
+        Types.ShouldBe(["info", "edges"]);
     }
 
     [Fact]
