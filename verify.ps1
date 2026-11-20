@@ -35,7 +35,7 @@ if ('host' -in $Only) {
     Step '.' { dotnet build host/WwvbDecoder.slnx -c Release -p:BuildUi=false }
     # Fresh results so ReportGenerator never merges a stale report from an earlier run.
     Remove-Item -Recurse -Force (Join-Path $root 'host/TestResults'), (Join-Path $root 'coverage/host') -ErrorAction Ignore
-    Step '.' { dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false --coverage --coverage-output-format cobertura --report-xunit-trx --results-directory "$root/host/TestResults" }
+    Step '.' { dotnet test host/WwvbDecoder.slnx -c Release --no-build -p:BuildUi=false --coverage --coverage-output-format cobertura --report-xunit-markdown --results-directory "$root/host/TestResults" }
     Step '.' { dotnet reportgenerator "-reports:host/TestResults/*.cobertura.xml" "-targetdir:coverage/host" "-reporttypes:MarkdownSummaryGithub;Cobertura;TextSummary" "minimumCoverageThresholds:lineCoverage=90" "minimumCoverageThresholds:branchCoverage=88" }
 }
 
