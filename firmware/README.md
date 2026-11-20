@@ -4,6 +4,14 @@ Rust + [Embassy](https://embassy.dev) firmware for the Raspberry Pi Pico 2 (RP23
 
 The WWVB edge logger: it timestamps every edge on the receiver's data pin with a microsecond counter and writes one text line per edge over USB serial. It makes no decisions about what the edges mean; the host does all decoding (ADR-0001). The full contract is [`docs/design/serial-protocol.md`](../docs/design/serial-protocol.md).
 
+## Layout
+
+`firmware/` is a Cargo workspace. `Cargo.toml` at its root lists the members and holds the release profile, because cargo ignores a profile in a member. `Cargo.lock`, `rust-toolchain.toml`, and `.cargo/config.toml` are shared by every member.
+
+| Folder | Package | What it is |
+| --- | --- | --- |
+| `edge-logger/` | `wwvb-edge-logger` | The edge logger, with its own `build.rs` and `memory.x` |
+
 ## Build and flash
 
 1. Install Rust with rustup. The first build installs the `thumbv8m.main-none-eabihf` target from `rust-toolchain.toml`.
@@ -11,7 +19,7 @@ The WWVB edge logger: it timestamps every edge on the receiver's data pin with a
 3. Hold **BOOTSEL** while plugging in the Pico 2, then:
 
 ```powershell
-cargo run --release
+cargo run --release -p wwvb-edge-logger
 ```
 
 `.cargo/config.toml` sets the runner to `picotool load -u -v -x -t elf`, so `cargo run` flashes and starts the board. To re-flash, hold BOOTSEL and replug again.

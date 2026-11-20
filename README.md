@@ -46,7 +46,7 @@ Then:
 ```powershell
 # Firmware: hold BOOTSEL while plugging in the Pico 2, then
 cd firmware
-cargo run --release
+cargo run --release -p wwvb-edge-logger
 
 # UI
 cd ui
