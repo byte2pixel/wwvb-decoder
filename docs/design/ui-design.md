@@ -260,7 +260,7 @@ In stage 5 one panel, Last complete frame, shows the newest `decodedFrame`:
 
 The full view (Step 16) will also list which weights are set; the sum it shows stays the host's value.
 
-In stage 6 the table lists every failure in the row. The result of a rejected frame reads `Rejected`, and under it one line per failure: the check in words, then the host's `detail`. The lines replace the tooltip, and the result column is wider than in the overview, at the cost of the symbol strip, so a line such as `consecutive: expected 2026-12-10T19:33Z, got 2026-12-10T19:34Z` fits. Sixteen rows fit a 16:9 window with up to two such lines; past that the table scrolls under its headings. A signal noisy enough to reject frames also loses sync often, so it seldom fills sixteen rows.
+In stage 6 the table lists every failure in the row. The result of a rejected frame reads `Rejected`, and under it one line per failure: the check in words, then the host's `detail`. The lines replace the tooltip, and the result column is wider than in the overview, at the cost of the symbol strip, so a line such as `consecutive: expected 2026-12-10T19:33Z, got 2026-12-10T19:32Z` fits. Sixteen rows fit a 16:9 window with up to two such lines; past that the table scrolls under its headings. A signal noisy enough to reject frames also loses sync often, so it seldom fills sixteen rows.
 
 A baseline view is built from panels, each with its header and its error boundary. Most are the overview's own. The edge log (stage 1), the sync losses (stage 4), and the last complete frame (stage 5) appear only in a focus view. A signal panel that shows fewer lanes names those lanes and carries only their stage chips.
 
@@ -275,7 +275,7 @@ The type is the host's, as C# writes it. The numbers in a rule repeat the host's
 | 3 Symbols | `IStage<Pulse, Symbol>` | A pulse from 100 ms is a 0, from 350 ms a 1, from 650 ms a marker, and outside 100 to 900 ms an error. |
 | 4 Frame sync | `IStage<Symbol, FrameSyncEvent>` | Two markers a second apart start a frame; a marker or a bit in the wrong second, or a gap outside 0.5 to 1.5 s, loses sync. |
 | 5 Decode | `IStage<Frame, DecodedFrame>` | Each field is the sum of the weights of its bits that are 1. |
-| 6 Validate | `IStage<DecodedFrame, ValidationResult>` | A frame is accepted when it passes all ten checks; the last is that its time is one minute after the frame before. |
+| 6 Validate | `IStage<DecodedFrame, ValidationResult>` | A frame is accepted when it passes all ten checks; the last is that its time is the last accepted frame's plus the minutes passed since. |
 | 7 Clock | `IStage<ValidationResult, ClockState>` | Two accepted frames in a row lock the clock; once locked it holds through two rejected frames, and the third sends it back to acquiring. |
 
 ## Panel states

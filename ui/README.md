@@ -185,17 +185,17 @@ It plays one of two recordings of the host's synthetic source, and the noise sli
 | Start with | Recording | What it holds |
 | --- | --- | --- |
 | Noise 0, or the Live or Replay source | `sim/fixtures/synthetic-noise-0.jsonl` | 1,141 messages over 225 s of signal: three accepted frames, and a clock that is `acquiring` after the first frame and `locked` after the second |
-| Synthetic with any noise above 0 | `sim/fixtures/synthetic-noise-0.06.jsonl` | 1,965 messages over 388 s of signal at noise 0.06: the faults below |
+| Synthetic with any noise above 0 | `sim/fixtures/synthetic-noise-0.06.jsonl` | 1,966 messages over 388 s of signal at noise 0.06: the faults below |
 
-The noisy recording is there to show what the clean one cannot: a rejected row, a lost sync, an error symbol, and a clock that is holding.
+The noisy recording is there to show what the clean one cannot: a rejected row, a lost sync, an error symbol, and a clock that holds and locks again.
 
 | At | What happens |
 | --- | --- |
 | 1:01 and 2:01 | The frames of 19:30 and 19:31 are accepted, and the clock locks |
 | 2:55 | Sync is lost in second 52, `gap 2000 ms before second 52`, so the frame of 19:32 never completes |
-| 4:01 | The frame of 19:33 arrives with one bit of its minute flipped. It reads 19:32 and is accepted, because the frame before it was lost and the host compares a frame only with one that started within 90 s. The clock stays locked, a minute behind |
-| 5:01 | The frame of 19:34 is right, and is rejected as `consecutive`: the host expected 19:33. The clock goes to holding |
-| 6:01 | The frame of 19:35 holds an error symbol in second 44, which is unused, and is rejected for `unused bits`. Rejected 2 of 3 |
+| 4:01 | The frame of 19:33 arrives with one bit of its minute flipped, second 8, and reads 19:32. It is rejected as `consecutive`: it started two minutes after the frame of 19:31, the last one accepted, so the host expected 19:33. The clock goes to holding, still on the right time |
+| 5:01 | The frame of 19:34 is accepted, three minutes after the frame of 19:31, and the clock is locked again |
+| 6:01 | The frame of 19:35 holds an error symbol in second 44, which is unused, and is rejected for `unused bits`. The clock goes to holding again, rejected 1 of 3 |
 | 6:18 | Sync is lost again, in second 15 |
 
 | Command | The simulator's answer |
@@ -240,7 +240,7 @@ It was made on 2026-11-19 by running the host's own classes without the window, 
 - One command, parsed by `CommandJson` as the window's would be: `{"command":"selectSource","source":"synthetic","noise":0.06}`. The run lasted 388 s in real time.
 - Each posted message went through `hostMessageSchema` and then `createRecorder`, with its arrival time as the recorder's clock. That is the path a message takes in the page, so the file is what `wwvbRecorder.dump()` would have returned.
 
-The synthetic source's faults come from a seeded generator, and the host always uses seed 0. So the run repeats: an unpaced run of the same start time and noise gave the same frames and the same losses at the same seconds before the paced one was made. To make another, search unpaced runs for a start time and a noise level that give the events wanted, then record that one paced.
+The synthetic source's faults come from a seeded generator, and the host always uses seed 0. So the run repeats: an unpaced run of the same start time and noise gave the same frames and the same losses at the same seconds before the paced one was made. The file in the repository is the second paced run, made later the same day, after the validator began to count the minutes across a lost frame (ADR-0006). Its edges, pulses, symbols, and frames are the first run's exactly; the validation and clock messages differ, and the edges arrive in 787 batches where the first run had 786. To make another, search unpaced runs for a start time and a noise level that give the events wanted, then record that one paced.
 
 ## Adding a shadcn component
 

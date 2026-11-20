@@ -7,11 +7,15 @@ namespace WwvbDecoder.Core;
 /// </summary>
 public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
 {
-    private const ulong MaxComparableGapMicros = 90_000_000;
+    private const ulong MaxAdjacentGapMicros = 90_000_000;
     private const ulong FrameGapMicros = 60_000_000;
     private const ulong FrameGapToleranceMicros = 50_000;
+    private const ulong MaxComparableMinutes = 60;
 
     private DecodedFrame? _previousFrame;
+
+    // The most recent frame whose only failure was Consecutive.
+    private DecodedFrame? _challenger;
 
     /// <summary>
     /// Validates a decoded frame and returns the validation results.
@@ -46,6 +50,11 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
         if (accepted)
         {
             _previousFrame = input;
+            _challenger = null;
+        }
+        else if (failures is [{ Check: ValidationCheck.Consecutive }])
+        {
+            _challenger = input;
         }
 
         return [new ValidationResult(input, accepted, [.. failures])];
@@ -57,6 +66,7 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
     public void Reset()
     {
         _previousFrame = null;
+        _challenger = null;
     }
 
     // UTC at second 0 of the frame. Real date arithmetic carries minute, hour, day, and year
@@ -175,8 +185,8 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
 
     // Skipped when there is:
     // - No previously accepted frame.
-    // - Frame started more than 90 s before this one (a decreasing StartMicros wraps to a huge gap, so it is skipped too)
-    // - A failed check means this frame's time cannot be built.
+    // - A failed check that means this frame's time cannot be built.
+    // - No telling from the two start times how many minutes passed since the previous frame.
     private ValidationFailure? CheckConsecutive(
         DecodedFrame input,
         List<ValidationFailure> failures
@@ -194,36 +204,80 @@ public sealed class FrameValidator : IStage<DecodedFrame, ValidationResult>
             return null;
         }
 
-        ulong gap = input.Frame.StartMicros - _previousFrame.Frame.StartMicros;
-        if (gap > MaxComparableGapMicros)
+        ValidationFailure? failure = Compare(_previousFrame, input).Failure;
+        if (failure is null)
         {
             return null;
         }
 
-        DateTime expected = FrameTime(_previousFrame).AddMinutes(1);
-        DateTime actual = FrameTime(input);
+        // The previous frame can be the wrong one: the first frame is accepted with nothing to
+        // check it against. Two frames that agree with each other outvote one that agrees with
+        // neither.
+        bool followsChallenger =
+            _challenger is not null
+            && Compare(_challenger, input) is (Compared: true, Failure: null);
+        return followsChallenger ? null : failure;
+    }
+
+    // Holds a frame to the time an earlier one predicts for it. The minutes between the two come
+    // from their start times. Compared is false when the start times do not say how many passed:
+    // more than 60, or two or more with a start that is not on the minute. A decreasing
+    // StartMicros wraps to a huge gap, so it is not compared either.
+    private static (bool Compared, ValidationFailure? Failure) Compare(
+        DecodedFrame earlier,
+        DecodedFrame frame
+    )
+    {
+        ulong gap = frame.Frame.StartMicros - earlier.Frame.StartMicros;
+        ulong minutes = MinutesIn(gap);
+        bool onTheMinute =
+            minutes <= MaxComparableMinutes
+            && gap >= minutes * (FrameGapMicros - FrameGapToleranceMicros)
+            && gap <= minutes * (FrameGapMicros + FrameGapToleranceMicros);
+        if (minutes > 1 && !onTheMinute)
+        {
+            return (false, null);
+        }
+
+        DateTime expected = FrameTime(earlier).AddMinutes(minutes);
+        DateTime actual = FrameTime(frame);
         if (actual != expected)
         {
             // ':' in a custom format is the culture's time separator, so pin the culture.
-            return new ValidationFailure(
-                ValidationCheck.Consecutive,
-                string.Create(
-                    CultureInfo.InvariantCulture,
-                    $"expected {expected:yyyy-MM-ddTHH:mm}Z, got {actual:yyyy-MM-ddTHH:mm}Z"
+            return (
+                true,
+                new ValidationFailure(
+                    ValidationCheck.Consecutive,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"expected {expected:yyyy-MM-ddTHH:mm}Z, got {actual:yyyy-MM-ddTHH:mm}Z"
+                    )
                 )
             );
         }
 
-        bool gapInRange =
-            gap
-            is >= FrameGapMicros - FrameGapToleranceMicros
-                and <= FrameGapMicros + FrameGapToleranceMicros;
-        return gapInRange
-            ? null
-            : new ValidationFailure(
-                ValidationCheck.Consecutive,
-                $"started {gap / 1_000_000}.{gap % 1_000_000 / 1_000:000} s after the previous frame"
+        return onTheMinute
+            ? (true, null)
+            : (
+                true,
+                new ValidationFailure(
+                    ValidationCheck.Consecutive,
+                    $"started {gap / 1_000_000}.{gap % 1_000_000 / 1_000:000} s after the previous frame"
+                )
             );
+    }
+
+    // One minute up to 90 s, and the nearest whole minute above that. Adding half a minute before
+    // dividing would overflow on a wrapped gap.
+    private static ulong MinutesIn(ulong gap)
+    {
+        if (gap <= MaxAdjacentGapMicros)
+        {
+            return 1;
+        }
+
+        ulong roundUp = gap % FrameGapMicros >= FrameGapMicros / 2 ? 1UL : 0UL;
+        return (gap / FrameGapMicros) + roundUp;
     }
 
     // "minute units", "day of year hundreds", and so on.
