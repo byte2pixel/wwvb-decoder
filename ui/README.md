@@ -180,24 +180,40 @@ The frame grid sizes its type with `clamp(small, n cqh, large)` inside a contain
 
 When a development build finds no `window.chrome.webview`, `main.tsx` loads `sim/simulatorBridge.ts` by dynamic import and uses it as the bridge. `npm run dev` and http://localhost:5173 in a browser is all it takes.
 
-It plays `sim/fixtures/synthetic-noise-0.jsonl`, a recording of the host's synthetic source at noise 0: 1,141 messages over 225 s of signal, three accepted frames, and a clock that is `acquiring` after the first frame and `locked` after the second.
+It plays one of two recordings of the host's synthetic source, and the noise slider picks which:
+
+| Start with | Recording | What it holds |
+| --- | --- | --- |
+| Noise 0, or the Live or Replay source | `sim/fixtures/synthetic-noise-0.jsonl` | 1,141 messages over 225 s of signal: three accepted frames, and a clock that is `acquiring` after the first frame and `locked` after the second |
+| Synthetic with any noise above 0 | `sim/fixtures/synthetic-noise-0.06.jsonl` | 1,965 messages over 388 s of signal at noise 0.06: the faults below |
+
+The noisy recording is there to show what the clean one cannot: a rejected row, a lost sync, an error symbol, and a clock that is holding.
+
+| At | What happens |
+| --- | --- |
+| 1:01 and 2:01 | The frames of 19:30 and 19:31 are accepted, and the clock locks |
+| 2:55 | Sync is lost in second 52, `gap 2000 ms before second 52`, so the frame of 19:32 never completes |
+| 4:01 | The frame of 19:33 arrives with one bit of its minute flipped. It reads 19:32 and is accepted, because the frame before it was lost and the host compares a frame only with one that started within 90 s. The clock stays locked, a minute behind |
+| 5:01 | The frame of 19:34 is right, and is rejected as `consecutive`: the host expected 19:33. The clock goes to holding |
+| 6:01 | The frame of 19:35 holds an error symbol in second 44, which is unused, and is rejected for `unused bits`. Rejected 2 of 3 |
+| 6:18 | Sync is lost again, in second 15 |
 
 | Command | The simulator's answer |
 | --- | --- |
 | `hello` | `sourceStatus` stopped, empty `ports` and `captures`, then `frameLayout` from `sim/fixtures/frameLayout.json` |
-| `selectSource` | Plays the recording from the top, whichever source and noise were asked for |
+| `selectSource` | Plays a recording from the top: the noisy one for the synthetic source with noise above 0, the clean one otherwise |
 | `stop` | Stops playing and sends `sourceStatus` stopped |
 | Anything else | Nothing |
 
 - Each message is sent at the time it arrived when it was recorded, so the stream has the host's real timing, late edges included.
 - One second after the last message the recording starts again. It opens with the host's `reset: start` status, so the page clears at the top of every pass.
 - `seq` is renumbered from 1 as messages go out, so the count never shows a gap.
-- The recording was made at noise 0 with High as the reduced-carrier level, and no command changes it. The noise slider, the speed buttons, and the signal settings still move on the page, but the stream does not follow them, and the port and capture lists are empty. With the level set to Low the page reads the carrier the other way while the recorded pulses stay as they were, so the signal panel draws a pending bar over every stretch the recording did not measure. That is the simulator, not a fault. Check these controls in the host.
+- Both recordings were made with High as the reduced-carrier level, and no command changes a recording while it plays. The noise slider picks the recording when Start is pressed and does nothing after that, whatever level it is set to; the speed buttons and the signal settings still move on the page, but the stream does not follow them, and the port and capture lists are empty. With the level set to Low the page reads the carrier the other way while the recorded pulses stay as they were, so the signal panel draws a pending bar over every stretch the recording did not measure. That is the simulator, not a fault. Check these controls in the host.
 - `?speed=10` on the address plays ten times faster: http://localhost:5173/?speed=10. Any positive number works, fractions too; anything else means 1. Only the arrival times shrink. The timestamps inside the messages are untouched, so at 10 the source runs at ten times wall time. The simulator writes that speed into every `sourceStatus` it sends, as the host does for a replay, and that is how the page's clock learns it.
 
 `sim/fixtures/frameLayout.json` is a copy of `docs/design/message-examples/frameLayout.json`, because the simulator has no host to build the layout for it. Two tests keep the copy true. In the host, `Serialize_FrameLayout_MatchesExample` holds the example equal to the layout table in C#. Here, the `hello` test in `sim/simulator.test.ts` holds the fixture equal to the example. When the layout changes in C#, change the example, copy it over the fixture, and run `npx prettier --write src/sim/fixtures/frameLayout.json`.
 
-The simulator and the recorder sit behind `import.meta.env.DEV`, so `npm run build` leaves both out, and both fixtures with them. In the host, the only layout the page has is the one the host sends. A production build opened without the host gets a bridge that only logs a warning, and the status bar reads `no host`.
+The simulator and the recorder sit behind `import.meta.env.DEV`, so `npm run build` leaves both out, and all three fixtures with them. In the host, the only layout the page has is the one the host sends. A production build opened without the host gets a bridge that only logs a warning, and the status bar reads `no host`.
 
 A development build runs under React's StrictMode, which mounts `App` twice. `hello` goes out twice and the log opens with two sets of answers. That is expected, in the host as well.
 
@@ -213,6 +229,18 @@ The stream fixture is recorded from the real host, so it cannot drift from the p
 6. Point the import in `sim/simulatorBridge.ts` at the new file, and the fixture test in `sim/recording.test.ts` with it.
 
 Each line is the envelope as the host sent it plus `t`, the milliseconds since `start()`. `parseRecording` checks every line against `hostMessageSchema` and names the first line that fails.
+
+### The noisy recording
+
+`synthetic-noise-0.06.jsonl` was not recorded in the window. What a noisy run does depends on the minute it starts in, because the host starts the synthetic source at the current UTC minute and the same noise then lands on different bits. A recording that must hold a lock, a rejected frame, and a lost sync inside a few minutes needs a start time that is chosen, and the window cannot choose one.
+
+It was made on 2026-11-19 by running the host's own classes without the window, in a throwaway test:
+
+- `DecoderPipeline`, `WebMessageBridge`, `SourceController`, and `HostEnvironment`, wired as `App.xaml.cs` wires them, on a `TimeProvider` whose UTC clock starts at 2026-12-10 19:30:07 and whose timers are the system's. Nothing else was replaced, so the stream has the host's pacing, its 100 ms edge batches, and its JSON.
+- One command, parsed by `CommandJson` as the window's would be: `{"command":"selectSource","source":"synthetic","noise":0.06}`. The run lasted 388 s in real time.
+- Each posted message went through `hostMessageSchema` and then `createRecorder`, with its arrival time as the recorder's clock. That is the path a message takes in the page, so the file is what `wwvbRecorder.dump()` would have returned.
+
+The synthetic source's faults come from a seeded generator, and the host always uses seed 0. So the run repeats: an unpaced run of the same start time and noise gave the same frames and the same losses at the same seconds before the paced one was made. To make another, search unpaced runs for a start time and a noise level that give the events wanted, then record that one paced.
 
 ## Adding a shadcn component
 

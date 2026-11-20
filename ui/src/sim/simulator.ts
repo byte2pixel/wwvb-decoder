@@ -18,9 +18,20 @@ const frameLayout = hostMessageSchema.parse(layoutFixture);
 
 const loopGapMs = 1_000;
 
+interface SimulatorOptions {
+  /** How many times faster than recorded the stream plays. */
+  speed?: number;
+  /** The recording to play when the synthetic source is asked for with noise. Without it, `recording` plays. */
+  noisy?: readonly RecordedMessage[];
+}
+
+/**
+ * A bridge that plays a recorded stream in place of the host.
+ * `recording` is what a Start plays, unless the options name another for a noisy start.
+ */
 export function createSimulator(
   recording: readonly RecordedMessage[],
-  { speed = 1 }: { speed?: number } = {},
+  { speed = 1, noisy = recording }: SimulatorOptions = {},
 ): Bridge {
   const subscribers: Set<(message: HostMessage) => void> = new Set();
   let next = 1;
@@ -38,15 +49,17 @@ export function createSimulator(
     timers = [];
   };
 
-  const play = () => {
-    if (recording[0] === undefined) return;
+  const play = (lines: readonly RecordedMessage[]) => {
+    if (lines[0] === undefined) return;
 
-    const first = recording[0].t;
-    timers = recording.map(({ t, message }) => {
+    const first = lines[0].t;
+    timers = lines.map(({ t, message }) => {
       return setTimeout(() => emit(message), (t - first) / speed);
     });
-    const last = recording.at(-1)?.t ?? 0;
-    timers.push(setTimeout(play, (last - first + loopGapMs) / speed));
+    const last = lines.at(-1)?.t ?? 0;
+    timers.push(
+      setTimeout(() => play(lines), (last - first + loopGapMs) / speed),
+    );
   };
   return {
     onMessage: (callback: (message: HostMessage) => void) => {
@@ -57,7 +70,11 @@ export function createSimulator(
       switch (command.command) {
         case "selectSource": {
           cancel();
-          play();
+          play(
+            command.source === "synthetic" && command.noise > 0
+              ? noisy
+              : recording,
+          );
           break;
         }
         case "stop": {

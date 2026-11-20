@@ -167,6 +167,61 @@ describe("createSimulator", () => {
     expect(summary(received)).toEqual(["A", "B", "A", "B"]);
   });
 
+  it("plays the noisy recording when the synthetic source is asked for with noise", () => {
+    const simulator = createSimulator([line(0, "clean")], {
+      noisy: [line(0, "noisy"), line(100, "still noisy")],
+    });
+    const received: HostMessage[] = [];
+    simulator.onMessage((message) => received.push(message));
+
+    simulator.send({ ...select, noise: 0.05 });
+    vi.advanceTimersByTime(100);
+    expect(summary(received)).toEqual(["noisy", "still noisy"]);
+
+    // One second after its last line it is the noisy recording that starts over.
+    vi.advanceTimersByTime(1_050);
+    expect(summary(received)).toEqual(["noisy", "still noisy", "noisy"]);
+  });
+
+  it.each([
+    ["the synthetic source at noise 0", select],
+    [
+      "a replay",
+      {
+        command: "selectSource",
+        source: "replay",
+        path: "a.edges.txt",
+        speed: 1,
+      },
+    ],
+    [
+      "a serial port",
+      { command: "selectSource", source: "serial", port: "COM3" },
+    ],
+  ] as const)("plays the first recording for %s", (_, command) => {
+    const simulator = createSimulator([line(0, "clean")], {
+      noisy: [line(0, "noisy")],
+    });
+    const received: HostMessage[] = [];
+    simulator.onMessage((message) => received.push(message));
+
+    simulator.send(command);
+    vi.advanceTimersByTime(0);
+
+    expect(summary(received)).toEqual(["clean"]);
+  });
+
+  it("plays its one recording at any noise when it has no noisy one", () => {
+    const simulator = createSimulator([line(0, "A")]);
+    const received: HostMessage[] = [];
+    simulator.onMessage((message) => received.push(message));
+
+    simulator.send({ ...select, noise: 0.4 });
+    vi.advanceTimersByTime(0);
+
+    expect(summary(received)).toEqual(["A"]);
+  });
+
   it("plays faster at a higher speed", () => {
     const simulator = createSimulator([line(0, "A"), line(100, "B")], {
       speed: 10,
