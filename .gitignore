@@ -5,6 +5,7 @@ obj/
 .vs/
 TestResults/
 coverage/
+/publish/
 
 # Rust
 firmware/target/

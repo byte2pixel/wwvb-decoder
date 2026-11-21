@@ -2,6 +2,12 @@
   <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
   <PropertyGroup>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!--
+      publish.ps1 publishes for this runtime. Naming it here puts its packages in each
+      packages.lock.json, so a build and a publish restore from the same lock file. A build is
+      still for any runtime: only RuntimeIdentifier, without the s, would change that.
+    -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
   <!-- This file should never have a PackageReference, put them directly in the project file. -->
 </Project>

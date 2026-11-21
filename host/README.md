@@ -71,3 +71,35 @@ To run the host against a production bundle instead, run `npm run build` in `ui/
 The captures directory, which `captures` lists and `selectSource` with `replay` reads from, is the nearest `captures` folder at or above the executable: the repo's own under F5, and one beside the executable when published. With none, the list is empty. `--captures <dir>` on the command line names another directory; a relative one is taken from the current directory. The host refuses to replay a file outside it.
 
 Manual check of the bridge: launch, and the page's log should show `sourceStatus`, `ports`, `captures`, and `frameLayout` in reply to its `hello`. Start the synthetic source and every stage type counts up; `clock` reaches `locked` after the third accepted frame; Stop answers `sourceStatus` `stopped`.
+
+## Publishing
+
+`./publish.ps1` at the repo root builds the folder that goes to the presentation laptop. `-Output <dir>` names another folder than `publish/`.
+
+```text
+publish/
+├── WwvbDecoder.Host.exe    the app, self-contained: no .NET on the laptop
+├── wwwroot/                the built page; the exe does not run without it
+├── captures/               every *.edges.txt of the repo; Replay lists this folder
+├── tools/
+│   └── WwvbDecoder.Tools.exe   ports, record, decode, tx-sync
+└── version.txt             the commit and the time of the publish
+```
+
+Copy the whole folder. The laptop needs 64-bit Windows 11, which includes the WebView2 runtime, and nothing else.
+
+The tools are there for two jobs on the laptop. Run them from the folder that holds the app's exe:
+
+```powershell
+tools\WwvbDecoder.Tools.exe ports
+tools\WwvbDecoder.Tools.exe record --port COM3 --label room    # writes captures\<time>-room.edges.txt
+tools\WwvbDecoder.Tools.exe tx-sync COM5                       # sets the desk-top transmitter's clock
+```
+
+`record` writes into `captures\` under the current folder, which is the folder the app's Replay list reads, so a capture made in the room is in the list the next time the list is opened.
+
+- Both exes are single files for `win-x64`. `IncludeNativeLibrariesForSelfExtract` puts `WebView2Loader.dll` inside the app's exe, and the first start unpacks it under `%TEMP%\.net`.
+- WebView2 keeps its user data in `WwvbDecoder.Host.exe.WebView2` beside the exe, so the folder must be one the user can write to.
+- The folder is cleared before each publish, all but `captures/`, so a capture recorded there is kept. The script stops before it deletes anything when the folder is not empty and holds no earlier publish, and when the app or the tools are running from it.
+- A publish restores from the same `packages.lock.json` files as a build, in locked mode, so it fails when they do not fit and never rewrites them. Two things make that so. `host/src/Directory.Build.props` names `win-x64` in `RuntimeIdentifiers`, which puts that runtime's packages in each lock file; a build is still for any runtime. And the script passes `EnableSingleFileAnalyzer=false`: `PublishSingleFile` would otherwise switch on an analyzer that comes as one more package, `Microsoft.NET.ILLink.Tasks`, which a build does not restore and which has a new version with every SDK patch.
+- The `.pdb` files stay, so an error on the laptop has line numbers.
