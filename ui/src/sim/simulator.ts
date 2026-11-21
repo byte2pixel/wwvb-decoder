@@ -13,6 +13,20 @@ const stopped: HostMessage = {
   payload: { source: "none", name: "", state: "stopped", detail: "" },
 };
 
+/** What a host that remembers nothing sends: the app bar's defaults. */
+const selection: HostMessage = {
+  type: "selection",
+  seq: 0,
+  payload: {
+    source: "synthetic",
+    port: null,
+    capture: null,
+    speed: 1,
+    noise: 0,
+    reducedCarrierLevel: "high",
+  },
+};
+
 /** A copy of the message example. The host builds the same payload from its layout table. */
 const frameLayout = hostMessageSchema.parse(layoutFixture);
 
@@ -88,6 +102,7 @@ export function createSimulator(
             emit({ type: "ports", seq: 0, payload: { items: [] } });
             emit({ type: "captures", seq: 0, payload: { items: [] } });
             emit(frameLayout);
+            emit(selection);
           }, 0);
           break;
         }

@@ -1012,7 +1012,7 @@ The overview is complete and every stage has a baseline focus view: its panel en
 9. App bar polish, left open by Step 13 on 2026-11-18. Each control works as it is, so these come last, each with its tests:
    - **Capture rows.** A row reads `2026-11-09 04:34 UTC · 8 h 45 min`, and two rows are hard to tell apart at a glance. Keep the length. Make the date and time easier to read, and add the capture's label, the part of the file name after the timestamp (`overnight`, `desk`). `ui/src/shell/captures.ts` builds the row.
    - **Noise on release.** While the synthetic source runs, the slider sends `setNoise` on every step it passes. Send it once, when the slider is released (`onValueCommitted` on the Base UI slider), and let the readout keep following the thumb.
-   - **A reloaded page.** After a reload the app bar shows its defaults (Synthetic, 1×, noise 0, the first port, the newest capture) while the host may be running something else. The status bar and the clock follow `sourceStatus`; the controls do not. Either the page stops the source when it loads, or the host reports what it is running (source, port or capture, speed, noise, reduced-carrier level) and the page shows that. Step 15 Task 4 stores the same values in `settings.json`, so decide the two together.
+   - **A reloaded page.** Done in Step 15, decided on 2026-11-21 together with its Task 4: the host owns these values, keeps them in `settings.json`, and sends them in a `selection` message with its reply to `hello`, and the app bar starts from that. Nothing is left of this item here.
 
 ### Files
 

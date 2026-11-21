@@ -104,6 +104,39 @@ describe("App", () => {
     }
   });
 
+  it("shows the host's warning in a row between the app bar and the rail", () => {
+    const { bridge, emit } = fakeBridge();
+    render(<App bridge={bridge} clock={idleClock()} />);
+    const text = "COM9 was not found. Replaying the newest capture.";
+
+    emit({
+      type: "sourceStatus",
+      seq: 1,
+      payload: {
+        source: "replay",
+        name: "replay",
+        state: "running",
+        detail: "",
+        speed: 1,
+        warning: text,
+      },
+    });
+
+    const banner = screen.getByText(text).closest("output");
+    const follows = Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(banner).not.toBeNull();
+    expect(
+      screen
+        .getByRole("heading", { level: 1 })
+        .compareDocumentPosition(banner!) & follows,
+    ).toBe(follows);
+    expect(
+      banner!.compareDocumentPosition(
+        screen.getByRole("navigation", { name: "Pipeline" }),
+      ) & follows,
+    ).toBe(follows);
+  });
+
   it("shows the panels in their no-data states", () => {
     render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);
 

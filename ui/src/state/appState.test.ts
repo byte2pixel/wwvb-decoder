@@ -665,3 +665,26 @@ describe("expireSyncLoss", () => {
     expect(expireSyncLoss(state, 7).syncLoss?.seq).toBe(20);
   });
 });
+
+describe("a selection", () => {
+  it("is counted and logged, and changes nothing else the reducer holds", () => {
+    const before = reduce(initialState, info(1));
+
+    const after = reduce(before, {
+      type: "selection",
+      seq: 2,
+      payload: {
+        source: "replay",
+        port: "COM5",
+        capture: null,
+        speed: 10,
+        noise: 0.1,
+        reducedCarrierLevel: "low",
+      },
+    });
+
+    expect(after).toEqual({ ...before, lastSeq: 2, log: after.log });
+    expect(after.log).not.toEqual(before.log);
+    expect(after.lostMessages).toBe(0);
+  });
+});

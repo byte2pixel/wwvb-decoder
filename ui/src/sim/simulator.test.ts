@@ -44,7 +44,7 @@ describe("createSimulator", () => {
     vi.useRealTimers();
   });
 
-  it("answers hello with the source status, the ports, the captures, and the frame layout", () => {
+  it("answers hello with the source status, the ports, the captures, the frame layout, and the selection", () => {
     // Arrange
     const simulator = createSimulator([]);
     const received: HostMessage[] = [];
@@ -70,6 +70,18 @@ describe("createSimulator", () => {
       { type: "ports", seq: 2, payload: { items: [] } },
       { type: "captures", seq: 3, payload: { items: [] } },
       { ...layoutExample, seq: 4 },
+      {
+        type: "selection",
+        seq: 5,
+        payload: {
+          source: "synthetic",
+          port: null,
+          capture: null,
+          speed: 1,
+          noise: 0,
+          reducedCarrierLevel: "high",
+        },
+      },
     ]);
   });
 
@@ -112,7 +124,9 @@ describe("createSimulator", () => {
     vi.advanceTimersByTime(10);
 
     // Assert
-    expect(received.map((message) => message.seq)).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(received.map((message) => message.seq)).toEqual([
+      1, 2, 3, 4, 5, 6, 7,
+    ]);
   });
 
   it("stops playing and reports stopped", () => {

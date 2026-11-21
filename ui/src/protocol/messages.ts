@@ -127,9 +127,21 @@ export const sourceStatusSchema = z.object({
   state: sourceStateSchema,
   detail: z.string(),
   speed: z.number().optional(),
+  warning: z.string().optional(),
 });
 
 export type SourceStatus = z.infer<typeof sourceStatusSchema>;
+
+/** What the host remembers of the page's choices. It comes once, last in the reply to hello. */
+export const selectionSchema = z.object({
+  source: z.enum(["serial", "replay", "synthetic"]),
+  port: z.string().nullable(),
+  capture: z.string().nullable(),
+  speed: z.number(),
+  noise: z.number(),
+  reducedCarrierLevel: pinLevelSchema,
+});
+export type Selection = z.infer<typeof selectionSchema>;
 
 export const captureEntrySchema = z.object({
   path: z.string(),
@@ -211,6 +223,11 @@ export const hostMessageSchema = z.discriminatedUnion("type", [
     type: z.literal("frameLayout"),
     seq: z.number(),
     payload: frameLayoutSchema,
+  }),
+  z.object({
+    type: z.literal("selection"),
+    seq: z.number(),
+    payload: selectionSchema,
   }),
   z.object({
     type: z.literal("info"),

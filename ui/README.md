@@ -52,7 +52,7 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 
 | File | Holds |
 | --- | --- |
-| `messages.ts` | zod schemas for every host envelope and page command, and the types inferred from them. The schemas are the source of truth; no type is written by hand. `hostMessageSchema` is a discriminated union on `type`, `commandSchema` on `command`, with the three `selectSource` shapes nested on `source`. |
+| `messages.ts` | zod schemas for every host envelope and page command, and the types inferred from them. The schemas are the source of truth; no type is written by hand. `hostMessageSchema` is a discriminated union on `type`, `commandSchema` on `command`, with the three `selectSource` shapes nested on `source`. A `sourceStatus` may come without `speed` or `warning`, as an older host sends it. |
 | `bridge.ts` | `createBridge(webview)` wraps `window.chrome.webview`: `onMessage` validates each event with `safeParse` and drops, with a `console.warn`, anything that fails; `send` posts a command object. `findWebView()` returns the real one, or `undefined` in a plain browser. `Bridge` is the interface the page depends on; the simulator implements it too. |
 | `edgeLine.ts` | `edgeLine(edge)` writes an edge as the serial protocol does, `H 12345678`. The rail's stage 1 readout and the edge log both call it. |
 | `decodedText.ts` | How the page writes a decoded frame's values that are not plain numbers: `UT1_SIGNS`, `DST_TEXT`, and `ut1Seconds(tenths)`. The decoded-frames table and the last complete frame both read them. Each table is a `Record` over the protocol's type, so a value the protocol gains later does not compile until it has its text. |
@@ -85,11 +85,22 @@ The store also holds what the page decides for itself, `UiState`, beside the red
 
 No host message changes these, and a source reset leaves them alone: the reducer never returns them, and `set` merges what it does return.
 
-One more value is the page's own and is kept the same way: `reducedLevel`, the pin level that means reduced carrier, `"high"` until `setReducedLevel` says otherwise. The signal settings set it and the signal view reads it. It sits beside `UiState` and not in it, because `UiState` is what the keyboard map takes.
+Three more values are the page's own and are kept the same way. They sit beside `UiState` and not in it, because `UiState` is what the keyboard map takes.
+
+| Field | Holds | Set by |
+| --- | --- | --- |
+| `reducedLevel` | The pin level that means reduced carrier, `"high"` to begin with. The signal view reads it | `setReducedLevel`, from the signal settings, and the host's `selection` |
+| `picks` | What the app bar has picked for the next Start: `source`, `port`, `capture`, `speed`, and `noise`. The type is the `selection` payload without its level. A `port` or `capture` of `null` means none was picked, and the first port and the newest capture then count as picked | `setPicks(change)`, which changes the picks it is given and keeps the rest, and the host's `selection` |
+| `closedWarning` | The text of the warning the presenter closed, or `null` | `closeWarning(text)`, and a `sourceStatus` without a warning, which sets it back to `null` |
+
+So two host messages do reach the page's own state, and `dispatch` applies both in the same `set` as the reducer's result, so subscribers hear of a message once:
+
+- `selection` comes last in the reply to `hello` and sets the picks and the level. That is how a page that has just loaded shows what the host is running or ran last. The reducer itself only counts and logs the message.
+- A `sourceStatus` whose `warning` is empty or missing forgets the closed warning, so the same text shows again when its cause comes back.
 
 - A component subscribes to the slice it shows: `useAppStore((state) => state.lastSeq)`.
 - Zustand compares a selector's result by identity. A selector that builds a new object on every call goes through `useShallow`, as the rail's buttons do.
-- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus`, `drawer`, and `reducedLevel` keep their values. A test file that touches any of those replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
+- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus`, `drawer`, `reducedLevel`, `picks`, and `closedWarning` keep their values. A test file that touches any of those replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
 
 ## Time
 
@@ -114,7 +125,8 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 | `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
 | `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too |
 | `theme.ts` | `toggleTheme()`, for the app bar's button and the `T` key |
-| `AppBar.tsx` | The name, the source control with each source's own controls (the port list, the capture list and speed buttons, the noise slider), Start, Stop, and the buttons for the signal settings, the theme, and the shortcut list. `PickList`, `SpeedButtons`, and `SignalSettings` are components local to the file. The rules are under "App bar" in `ui-design.md` |
+| `AppBar.tsx` | The name, the source control with each source's own controls (the port list, the capture list and speed buttons, the noise slider), Start, Stop, and the buttons for the signal settings, the theme, and the shortcut list. `PickList`, `SpeedButtons`, and `SignalSettings` are components local to the file. What is picked is the store's `picks`, not component state, so the host's `selection` can set it. The rules are under "App bar" in `ui-design.md` |
+| `WarningBanner.tsx` | The host's warning, in a row between the app bar and the rail: the `warning` of the latest `sourceStatus`, in the host's words, as an `output` element, which is a status to a screen reader, with a warning glyph and a hidden `Warning:` before the text. It draws nothing while there is no warning, and none while the text is the one in `closedWarning`, which its close button sets. The rules are under "Warning banner" in `ui-design.md` |
 | `captures.ts` | `captureLabel(entry)`: what the capture list shows for one capture, built from `formatRecorded` and `formatLength` |
 | `StatusBar.tsx`, `ProtocolLog.tsx` | The run state, the source's name and detail, the last `seq`, the lost count, the key hints, and the Log button. The protocol log is a sheet that opens when the store's `drawer` is `"log"` |
 | `ShortcutList.tsx` | The shortcut list, a sheet that opens when `drawer` is `"shortcuts"`. Its rows are written out by hand, so a key added to the map is added here too |
@@ -200,7 +212,7 @@ The noisy recording is there to show what the clean one cannot: a rejected row, 
 
 | Command | The simulator's answer |
 | --- | --- |
-| `hello` | `sourceStatus` stopped, empty `ports` and `captures`, then `frameLayout` from `sim/fixtures/frameLayout.json` |
+| `hello` | `sourceStatus` stopped, empty `ports` and `captures`, `frameLayout` from `sim/fixtures/frameLayout.json`, then a `selection` of the defaults, which is what a host that remembers nothing sends |
 | `selectSource` | Plays a recording from the top: the noisy one for the synthetic source with noise above 0, the clean one otherwise |
 | `stop` | Stops playing and sends `sourceStatus` stopped |
 | Anything else | Nothing |

@@ -7,6 +7,7 @@ import { FocusLayout } from "./shell/FocusLayout";
 import { PipelineRail } from "./shell/PipelineRail";
 import { ShortcutList } from "./shell/ShortcutList";
 import { StatusBar } from "./shell/StatusBar";
+import { WarningBanner } from "./shell/WarningBanner";
 import {
   DecodedFramesPanel,
   FramePanel,
@@ -50,6 +51,7 @@ export default function App({
     <TooltipProvider>
       <div className="flex h-full flex-col">
         <AppBar bridge={bridge} />
+        <WarningBanner />
         <PipelineRail />
         {focused ? (
           <FocusLayout stage={focused} clock={clock} />

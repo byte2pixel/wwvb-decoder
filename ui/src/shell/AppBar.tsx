@@ -21,16 +21,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Bridge } from "@/protocol/bridge";
-import type { Command, PinLevel, Source } from "@/protocol/messages";
+import type { Command, PinLevel } from "@/protocol/messages";
 import { Keyboard, SlidersHorizontal, SunMoon } from "lucide-react";
-import { useAppStore } from "@/state/store";
-import { useState, useId } from "react";
+import { useAppStore, type Picks } from "@/state/store";
+import { useId } from "react";
 import { captureLabel } from "./captures";
 import { toggleTheme } from "./theme";
 
-type SourceKind = Exclude<Source, "none">;
-
-const sources: readonly { kind: SourceKind; label: string }[] = [
+const sources: readonly { kind: Picks["source"]; label: string }[] = [
   { kind: "serial", label: "Live" },
   { kind: "replay", label: "Replay" },
   { kind: "synthetic", label: "Synthetic" },
@@ -176,11 +174,10 @@ function SignalSettings({ bridge }: Readonly<{ bridge: Bridge }>) {
   );
 }
 export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
-  const [source, setSource] = useState<SourceKind>("synthetic");
-  const [pickedPort, setPickedPort] = useState<string | null>(null);
-  const [pickedCapture, setPickedCapture] = useState<string | null>(null);
-  const [speed, setSpeed] = useState<number>(1);
-  const [noise, setNoise] = useState(0);
+  // The picks are in the store, where the host's selection sets them when the page loads.
+  const picks = useAppStore((state) => state.picks);
+  const setPicks = useAppStore((state) => state.setPicks);
+  const { source, speed, noise } = picks;
   const noiseId = useId();
   const ports = useAppStore((state) => state.ports);
   const captures = useAppStore((state) => state.captures);
@@ -196,9 +193,9 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
   );
   const setDrawer = useAppStore((state) => state.setDrawer);
 
-  const port = ports.find((name) => name === pickedPort) ?? ports.at(0);
+  const port = ports.find((name) => name === picks.port) ?? ports.at(0);
   const capture = (
-    captures.find((entry) => entry.path === pickedCapture) ?? captures.at(0)
+    captures.find((entry) => entry.path === picks.capture) ?? captures.at(0)
   )?.path;
 
   const startCommand = (): Command | null => {
@@ -230,7 +227,7 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
         value={[source]}
         onValueChange={([picked]) => {
           const next = sources.find(({ kind }) => kind === picked);
-          if (next) setSource(next.kind);
+          if (next) setPicks({ source: next.kind });
         }}
         variant="outline"
         size="sm"
@@ -248,7 +245,7 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
           items={ports.map((name) => ({ value: name, label: name }))}
           value={port}
           empty="No ports found"
-          onPick={setPickedPort}
+          onPick={(picked) => setPicks({ port: picked })}
           onOpen={() => bridge.send({ command: "listPorts" })}
         />
       )}
@@ -262,13 +259,13 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
             }))}
             value={capture}
             empty="No captures found"
-            onPick={setPickedCapture}
+            onPick={(picked) => setPicks({ capture: picked })}
             onOpen={() => bridge.send({ command: "listCaptures" })}
           />
           <SpeedButtons
             speed={speed}
             onPick={(next) => {
-              setSpeed(next);
+              setPicks({ speed: next });
               if (replayRunning) {
                 bridge.send({ command: "setReplaySpeed", speed: next });
               }
@@ -290,7 +287,7 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
               value={[noise]}
               onValueChange={(value) => {
                 const next = typeof value === "number" ? value : value[0];
-                setNoise(next);
+                setPicks({ noise: next });
                 if (syntheticRunning) {
                   bridge.send({ command: "setNoise", noise: next });
                 }
