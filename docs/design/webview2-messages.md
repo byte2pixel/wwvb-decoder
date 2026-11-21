@@ -324,7 +324,7 @@ interface SourceStatus {
 
 The page has no other way to learn the speed, and a reloaded page gets it back with the reply to `hello`. A page that receives a status without `speed` takes it as 1.
 
-`detail` belongs to one status: the next reset or banner line replaces it. A `warning` belongs to the run. Every status of the run carries it, through source resets, the banner line, and a change of speed, until its cause is gone or the run ends. A status that starts a run carries a warning only when the host has one to give at that moment, and the status that answers `stop` carries none. A page that receives a status without `warning` takes it as empty.
+`detail` belongs to one status: the next reset or banner line replaces it. A `warning` belongs to the run. Every status of the run carries it, through source resets, the banner line, and a change of speed, until its cause is gone or the run ends. The status that reports the end of the run is the last to carry it. A status that starts a run carries a warning only when the host has one to give at that moment, and the status that answers `stop` carries none. A page that receives a status without `warning` takes it as empty.
 
 | Warning | When | Until |
 | --- | --- | --- |
@@ -638,10 +638,13 @@ After its reply to the first `hello`, the host starts the remembered source if o
 | `replay` | The capture is gone, and there is another | A replay of the newest capture | `<name> was not found. Replaying the newest capture.` |
 | `replay` | There is no capture | Nothing | `<name> was not found, and there is no capture to replay.` |
 
-- A start at launch is the start a `selectSource` would make, with the same answers. A port that is listed and cannot be opened follows as `error`, as it does for a command.
+- A start at launch is the start a `selectSource` would make, with the same answers. A port that is listed and cannot be opened follows as `error`, as it does for a command. A capture that is listed and cannot be read is answered with `error` at once, and that status carries no warning.
+- Nothing at launch is written to the file, whether the host starts the remembered source or the newest capture in its place.
 - Where nothing can be started, the warning comes in a `sourceStatus` with `source: "none"` and `state: "stopped"`.
-- A port that is listed is taken as it is. The host does not know that the port is the logger's until the banner line arrives, and the status bar shows that line.
-- The `selection` in that first reply names what is about to start: in the fourth and seventh rows, `replay` and the newest capture.
+- A port is looked for in `ports` without regard to case. One that is listed is taken as it is: the host does not know that the port is the logger's until the banner line arrives, and the status bar shows that line.
+- A file edited by hand can say `serial` with no port, or `replay` with no capture. Either counts as not found, and the warning says `The port` or `The capture` where the name would be.
+- The `selection` in that first reply names what is about to start: in the fourth and seventh rows, `replay` and the newest capture. While that capture replays, the `selection` of a later `hello` names it too. `stop`, or any `selectSource`, ends that, and `selection` is what is remembered again.
+- The start waits for the first `hello` and happens once. A `selectSource` or a `stop` that arrives before that `hello` cancels it, since a command has then chosen.
 
 ## Threading
 

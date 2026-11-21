@@ -8,15 +8,16 @@ public class SourceControllerTests
 {
     private readonly FakeSourceEnvironment _environment = new();
     private readonly RecordingPoster _poster = new();
+    private readonly FakeSettingsStore _settings = new();
     private readonly DecoderPipeline _pipeline = new(TimeProvider.System);
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    private SourceController CreateController() => new(_pipeline, _environment, _poster);
+    private SourceController CreateController() => new(_pipeline, _environment, _poster, _settings);
 
     [Theory]
     [InlineData(1)]
     [InlineData(99)] // a mismatch is logged, not refused
-    public async Task Hello_AnswersStatusPortsCapturesLayoutInOrder(int protocol)
+    public async Task Hello_AnswersStatusPortsCapturesLayoutSelectionInOrder(int protocol)
     {
         // Arrange
         await using SourceController controller = CreateController();
@@ -26,7 +27,9 @@ public class SourceControllerTests
 
         // Assert
         var posted = _poster.Posted;
-        posted.Select(p => p.Type).ShouldBe(["sourceStatus", "ports", "captures", "frameLayout"]);
+        posted
+            .Select(p => p.Type)
+            .ShouldBe(["sourceStatus", "ports", "captures", "frameLayout", "selection"]);
         posted[0].Payload.ShouldBe(new SourceStatus(SourceKind.None, "", SourceState.Stopped, ""));
         posted[1].Payload.ShouldBeOfType<ItemsPayload<string>>().Items.ShouldBe(["COM3", "COM5"]);
         posted[2]
@@ -35,6 +38,8 @@ public class SourceControllerTests
         posted[3]
             .Payload.ShouldBeOfType<FrameLayoutPayload>()
             .Roles.ShouldBe(WwvbFrameLayout.Roles);
+        posted[4]
+            .Payload.ShouldBe(new Selection(SourceKind.Synthetic, null, null, 1, 0, PinLevel.High));
     }
 
     [Theory]
@@ -296,7 +301,12 @@ public class SourceControllerTests
             ];
             await File.WriteAllTextAsync(path, string.Join('\n', lines) + "\n", Ct);
             var environment = new HostEnvironment(TimeProvider.System, directory);
-            await using SourceController controller = new(_pipeline, environment, _poster);
+            await using SourceController controller = new(
+                _pipeline,
+                environment,
+                _poster,
+                _settings
+            );
 
             // Act
             await controller.HandleAsync(new Command.SelectReplay(path, Speed: 1));
