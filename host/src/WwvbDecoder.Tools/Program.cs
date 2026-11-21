@@ -40,6 +40,9 @@ app.Configure(config =>
                 .WithDescription("Decode edges from a serial port.");
         }
     );
+    config
+        .AddCommand<TxSyncCommand>("tx-sync")
+        .WithDescription("Set the desk-top transmitter's clock from the PC's clock.");
     config.SetExceptionHandler(
         (ex, _) =>
         {

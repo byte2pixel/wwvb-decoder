@@ -8,7 +8,7 @@ Raw edge logs from the receiver. Replay uses them as input, and they double as t
 | --- | --- |
 | `2026-11-08T2300Z-desk.edges.txt` | Ten-minute smoke test of the Tools `record` command, receiver on the desk. 1,214 edges, no gaps, no malformed lines |
 | `2026-11-09T0434Z-overnight.edges.txt` | First overnight capture, 8 h 45 min (04:34Z to 13:19Z on 2026-11-09). 62,991 edges and one glitch; see [The first overnight capture](#the-first-overnight-capture) |
-| `pulseview/` | Logic-analyser recordings (PulseView `.sr`) from bring-up, used to establish the receiver's output polarity. Not readable by replay |
+| `pulseview/` | Logic-analyser recordings (PulseView `.sr`) from bring-up: one that established the receiver's output polarity, and one of the transmitter's carrier pin. Not readable by replay |
 
 ## Recording a capture
 

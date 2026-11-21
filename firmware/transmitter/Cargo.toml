@@ -1,0 +1,17 @@
+[package]
+name = "wwvb-transmitter"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+wwvb-transmitter-core = { path = "../transmitter-core" }
+embassy-executor = "0.10.0"
+embassy-rp = { version = "0.10.0", features = ["rp235xa", "time-driver", "critical-section-impl", "binary-info", "executor-thread"] }
+embassy-time = "0.5.1"
+embassy-usb = { version = "0.6", default-features = false }
+embassy-sync = "0.8"
+embassy-futures = "0.1"
+static_cell = "2"
+cortex-m-rt = "0.7.5"
+panic-halt = "1.0.0"

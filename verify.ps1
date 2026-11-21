@@ -54,6 +54,9 @@ if ('firmware' -in $Only) {
     Step 'firmware' { cargo fmt --check }
     Step 'firmware' { cargo build --release --locked }
     Step 'firmware' { cargo clippy --release --locked -- -D warnings }
+    # The two libraries' tests run on this PC, not on the Pico, so these two name the PC's target.
+    Step 'firmware' { cargo test --locked -p wwvb-frame -p wwvb-transmitter-core --target x86_64-pc-windows-msvc }
+    Step 'firmware' { cargo clippy --locked -p wwvb-frame -p wwvb-transmitter-core --target x86_64-pc-windows-msvc --all-targets -- -D warnings }
 }
 
 Write-Host "`nAll checks passed ($($Only -join ', ')) in $([int]$timer.Elapsed.TotalSeconds)s." -ForegroundColor Green
