@@ -145,10 +145,28 @@ Typing `TIME` by hand sets the clock to within a second or so of what you meant,
 
 | From | To | Note |
 | --- | --- | --- |
-| GP16 (pin 21) | 1 kΩ resistor | The resistor limits the current to about 3 mA |
+| GP16 (pin 21) | 1 kΩ resistor | The resistor limits the current to about 3 mA. It is on the pin's side so that the coil stays near 0 V and reaches the receiver through its magnetic field only |
 | 1 kΩ resistor | One end of the coil | |
 | Other end of the coil | GND (pin 23) | |
 
-The coil is 10 to 20 turns of 22 AWG wire, about 5 cm across, laid beside the receiver's ferrite rod with its axis along the rod. There is no amplifier, which keeps the field to a few centimetres. The transmitter's Pico shares nothing with the receiver but that field: the receiver stays wired to the edge logger's Pico.
+The coil is 15 turns of insulated 22 AWG wire, about 5 cm across, in one flat bundle. Only the two ends are stripped. It lies off to one side of the receiver's ferrite rod, with its axis parallel to the rod. There is no amplifier. The transmitter's Pico shares nothing with the receiver but that field: the receiver stays wired to the edge logger's Pico.
 
-The number of turns and the distance that work are not measured yet (construction plan Step 14, task 4).
+### Working distance
+
+Put the coil 20 to 30 cm from the rod. The decoder locks with the coil anywhere from against the rod to 50 cm away, and not at 1 m.
+
+Measured on 2026-11-20 with the host decoding the edge logger's port. Each distance is from the coil's axis to the rod. It was night and the real station was being received as well, so the transmitter's clock was set to 2026-12-10: every accepted frame said that date and so was the coil's, not the station's. The widths are as the host's signal panel showed them.
+
+| Distance | Frames accepted | Width of a 0, sent as 200 ms | Width of a marker, sent as 800 ms |
+| --- | --- | --- | --- |
+| 2.5 cm, the coil against the rod | 5 of 5 | 146 to 154 ms | 750 to 751 ms |
+| About 5 cm | 6 of 6 | 151 to 161 ms | 755 to 760 ms |
+| 15 cm | 5 of 5 | 180 to 183 ms | 775 to 781 ms |
+| 20 cm | 5 of 5 | 189 to 196 ms | 793 ms |
+| 30 cm | 5 of 5 | 196 to 206 ms | 795 to 800 ms |
+| 50 cm | 5 of 5 | 197 to 219 ms | 798 ms |
+| 1 m | None: frame sync never found the frame | Erratic, 97 to 813 ms | |
+
+Close to the coil every pulse reads short by the same amount, up to about 50 ms, although the pin's keying is exact (see [`captures/pulseview/`](../captures/pulseview/README.md)). The likely cause is in the receiver: after a strong carrier stops, its narrow filter rings on, so it reports the gap late, and it reports the carrier's return at once. The shortening levels off against the rod, where a 0 is still well above the host's 100 ms floor. At 50 cm the pulses read a little long and scatter more.
+
+The far limit with no station on the air is not measured. It may be larger, because at night the station competes with the coil.
