@@ -133,7 +133,7 @@ The desk-top transmitter is a second Pico 2 (construction plan Step 14). It send
 
 | Side | Implemented in | Role |
 | --- | --- | --- |
-| Firmware | `firmware/transmitter/` (Step 14) | Keeps the time, keys the carrier, obeys the commands |
+| Firmware | `firmware/transmitter/`, with its logic in `firmware/transmitter-core/` (Step 14) | Keeps the time, keys the carrier, obeys the commands |
 | Host tool | `WwvbDecoder.Tools`, `tx-sync` (Step 14) | Sends the PC's time and prints the reply |
 
 The decoder never talks to the transmitter. It hears it through the receiver and the edge logger, as it hears the real station.
@@ -161,7 +161,8 @@ Command lines, from the host, have their own rules:
 
 - A session starts when the host asserts DTR, as with the logger. The transmitter writes `# session` and then its banner, `# wwvb-transmitter <semver> pin=<gpio>`, where `<gpio>` is the pin that drives the coil. For example `# wwvb-transmitter 0.1.0 pin=16`.
 - The banner tells the host which Pico it has opened. `tx-sync` waits for it before it sends anything, and stops with a message when the banner is the edge logger's.
-- A session starts with an empty command line. Bytes of an unfinished line from before the session are discarded.
+- A host waits for the banner before it sends its first command. The transmitter discards the bytes it received before it wrote the banner, so a session starts with an empty command line and nothing of an earlier session is left in it.
+- A host ignores every line before `# session`. At most one can arrive there: a reply of an earlier session that its host never read, which the USB hardware still held.
 - A host must assert DTR. What the transmitter does with bytes sent without DTR is not defined.
 - After the banner the transmitter writes only replies: one line for each command, and nothing by itself.
 - The session and the signal are independent. The transmitter keeps its time and keeps transmitting after the host closes the port. Only a power loss or a reset clears its state.
@@ -253,6 +254,7 @@ A program reads the first word, `OK` or `ERR`. The reason is for a person, and a
 - Each second starts with reduced carrier: 0.2 s for a 0, 0.5 s for a 1, 0.8 s for a marker. The carrier is full for the rest of the second.
 - Each minute is one frame, with second 0 at the clock's minute, and the frame says the minute it is sent in, as the station's does. The layout is the host's `WwvbFrameLayout`, ported to `firmware/wwvb-frame/` and held to it by a test.
 - The time does not give the frame's other fields, so they are fixed: a UT1 correction of plus 0.0, no leap second pending, and standard time. In summer the station says daylight time and the transmitter does not. A custom frame can say anything.
+- A clock that runs past the end of 2099 has no frame that can say its minute. The transmitter then sends no carrier, apart from a custom frame, until a `TIME` puts the clock back in range.
 
 ### Example
 

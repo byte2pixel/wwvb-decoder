@@ -1559,6 +1559,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "wwvb-transmitter"
+version = "0.1.0"
+dependencies = [
+ "cortex-m-rt",
+ "embassy-executor",
+ "embassy-futures",
+ "embassy-rp",
+ "embassy-sync",
+ "embassy-time",
+ "embassy-usb",
+ "panic-halt",
+ "static_cell",
+ "wwvb-transmitter-core",
+]
+
+[[package]]
+name = "wwvb-transmitter-core"
+version = "0.1.0"
+dependencies = [
+ "wwvb-frame",
+]
+
+[[package]]
 name = "zerocopy"
 version = "0.8.63"
 source = "registry+https://github.com/rust-lang/crates.io-index"
