@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.IO;
+using System.Windows;
 using Microsoft.Web.WebView2.Core;
 using WwvbDecoder.Host.Bridge;
 using WwvbDecoder.Host.Services;
@@ -50,26 +51,68 @@ public partial class MainWindow
 
     private async Task InitializeAsync()
     {
-        await Wv.EnsureCoreWebView2Async(null);
-        Wv.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+        try
+        {
+            string userData = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "WwvbDecoder",
+                "WebView2"
+            );
+            try
+            {
+                CoreWebView2Environment environment = await CoreWebView2Environment.CreateAsync(
+                    null,
+                    userData
+                );
+                await Wv.EnsureCoreWebView2Async(environment);
+                Wv.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+            }
+            catch (WebView2RuntimeNotFoundException ex)
+            {
+                Trace.TraceError("Failed to initialize WebView2: {0}", ex);
+                string message =
+                    "Failed to initialize WebView2. Please ensure it is installed. https://developer.microsoft.com/microsoft-edge/webview2/\r\n\r\n"
+                    + ex.Message;
+                Fail(message);
+                return;
+            }
 
 #if DEBUG
-        // Prefer the Vite dev server (hot reload) when it's running.
-        if (await IsDevServerRunningAsync())
-        {
-            Wv.CoreWebView2.Navigate(DevServerUrl);
-            return;
-        }
+            // Prefer the Vite dev server (hot reload) when it's running.
+            if (await IsDevServerRunningAsync())
+            {
+                Wv.CoreWebView2.Navigate(DevServerUrl);
+                return;
+            }
 #endif
 
-        // Otherwise serve the built UI copied next to the exe.
-        string uiFolder = Path.Combine(AppContext.BaseDirectory, UiFolderName);
-        Wv.CoreWebView2.SetVirtualHostNameToFolderMapping(
-            VirtualHostName,
-            uiFolder,
-            CoreWebView2HostResourceAccessKind.Allow
-        );
-        Wv.CoreWebView2.Navigate($"https://{VirtualHostName}/index.html");
+            // Otherwise serve the built UI copied next to the exe.
+            string uiFolder = Path.Combine(AppContext.BaseDirectory, UiFolderName);
+            // check for index.html to avoid confusing errors when the UI is not built
+            if (!File.Exists(Path.Combine(uiFolder, "index.html")))
+            {
+                Fail($"UI was not found in {uiFolder}.");
+                return;
+            }
+
+            Wv.CoreWebView2.SetVirtualHostNameToFolderMapping(
+                VirtualHostName,
+                uiFolder,
+                CoreWebView2HostResourceAccessKind.Allow
+            );
+            Wv.CoreWebView2.Navigate($"https://{VirtualHostName}/index.html");
+        }
+        catch (Exception ex)
+        {
+            Trace.TraceError("Failed to initialize WebView2: {0}", ex);
+            Fail($"The app could not start: {ex.Message}");
+        }
+    }
+
+    private static void Fail(string message)
+    {
+        MessageBox.Show(message, "WWVB decoder", MessageBoxButton.OK, MessageBoxImage.Error);
+        Application.Current.Shutdown(1);
     }
 
     private async void OnWebMessageReceived(
