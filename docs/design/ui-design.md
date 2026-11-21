@@ -37,6 +37,8 @@ The design baseline is 1280 by 720 CSS pixels. Sizes below are at the baseline.
 
 The right column is 344 wide. Panels are 12 apart, with 12 of padding around the content area. The two fixed rows leave the decoded-frames panel 140 at the baseline, which is what its heading row and three frames need.
 
+A warning from the host adds a row of 32 between the app bar and the rail for as long as it shows (see [Warning banner](#warning-banner)). The decoded-frames panel gives up the room.
+
 ### Scaling
 
 The page scales as one piece, like a slide. The root font size is `min(100vw / 80, 100vh / 45)`, which is 16 px at 1280 by 720 and 24 px at 1920 by 1080. Every size is in `rem`, so Tailwind's spacing and type scales follow. Borders stay 1 px. At another aspect ratio the two flexible panels take the extra room.
@@ -227,7 +229,22 @@ Name; a three-way source control (Live, Replay, Synthetic); the selected source'
 - **Signal settings** is a popover with the reduced-carrier level, High or Low. A pick is sent as `setReducedCarrierLevel` at once, whether or not a source runs, because the host keeps the level from one run to the next. The signal panel reads the carrier with the same level.
 - **The pressed button** of the source, the speed, and the level is drawn in the accent color, so the choice can be read from the back of the room.
 
-The host does not report the port, the capture, the noise, or the level, so a reloaded page shows its defaults: Synthetic, the first port, the newest capture, 1×, noise 0, and High. The clock still runs at the host's speed, because every `sourceStatus` carries it; the speed buttons do not follow it. Step 16 Task 9 holds what is left to polish here.
+The app bar starts from the host's [`selection`](webview2-messages.md#selection), which arrives with the reply to `hello`: the source, the port, the capture, the speed, the noise, and the level. So a reloaded page shows what the host is running, and a restarted host shows what it ran last, and starts it again. Until `selection` arrives the values are the host's defaults: Synthetic, nothing picked (so the first port and the newest capture count as picked), 1×, noise 0, and High.
+
+- **No echo.** `selection` comes once for each page load. After that a pick changes the app bar at once, and the host learns of it from the command that carries it: `selectSource` on Start, and `setReplaySpeed`, `setNoise`, and `setReducedCarrierLevel` as above.
+- **A remembered port that is unplugged** is not in the list. It stays the pick, by the rule of the default pick, and is shown again when the port comes back. A capture that is gone arrives as `null`.
+- **What is on show and what is running can differ**, as before: Replay picked while Synthetic runs changes nothing until Start. The status bar says what is running.
+
+Step 16 Task 9 holds what is left to polish here: the capture rows and the noise slider.
+
+### Warning banner
+
+A row between the app bar and the rail, 32 high, that is there only while the latest `sourceStatus` carries a `warning`. It is the one place where the host tells the presenter something to act on: that the logger was not found and a capture is playing in its place, or that the reduced-carrier level looks inverted (Step 15, Task 3).
+
+- The text is the host's, shown as it comes. The page does not parse it.
+- It is drawn in the warning color with a warning glyph before the text, so it does not depend on hue, and it is announced to a screen reader as a status.
+- A close button at its right end hides it. The banner stays hidden while the host keeps sending the same text. It shows again when the text changes, and when the same text comes back after a status without a warning.
+- It takes no key, and the keyboard map is the same while it shows.
 
 ### Status bar and protocol log
 
@@ -298,10 +315,10 @@ bridge (or simulator)  ->  store  ->  React components   (rail, tables, clock, c
 ```
 
 - **Store.** One Zustand store. Each message type is handled by a pure reducer that is tested on its own. The store keeps ring buffers (2,000 edges, 300 pulses, 600 symbols, 120 filled slots, 20 validation results, 50 info lines, 5 sync losses), the latest message of each type for the rail, and the counters. A filled slot is a `slotFilled` event together with the start time of the symbol that arrived just before it, which is the symbol it placed. The signal panel's second lane and the frame panel both read that buffer.
-- **The page's own state.** The store also holds what the page decides for itself: the focused stage and the open drawer. No message changes them, so they are outside the reducer, and a source reset leaves them alone.
+- **The page's own state.** The store also holds what the page decides for itself: the focused stage, the open drawer, the app bar's picks with the reduced-carrier level, and the warning the presenter closed. They are outside the reducer, so a source reset leaves them alone. Two messages reach them: `selection` sets the picks and the level, and a `sourceStatus` with an empty `warning` forgets the warning that was closed.
 - **Rendering.** Components subscribe to small slices, so a new edge batch does not re-render the tables. The canvas views do not go through React at all.
 - **View models.** Each custom view has a pure function from buffers, size, and tokens to a list of things to draw, and a thin component that paints the list. Tests cover the function.
-- **Simulator.** When `window.chrome.webview` is absent, a simulator bridge plays a recorded message stream at a chosen speed and answers commands with canned status. The recording is taken from the real host, so the simulator cannot drift from the protocol.
+- **Simulator.** When `window.chrome.webview` is absent, a simulator bridge plays a recorded message stream at a chosen speed and answers commands with canned status. Its reply to `hello` ends with a `selection` of the defaults. The recording is taken from the real host, so the simulator cannot drift from the protocol.
 
 ### Source clock
 
@@ -334,13 +351,15 @@ The reducer also appends each loss to a list of the newest five, with a number t
 
 Each lands with its example file and both test suites, in the step that needs it.
 
-**`frameLayout` (the frame panel, Step 13).** The frame layout is written down in exactly two places in code, `WwvbFrameLayout` and the Rust crate. A TypeScript copy would be a third, so the host sends it once, at the end of its reply to `hello`. The payload is specified in [`webview2-messages.md`](webview2-messages.md#framelayout): a role and a bit weight for each of the 60 seconds.
+**`frameLayout` (the frame panel, Step 13).** The frame layout is written down in exactly two places in code, `WwvbFrameLayout` and the Rust crate. A TypeScript copy would be a third, so the host sends it once, in its reply to `hello`. The payload is specified in [`webview2-messages.md`](webview2-messages.md#framelayout): a role and a bit weight for each of the 60 seconds.
 
 - The page derives a field's bracket from the first and last second with its role.
 - The message carries no marker names. The page names the marker seconds in order: `Pr`, `P1` to `P5`, `P0`.
 - The store keeps the layout across a source reset, because the host does not send it again.
 
 Adding a message type does not change an existing one, so the protocol number stays 1.
+
+**`selection` and the `warning` of `sourceStatus` (Step 15).** The host remembers the page's choices in a settings file and starts the remembered source at launch. `selection` tells a page that has just loaded what they are, and `warning` carries what the banner shows. Both are specified in [`webview2-messages.md`](webview2-messages.md#selection), with the file and the launch rule under [What the host remembers](webview2-messages.md#what-the-host-remembers). `warning` is a new field of an existing message, which either side may add: a page without it shows no banner, and a host without it sends none.
 
 **Pulse statistics (optional, Step 16).** `PulseMeasurement` counts `GlitchesDropped` and `GapsBridged`, but no message carries them. The stage 2 focus view can show them only if a message does. Until then the page shows the dips in the carrier lane and no count.
 

@@ -39,7 +39,7 @@ Unknown properties are ignored on both sides, so either side can add a field wit
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `type` | string | One of the twelve types below |
+| `type` | string | One of the thirteen types below |
 | `seq` | number | Monotonic, starting at 1 when the host starts, shared by every type. A gap means a message was lost; the page may log it |
 | `payload` | object | The shape the type selects |
 
@@ -60,6 +60,7 @@ type Envelope =
   | { type: "ports"; seq: number; payload: { items: string[] } }
   | { type: "captures"; seq: number; payload: { items: CaptureEntry[] } }
   | { type: "frameLayout"; seq: number; payload: FrameLayout }
+  | { type: "selection"; seq: number; payload: Selection }
   | { type: "info"; seq: number; payload: { line: string } };
 ```
 
@@ -299,7 +300,7 @@ interface ClockState {
 
 ### `sourceStatus`
 
-Not a stage output. The host posts it whenever the source changes state: in reply to `hello`, after every `selectSource` and `stop`, when a run ends on its own or fails, on every source reset, and when `setReplaySpeed` changes the speed of a running replay.
+Not a stage output. The host posts it whenever the source changes state: in reply to `hello`, after every `selectSource` and `stop`, when a run ends on its own or fails, on every source reset, when `setReplaySpeed` changes the speed of a running replay, and when a warning appears or goes away.
 
 ```ts
 interface SourceStatus {
@@ -308,6 +309,7 @@ interface SourceStatus {
   state: "stopped" | "running" | "error";
   detail: string;
   speed: number;
+  warning: string;
 }
 ```
 
@@ -318,8 +320,17 @@ interface SourceStatus {
 | `state` | `running` while the pipeline is pumping; `stopped` after `stop` or when a replay without looping reaches its end; `error` when the source could not start or the run faulted |
 | `detail` | Display text. For a serial source the banner line once seen; for an error the exception message; on a source reset `reset: <reason>` with the reason from the contracts document (`open`, `start`, `session`, `loop`, `timestamp went backwards`); otherwise empty or a short description |
 | `speed` | How fast the source's time runs against real time. While a replay is the source it is the replay's speed, 0 for as fast as possible. In every other status it is 1. The page runs its source clock at this speed |
+| `warning` | Display text for something the presenter should know and may have to act on, or empty. The page shows it as a banner |
 
 The page has no other way to learn the speed, and a reloaded page gets it back with the reply to `hello`. A page that receives a status without `speed` takes it as 1.
+
+`detail` belongs to one status: the next reset or banner line replaces it. A `warning` belongs to the run. Every status of the run carries it, through source resets, the banner line, and a change of speed, until its cause is gone or the run ends. A status that starts a run carries a warning only when the host has one to give at that moment, and the status that answers `stop` carries none. A page that receives a status without `warning` takes it as empty.
+
+| Warning | When | Until |
+| --- | --- | --- |
+| `<port> was not found. Replaying the newest capture.`, and the three like it in [What the host remembers](#what-the-host-remembers) | At launch, when the host cannot start the source it remembers | The run ends |
+
+The texts are for people. The page shows them and does not parse them.
 
 ```json
 {
@@ -330,7 +341,8 @@ The page has no other way to learn the speed, and a reloaded page gets it back w
     "name": "serial COM5",
     "state": "running",
     "detail": "# wwvb-edge-logger 0.1.0 pin=2",
-    "speed": 1
+    "speed": 1,
+    "warning": ""
   }
 }
 ```
@@ -365,7 +377,7 @@ interface CaptureEntry { path: string; recorded: string; minutes: number }
 
 ### `frameLayout`
 
-Not a stage output. Sent once after `hello`, as the last message of the reply. It carries the frame layout of the contracts document as `WwvbFrameLayout` holds it, so the page can draw bit weights and field brackets without a copy of the layout in TypeScript. No command asks for it again, and the layout does not change while the host runs, so the page keeps it across source resets.
+Not a stage output. Sent once after `hello`. It carries the frame layout of the contracts document as `WwvbFrameLayout` holds it, so the page can draw bit weights and field brackets without a copy of the layout in TypeScript. No command asks for it again, and the layout does not change while the host runs, so the page keeps it across source resets.
 
 ```ts
 type SecondRole =
@@ -408,6 +420,50 @@ The payload is not one of the pipeline's records. The host builds it from `WwvbF
 }
 ```
 
+### `selection`
+
+Not a stage output. Sent once after `hello`, as the last message of the reply. It carries what the host remembers of the page's choices, so the app bar of a page that has just loaded shows what the host is running, or ran last, and not the page's own defaults. [What the host remembers](#what-the-host-remembers) says where the values come from.
+
+```ts
+interface Selection {
+  source: "serial" | "replay" | "synthetic";
+  port: string | null;
+  capture: string | null;
+  speed: number;
+  noise: number;
+  reducedCarrierLevel: PinLevel;
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `source` | The source the app bar shows as chosen: the one last started. `synthetic` when none ever was. Never `none` |
+| `port` | The port of the last serial source, or `null` when there was none. It need not be in `ports`: the logger may be unplugged |
+| `capture` | The `path`, as `captures` gives it, of the capture last replayed. `null` when there was none, or when its file is no longer in the captures directory |
+| `speed` | The replay speed last asked for, by `selectSource` or `setReplaySpeed`. 1 when none was |
+| `noise` | The synthetic noise last asked for, by `selectSource` or `setNoise`. 0 when none was |
+| `reducedCarrierLevel` | The level stage 2 is using |
+
+Two rules keep it small:
+
+- The host sends it in reply to `hello` and at no other time. Every later change comes from the page, in a command, so the page already has it, and an echo arriving late would move a slider back under the presenter's hand.
+- At launch the host may start something other than what it remembers, a capture where the logger is unplugged. `source` and `capture` then describe what it is about to start, because that is what the app bar should show.
+
+```json
+{
+  "type": "selection",
+  "seq": 7,
+  "payload": {
+    "source": "replay",
+    "port": "COM5",
+    "capture": "captures/2026-11-02T0310Z-home-west-window.edges.txt",
+    "speed": 10,
+    "noise": 0.1,
+    "reducedCarrierLevel": "high"
+  }
+}
+```
+
 ### `info`
 
 Pipeline event `InfoReceived`: a `#` line from the source, verbatim. From a serial source these are the banner and `# dropped <n>`; from replay also the capture's `# wall` lines, which carry the recorded PC-clock offset.
@@ -436,7 +492,9 @@ type Command =
 
 ### `hello`
 
-Sent once when the page has loaded and subscribed. `protocol` is the version of this document the page was built against, currently 1. The host logs a mismatch and carries on. It answers with `sourceStatus`, `ports`, `captures`, and `frameLayout`, in that order, so a reloaded page recovers the host's state.
+Sent once when the page has loaded and subscribed. `protocol` is the version of this document the page was built against, currently 1. The host logs a mismatch and carries on. It answers with `sourceStatus`, `ports`, `captures`, `frameLayout`, and `selection`, in that order, so a reloaded page recovers the host's state.
+
+The first `hello` after the host starts does one thing more. When the reply has been sent, the host starts the source it remembers, as [What the host remembers](#what-the-host-remembers) describes, and the page sees that as the `sourceStatus` of any start. It waits for `hello` so that the page is there to see the run from its first edge. A later `hello`, from a reloaded page, starts nothing.
 
 ```json
 { "command": "hello", "protocol": 1 }
@@ -520,11 +578,76 @@ Cancels the current run and disposes the source. The host answers with `sourceSt
 { "command": "stop" }
 ```
 
+## What the host remembers
+
+The host keeps the page's choices in a file, so that the app starts the way it was left. On the day of a talk that means: start the app, and the receiver is being decoded again without a click.
+
+### The file
+
+`%LocalAppData%\WwvbDecoder\settings.json`, beside the WebView2 user data. `--settings <file>` on the command line names another file, which is how a test run keeps away from the real one.
+
+```json
+{
+  "source": "replay",
+  "port": "COM5",
+  "capture": "2026-11-02T0310Z-home-west-window.edges.txt",
+  "speed": 10,
+  "noise": 0.1,
+  "reducedCarrierLevel": "high",
+  "running": true
+}
+```
+
+The first six are the fields of [`selection`](#selection), with one difference: `capture` is the file's name and not its path. The folder that holds the app can be copied to another place, or to the laptop, and the name still finds the capture in the captures directory beside it. `running` says whether a source was running when the file was last written.
+
+The file follows the serialization rules at the top of this document. Without a file the values are `synthetic`, `null`, `null`, 1, 0, `high`, and `false`.
+
+- **Reading.** Once, when the host starts. A file that is missing, cannot be read, is not JSON, or holds a value that is not valid gives the defaults, all of them, and a line in the log. Valid means: all seven properties are there, `source` is one of the three, `port` and `capture` are strings or `null`, `speed` is a finite number of 0 or more, `noise` is from 0 to 1, `reducedCarrierLevel` is `high` or `low`, and `running` is `true` or `false`. An enum written as a number is not valid. An unknown property is ignored. Nothing in the file can stop the host from starting.
+- **Writing.** In the command that changed a value, before the command returns. A file that cannot be written is logged, and the command carries on.
+
+### What changes it
+
+| Command | The host remembers |
+| --- | --- |
+| `selectSource` with `serial` | `source`, `port`, and that a source is running |
+| `selectSource` with `replay` | `source`, `capture` as the name of the file in `path`, `speed`, and that a source is running |
+| `selectSource` with `synthetic` | `source`, `noise`, and that a source is running |
+| `setReplaySpeed` | `speed`, while a replay is running. At any other time the command is ignored, and nothing is remembered |
+| `setNoise` | `noise`, while the synthetic source is running. At any other time the command is ignored, and nothing is remembered |
+| `setReducedCarrierLevel` | `reducedCarrierLevel` |
+| `stop` | That no source is running. The six values stay |
+
+- A `selectSource` is remembered when its answer is `running`. One that is refused, a capture that cannot be read or a noise out of range, changes nothing.
+- A run that ends on its own or fails changes nothing either. A logger that was unplugged in the middle of a run is still the remembered source, and still counts as running, the next time the host starts.
+- What the host starts at launch in place of the remembered source, below, is not written to the file. When the logger is plugged in again, the next launch is live again.
+
+### At launch
+
+The remembered level goes to stage 2 before any source starts.
+
+After its reply to the first `hello`, the host starts the remembered source if one was running. A source that cannot be started as remembered is replaced by the newest capture, the first item of `captures`, at the remembered speed:
+
+| Remembered | What the host finds | It starts | `warning` |
+| --- | --- | --- | --- |
+| Nothing running | | Nothing | |
+| `synthetic` | | The synthetic source at the remembered noise | |
+| `serial` | The port is in `ports` | The serial source on that port | |
+| `serial` | The port is not in `ports`, and there is a capture | A replay of the newest capture | `COM5 was not found. Replaying the newest capture.` |
+| `serial` | The port is not in `ports`, and there is no capture | Nothing | `COM5 was not found, and there is no capture to replay.` |
+| `replay` | The capture is in the captures directory | A replay of that capture at the remembered speed | |
+| `replay` | The capture is gone, and there is another | A replay of the newest capture | `<name> was not found. Replaying the newest capture.` |
+| `replay` | There is no capture | Nothing | `<name> was not found, and there is no capture to replay.` |
+
+- A start at launch is the start a `selectSource` would make, with the same answers. A port that is listed and cannot be opened follows as `error`, as it does for a command.
+- Where nothing can be started, the warning comes in a `sourceStatus` with `source: "none"` and `state: "stopped"`.
+- A port that is listed is taken as it is. The host does not know that the port is the logger's until the banner line arrives, and the status bar shows that line.
+- The `selection` in that first reply names what is about to start: in the fourth and seventh rows, `replay` and the newest capture.
+
 ## Threading
 
 `DecoderPipeline` raises its events synchronously on the pump thread, the thread enumerating the source. The bridge's handlers do only two things there: serialize the event to a string, and queue it. Edges go into the batch; everything else goes straight to the dispatcher, and a `sourceStatus` sends the waiting batch ahead of itself. The batch is taken and queued under the lock that assigns `seq`, so the batch timer cannot queue it behind the status. `CoreWebView2.PostWebMessageAsJson` must be called on the WPF dispatcher thread, so the bridge posts through `Dispatcher.BeginInvoke`. The `seq` counter is assigned when a message is queued for the dispatcher, and the dispatcher queue is first in, first out, so sequence numbers match posting order.
 
-Commands arrive on the dispatcher in `CoreWebView2.WebMessageReceived`. Starting or stopping a source happens there too; the running pipeline is cancelled through its `CancellationTokenSource` and the new run starts on a thread-pool thread. Options changed by `setNoise`, `setReplaySpeed`, and `setReducedCarrierLevel` are written on the dispatcher and read on the pump thread; the Core types make those reads and writes volatile.
+Commands arrive on the dispatcher in `CoreWebView2.WebMessageReceived`. Starting or stopping a source happens there too; the running pipeline is cancelled through its `CancellationTokenSource` and the new run starts on a thread-pool thread. Options changed by `setNoise`, `setReplaySpeed`, and `setReducedCarrierLevel` are written on the dispatcher and read on the pump thread; the Core types make those reads and writes volatile. The settings file is read when the host starts and written on the dispatcher, in the command that changed it.
 
 While a replay runs, `sourceStatus` is posted from both threads: a source reset from the pump thread, and the answer to `setReplaySpeed` from the dispatcher. The controller reads the source's speed and posts the status under one lock, so the last status posted always carries the current speed.
 
