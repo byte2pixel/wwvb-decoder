@@ -127,7 +127,28 @@ ERR unknown command
 
 `time` is the clock's current second as Unix seconds, `carrier` is the switch that `ON` and `OFF` set, and `custom` says whether a `FRAME` waits for the next minute. The section "Transmitter commands" of the contract has every rule and every reason.
 
-Typing `TIME` by hand sets the clock to within a second or so of what you meant, which is enough to see frames decode. To set it to the PC's clock, a program sends the line at the top of a second.
+Typing `TIME` by hand sets the clock to within a second or so of what you meant, which is enough to see frames decode.
+
+### Setting the clock from the PC
+
+`tx-sync` in the host's Tools sets the clock from the PC's clock. It waits for the top of the next second, sends that second as `TIME`, and then asks for `STATUS`. Run it from the repository root with the transmitter's port:
+
+```powershell
+dotnet run --project host/src/WwvbDecoder.Tools -- tx-sync COM5
+```
+
+```text
+# wwvb-transmitter 0.1.0 pin=16
+Time set: OK time=1796931000 carrier=on custom=none
+Status: OK time=1796931000 carrier=on custom=none
+```
+
+| Item | Behaviour |
+| --- | --- |
+| The port | No other program may have it open. On the edge logger's port `tx-sync` says "The device is an edge logger, not a transmitter" and sends nothing |
+| `--offset <seconds>` | Adds that many seconds to the time it sends; it may be negative. `--offset 86400` sends tomorrow's date at today's time of day. Where the real station can be received too, a date that is off tells the transmitter's frames from the station's |
+| Exit code | 0 when both replies are `OK`. 1 when the transmitter answers `ERR`, when nothing answers within 3 s, or when the port cannot be opened |
+| Accuracy | The line goes out up to about 15 ms after the second turns, which is how late the Windows timer it waits on can be. The receiver's own delay changes by more than that with the coil's distance |
 
 ### Board behaviour
 

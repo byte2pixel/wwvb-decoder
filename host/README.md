@@ -5,11 +5,11 @@ C# / .NET 10 solution (`WwvbDecoder.slnx`).
 | Project | Purpose |
 | --- | --- |
 | `src/WwvbDecoder.Core` | Decoder pipeline. No UI or platform dependencies. |
-| `src/WwvbDecoder.Adapters` | The serial port (`SerialEdgeSource`, `SerialPorts`) and capture files on disk (`CaptureFile`, `CaptureWriter`). |
+| `src/WwvbDecoder.Adapters` | The serial port (`SerialEdgeSource`, `SerialPorts`), the desk-top transmitter's commands and replies (`TransmitterSession`, `TransmitterReply`), and capture files on disk (`CaptureFile`, `CaptureWriter`). |
 | `src/WwvbDecoder.Host` | WPF app that hosts the React UI in WebView2 and wires Core to the adapters. `Bridge/` serializes pipeline events into web messages and parses page commands; `Services/` starts and stops sources. See [Host layout](#host-layout). |
-| `src/WwvbDecoder.Tools` | Console app on Spectre.Console.Cli, one class per command: `ports` lists serial ports, `record` writes a capture file from the edge logger, `decode` runs the pipeline on a capture or a live port and prints every stage's output. See [`captures/README.md`](../captures/README.md) for `record` and `decode`. |
+| `src/WwvbDecoder.Tools` | Console app on Spectre.Console.Cli, one class per command: `ports` lists serial ports, `record` writes a capture file from the edge logger, `decode` runs the pipeline on a capture or a live port and prints every stage's output, `tx-sync` sets the desk-top transmitter's clock from the PC's clock. See [`captures/README.md`](../captures/README.md) for `record` and `decode`, and [`firmware/README.md`](../firmware/README.md) for `tx-sync`. The commands are thin: what can be tested is in Adapters, and this project has no tests. |
 | `tests/WwvbDecoder.Core.Tests` | xUnit tests for Core. |
-| `tests/WwvbDecoder.Adapters.Tests` | xUnit tests for Adapters: the serial source over a `StringReader`, the capture writer on a `FakeTimeProvider`, capture files in a temp directory. |
+| `tests/WwvbDecoder.Adapters.Tests` | xUnit tests for Adapters: the serial source over a `StringReader`, the transmitter session over a `StringReader` and a `StringWriter` on a `FakeTimeProvider`, the capture writer on a `FakeTimeProvider`, capture files in a temp directory. |
 | `tests/WwvbDecoder.Host.Tests` | xUnit tests for Host (`net10.0-windows`, `UseWPF`): message serialization and command parsing against `docs/design/message-examples/*.json`, `WebMessageBridge` on a `FakeTimeProvider`, `SourceController` on a fake environment. No WebView2 is created. |
 
 ## Core layout
@@ -44,7 +44,7 @@ Threading: commands arrive on the dispatcher and are handled there; the pipeline
 
 Core does no I/O and references no I/O packages: no `System.IO.Ports`, no WebView2, no WPF. Code that touches the serial port or the file system belongs outside Core, behind a port such as `IEdgeSource`. PC time enters Core only through an injected `TimeProvider`.
 
-`WwvbDecoder.Adapters` is where that code lives: `System.IO.Ports` and the file system are referenced there and nowhere else. Every Adapters type is in the namespace `WwvbDecoder.Adapters`, whichever folder (`Serial/`, `Capture/`) it sits in.
+`WwvbDecoder.Adapters` is where that code lives: the `System.IO.Ports` package and the file system are referenced there and nowhere else. One command in Tools, `tx-sync`, opens a serial port itself and hands its two streams to `TransmitterSession`, so that everything in Adapters about the transmitter can be tested without a port. Every Adapters type is in the namespace `WwvbDecoder.Adapters`, whichever folder (`Serial/`, `Capture/`) it sits in.
 
 `SyntheticEdgeSource` is in Core because it only computes edges. It paces them on the injected `TimeProvider`.
 

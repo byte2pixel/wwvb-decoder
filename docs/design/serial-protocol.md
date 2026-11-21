@@ -134,7 +134,7 @@ The desk-top transmitter is a second Pico 2 (construction plan Step 14). It send
 | Side | Implemented in | Role |
 | --- | --- | --- |
 | Firmware | `firmware/transmitter/`, with its logic in `firmware/transmitter-core/` (Step 14) | Keeps the time, keys the carrier, obeys the commands |
-| Host tool | `WwvbDecoder.Tools`, `tx-sync` (Step 14) | Sends the PC's time and prints the reply |
+| Host tool | `tx-sync` in `WwvbDecoder.Tools`, with its logic in `TransmitterSession` of `WwvbDecoder.Adapters` (Step 14) | Sends the PC's time and prints the replies |
 
 The decoder never talks to the transmitter. It hears it through the receiver and the edge logger, as it hears the real station.
 
@@ -201,7 +201,7 @@ So after power-up the transmitter is silent until its first `TIME`.
 `TIME <unix_seconds>`:
 
 - `<unix_seconds>` is decimal digits only: the seconds since 1970-01-01T00:00:00Z, from 946684800 (2000-01-01T00:00:00Z) to 4102444799 (2099-12-31T23:59:59Z). Those are the years that a frame's two digits of year can say.
-- The moment the transmitter reads the end of the line is the start of that second. So the host sends the line at the top of a second by its own clock. The error is the PC clock's error plus a few milliseconds of USB.
+- The moment the transmitter reads the end of the line is the start of that second. So the host sends the line at the top of a second by its own clock. The error is the PC clock's error, a few milliseconds of USB, and the lateness of the timer the host waits on: `tx-sync` waits on a Windows timer, which can fire up to about 15 ms late.
 - It takes effect at once. The second in progress is cut short and the new second begins, with its reduced carrier. The frame in progress is abandoned, custom or not, and the transmitter goes on from that second of the new minute's frame. The decoder sees one second of the wrong length and then part of a frame, which it handles as it handles noise. A custom frame that is waiting keeps waiting.
 - Unix time has no leap seconds, and the transmitter never sends one.
 
@@ -247,6 +247,8 @@ A command that failed changes nothing and is answered with `ERR` and a reason:
 | `ERR line too long` | The line passed 66 bytes |
 
 A program reads the first word, `OK` or `ERR`. The reason is for a person, and a program shows it as it is.
+
+The transmitter answers within milliseconds. `tx-sync` gives it 3 s for the banner and 3 s for each reply, and stops with a message when one does not come: the port is then some other device, or nothing is listening.
 
 ### Signal
 
