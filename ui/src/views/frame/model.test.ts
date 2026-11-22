@@ -13,6 +13,7 @@ import fixture from "@/sim/fixtures/frameLayout.json";
 import {
   cellState,
   decodedFrameLine,
+  decodedRecord,
   fieldBrackets,
   fieldValues,
   frameCells,
@@ -21,6 +22,9 @@ import {
   placedSymbols,
   receivingSecond,
   ROW_SECONDS,
+  setWeights,
+  SYNC_MOVES,
+  syncDiagram,
   type CellState,
 } from "./model";
 
@@ -399,18 +403,112 @@ describe("fieldValues", () => {
   });
 });
 
-describe("decodedFrameLine", () => {
-  /** The example with an error symbol in each of these seconds. */
-  const withErrors = (...seconds: number[]): DecodedFrame => ({
-    ...decoded,
-    frame: {
-      ...decoded.frame,
-      symbols: decoded.frame.symbols.map((symbol, second) =>
-        seconds.includes(second) ? "error" : symbol,
-      ),
-    },
+/** The example with an error symbol in each of these seconds. */
+const withErrors = (...seconds: number[]): DecodedFrame => ({
+  ...decoded,
+  frame: {
+    ...decoded.frame,
+    symbols: decoded.frame.symbols.map((symbol, second) =>
+      seconds.includes(second) ? "error" : symbol,
+    ),
+  },
+});
+
+describe("setWeights", () => {
+  it("lists nothing before the first complete frame", () => {
+    expect(setWeights(null, layout)).toBeNull();
   });
 
+  it("lists nothing before the layout arrives", () => {
+    expect(setWeights(decoded, null)).toBeNull();
+  });
+
+  it("lists the weights of each field's bits that are 1, in the order they are sent", () => {
+    // 19:30 on day 344 of year 26, with no UT1 correction.
+    expect(setWeights(decoded, layout)).toEqual({
+      minute: "20 + 10",
+      hour: "10 + 8 + 1",
+      dayOfYear: "200 + 100 + 40 + 4",
+      ut1Correction: "none",
+      year: "20 + 4 + 2",
+    });
+  });
+
+  it("has no entry for a field whose seconds carry no weight", () => {
+    const weights = setWeights(decoded, layout);
+
+    expect(weights).not.toHaveProperty("ut1Sign");
+    expect(weights).not.toHaveProperty("leapYear");
+    expect(weights).not.toHaveProperty("leapSecondPending");
+    expect(weights).not.toHaveProperty("dst");
+  });
+
+  it("leaves out the weight of a second that holds an error symbol, as the host reads it as 0", () => {
+    // Second 2 carries the minute's 20.
+    expect(setWeights(withErrors(2), layout)).toMatchObject({ minute: "10" });
+  });
+
+  it("lists a weight only where the layout's second holds a 1", () => {
+    const allOnes: DecodedFrame = {
+      ...decoded,
+      frame: {
+        ...decoded.frame,
+        symbols: decoded.frame.symbols.map(() => "one"),
+      },
+    };
+
+    // The unused second 4 and the marker in second 9 add nothing.
+    expect(setWeights(allOnes, layout)).toMatchObject({
+      minute: "40 + 20 + 10 + 8 + 4 + 2 + 1",
+      ut1Correction: "8 + 4 + 2 + 1",
+    });
+  });
+});
+
+describe("decodedRecord", () => {
+  it("has no rows before the first complete frame", () => {
+    expect(decodedRecord(null)).toBeNull();
+  });
+
+  it("writes the host's record, a row for each property under its C# name", () => {
+    expect(decodedRecord(decoded)).toEqual([
+      { name: "Frame", value: "60 symbols" },
+      { name: "Minute", value: "30" },
+      { name: "Hour", value: "19" },
+      { name: "DayOfYear", value: "344" },
+      { name: "Year", value: "26" },
+      { name: "Ut1Sign", value: "Plus" },
+      { name: "Ut1Tenths", value: "0" },
+      { name: "LeapYear", value: "false" },
+      { name: "LeapSecondPending", value: "false" },
+      { name: "Dst", value: "Standard" },
+      { name: "ErrorSeconds", value: "none" },
+    ]);
+  });
+
+  it("writes an enum's value as C# names it, and lists the seconds in error", () => {
+    const rows = decodedRecord({
+      ...decoded,
+      ut1Sign: "invalid",
+      ut1Tenths: 7,
+      leapSecondPending: true,
+      dst: "endsToday",
+      errorSeconds: [6, 31],
+    });
+
+    expect(rows).toEqual(
+      expect.arrayContaining([
+        { name: "Ut1Sign", value: "Invalid" },
+        { name: "Ut1Tenths", value: "7" },
+        { name: "LeapSecondPending", value: "true" },
+        { name: "Dst", value: "EndsToday" },
+        { name: "ErrorSeconds", value: "6, 31" },
+      ]),
+    );
+  });
+});
+
+describe("decodedFrameLine", () => {
   it.each<[string, DecodedFrame | null, string]>([
     ["before the first frame", null, "No frame yet"],
     ["for a frame with no error symbol", decoded, "No error symbols"],
@@ -443,5 +541,92 @@ describe("cellState", () => {
     ["minute", "error", "error"],
   ])("draws a %s second holding %s as %s", (role, symbol, state) => {
     expect(cellState(role, symbol)).toBe(state);
+  });
+});
+
+describe("syncDiagram", () => {
+  const running = {
+    source: "synthetic",
+    name: "",
+    state: "running",
+    detail: "",
+  } as const;
+  const quiet = { frameSync: null, syncLoss: null, sourceStatus: null };
+
+  it("is in no state while no source has run", () => {
+    expect(syncDiagram(quiet)).toEqual({
+      state: null,
+      count: "",
+      lose: "sync lost",
+      lost: false,
+    });
+  });
+
+  it("is searching once a source runs, before frame sync reports", () => {
+    expect(syncDiagram({ ...quiet, sourceStatus: running })).toMatchObject({
+      state: "searching",
+      count: "0 of 2 markers",
+    });
+  });
+
+  it("counts the markers in a row while searching", () => {
+    expect(
+      syncDiagram({
+        ...quiet,
+        frameSync: { kind: "searching", consecutiveMarkers: 1 },
+      }),
+    ).toMatchObject({ state: "searching", count: "1 of 2 markers" });
+  });
+
+  it("counts the symbols placed while synced", () => {
+    expect(
+      syncDiagram({
+        ...quiet,
+        frameSync: {
+          kind: "slotFilled",
+          frameStartMicros: 1_000_000,
+          second: 36,
+          symbol: "one",
+        },
+      }),
+    ).toMatchObject({ state: "synced", count: "37 of 60 symbols" });
+  });
+
+  it("is synced with every symbol placed when the frame is complete", () => {
+    expect(
+      syncDiagram({
+        ...quiet,
+        frameSync: { kind: "frameComplete", frame: decoded.frame },
+      }),
+    ).toMatchObject({ state: "synced", count: "60 of 60 symbols" });
+  });
+
+  it("is searching from no markers at the moment sync is lost", () => {
+    expect(
+      syncDiagram({
+        ...quiet,
+        frameSync: { kind: "syncLost", reason: "gap 2000 ms before second 15" },
+      }),
+    ).toMatchObject({ state: "searching", count: "0 of 2 markers" });
+  });
+
+  it("names the host's reason on the arrow for as long as the store holds the loss", () => {
+    expect(
+      syncDiagram({
+        ...quiet,
+        frameSync: { kind: "searching", consecutiveMarkers: 0 },
+        syncLoss: { reason: "gap 2000 ms before second 15", seq: 7 },
+      }),
+    ).toMatchObject({
+      state: "searching",
+      lose: "sync lost: gap 2000 ms before second 15",
+      lost: true,
+    });
+  });
+});
+
+describe("SYNC_MOVES", () => {
+  it("says what starts a frame, with the host's two markers", () => {
+    expect(SYNC_MOVES.sync).toBe("2 markers a second apart");
   });
 });

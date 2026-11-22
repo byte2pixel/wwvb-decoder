@@ -119,7 +119,7 @@ export interface Stage {
   name: string;
   /** The host's type for the stage, as C# writes it. */
   type: string;
-  /** The stage's rule in one sentence, for its focus view. The numbers repeat the host's defaults. */
+  /** The stage's rule text, for its focus view. The numbers repeat the host's defaults. */
   rule: string;
   view: (state: AppState) => StageView;
 }
@@ -136,7 +136,7 @@ export const stages: readonly Stage[] = [
     number: 2,
     name: "Pulses",
     type: "IStage<Edge, Pulse>",
-    rule: "A pulse is the time the carrier stays reduced; a pulse under 50 ms is dropped and a gap under 50 ms is bridged.",
+    rule: "A pulse is the time the carrier stays reduced. A pulse under 50 ms is dropped and a gap under 50 ms is bridged.",
     view: pulsesStage,
   },
   {
@@ -150,7 +150,7 @@ export const stages: readonly Stage[] = [
     number: 4,
     name: "Frame sync",
     type: "IStage<Symbol, FrameSyncEvent>",
-    rule: "Two markers a second apart start a frame; a marker or a bit in the wrong second, or a gap outside 0.5 to 1.5 s, loses sync.",
+    rule: "Two markers a second apart start a frame. A marker or a bit in the wrong second, or a gap outside 0.5 to 1.5 s, loses sync.",
     view: frameSyncStage,
   },
   {
@@ -164,14 +164,14 @@ export const stages: readonly Stage[] = [
     number: 6,
     name: "Validate",
     type: "IStage<DecodedFrame, ValidationResult>",
-    rule: "A frame is accepted when it passes all ten checks; the last is that its time is the last accepted frame's plus the minutes passed since.",
+    rule: "A frame is accepted when it passes all ten checks. The last is that its time is the last accepted frame's plus the minutes passed since.",
     view: validateStage,
   },
   {
     number: 7,
     name: "Clock",
     type: "IStage<ValidationResult, ClockState>",
-    rule: "Two accepted frames in a row lock the clock; once locked it holds through two rejected frames, and the third sends it back to acquiring.",
+    rule: "Two accepted frames in a row lock the clock. Once locked it holds through two rejected frames, and the third sends it back to acquiring.",
     view: clockStage,
   },
 ];

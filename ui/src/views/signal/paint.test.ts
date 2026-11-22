@@ -8,6 +8,7 @@ const drawing = (over: Partial<SignalDrawing> = {}): SignalDrawing => ({
   ticks: [],
   carrier: null,
   pulses: [],
+  glitches: [],
   symbols: [],
   seconds: [],
   cursor: null,
@@ -238,6 +239,12 @@ describe("paintSignal", () => {
           width: 1.5,
         },
         pulses: [{ bar, label: text("502 ms", 55) }],
+        glitches: [
+          {
+            bar: { ...bar, x: 120, w: 2, h: 7, fill: "onSignal", radius: 0 },
+            label: text("bridged", 58),
+          },
+        ],
         symbols: [{ box: { ...bar, y: 62 }, text: text("1", 69) }],
         seconds: [text(":17", 90)],
         cursor: vertical(300, "signal"),
@@ -250,6 +257,9 @@ describe("paintSignal", () => {
       "stroke M 0 6",
       "fill R 100 45 50 12 2",
       "502 ms",
+      // The notch of a bridged gap goes over its pulse's bar.
+      "fill R 120 45 2 7 0",
+      "bridged",
       "fill R 100 62 50 12 2",
       "1",
       ":17",

@@ -7,7 +7,7 @@ import {
   type ValidationCheck,
   type ValidationResult,
 } from "@/protocol/messages";
-import { failureLine, frameRows } from "./model";
+import { failureLine, frameRows, shownFrame } from "./model";
 
 /** The host's validation example: the frame that reads 19:35 where 19:31 was due. */
 const example = ((): ValidationResult => {
@@ -147,5 +147,26 @@ describe("failureLine", () => {
     expect(
       failureLine({ check: "errorSymbols", detail: "seconds 12, 13" }),
     ).toBe("error symbols: seconds 12, 13");
+  });
+});
+
+describe("shownFrame", () => {
+  const rows = frameRows([accepted(), rejected("markers"), accepted()], 3);
+
+  it("is nothing before the first frame", () => {
+    expect(shownFrame([], null)).toBeNull();
+    expect(shownFrame([], 4)).toBeNull();
+  });
+
+  it("is the newest frame while none is selected", () => {
+    expect(shownFrame(rows, null)?.number).toBe(3);
+  });
+
+  it("is the selected frame while its row is among the rows", () => {
+    expect(shownFrame(rows, 2)).toMatchObject({ number: 2, accepted: false });
+  });
+
+  it("is the newest frame again when the selected one is not among the rows", () => {
+    expect(shownFrame(rows.slice(0, 2), 1)?.number).toBe(3);
   });
 });

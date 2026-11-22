@@ -96,6 +96,8 @@ export interface SignalDrawing {
   ticks: Line[];
   carrier: Polyline | null;
   pulses: PulseMark[];
+  /** What stage 2 dropped or bridged, painted over the pulses. Empty where the pulse lane is short. */
+  glitches: PulseMark[];
   symbols: ChipMark[];
   seconds: Text[];
   cursor: Line | null;
@@ -134,6 +136,20 @@ const MONO_ADVANCE = 0.6;
 const CHIP_MAX_SHARE = 0.8;
 const CHIP_RADIUS = 0.3125;
 const BAR_RADIUS = 0.125;
+/** A pulse's bar sits in the upper part of its lane, and its duration under it, as shares of the lane. */
+const BAR_TOP = 0.12;
+const BAR_HEIGHT = 0.3;
+const BAR_LABEL = 0.74;
+/**
+ * A glitch is named on a line of its own under the durations, which needs a pulse lane at
+ * least this tall, in rem. The stage 2 focus view's is, and the overview's is not.
+ */
+const MIN_GLITCH_LANE = 8;
+const GLITCH_LABEL = 0.9;
+/** How far down a bar the notch of a bridged gap is cut, as a share of the bar. */
+const NOTCH_DEPTH = 0.6;
+/** A glitch's mark is at least this wide, in pixels: a glitch of a few milliseconds is a hairline. */
+const MIN_GLITCH_WIDTH = 2;
 
 type ChipKind = SymbolKind | "pending";
 
@@ -188,6 +204,7 @@ export function drawSignal(
       ticks: [],
       carrier: null,
       pulses: [],
+      glitches: [],
       symbols: [],
       seconds: [],
       cursor: null,
@@ -235,9 +252,9 @@ export function drawSignal(
       return {
         bar: {
           x: left,
-          y: box.top + 0.12 * box.height,
+          y: box.top + BAR_TOP * box.height,
           w: barWidth,
-          h: 0.3 * box.height,
+          h: BAR_HEIGHT * box.height,
           fill: pending ? null : tokens.signal,
           stroke: pending ? tokens.lineStrong : null,
           radius: BAR_RADIUS * rem,
@@ -245,7 +262,7 @@ export function drawSignal(
         label: labelled
           ? {
               x: left,
-              y: box.top + 0.74 * box.height,
+              y: box.top + BAR_LABEL * box.height,
               text: pending ? "pending" : `${pulse.durationMs} ms`,
               fill: pending ? tokens.textMuted : tokens.textSoft,
               size: textSize(box),
@@ -254,6 +271,39 @@ export function drawSignal(
           : null,
       };
     });
+
+  // A dropped glitch is the outline of the bar it did not become. A bridged gap is a notch
+  // cut into the top of the bar that runs across it. Each is named under the durations.
+  const drawGlitches = (box: LaneBox): PulseMark[] => {
+    if (box.height < MIN_GLITCH_LANE * rem) return [];
+
+    return lanes.glitches.map((glitch) => {
+      const left = x(glitch.startMicros);
+      const dropped = glitch.kind === "dropped";
+      const barHeight = BAR_HEIGHT * box.height;
+      return {
+        bar: {
+          x: left,
+          y: box.top + BAR_TOP * box.height,
+          w: Math.max(x(glitch.endMicros) - left, MIN_GLITCH_WIDTH),
+          h: dropped ? barHeight : NOTCH_DEPTH * barHeight,
+          fill: dropped ? null : tokens.onSignal,
+          stroke: dropped ? tokens.lineStrong : null,
+          radius: 0,
+        },
+        label: labels
+          ? {
+              x: left,
+              y: box.top + GLITCH_LABEL * box.height,
+              text: glitch.kind,
+              fill: tokens.textMuted,
+              size: textSize(box),
+              align: "left",
+            }
+          : null,
+      };
+    });
+  };
 
   const drawSymbols = (box: LaneBox): ChipMark[] =>
     lanes.symbols.map((chip) => {
@@ -308,6 +358,7 @@ export function drawSignal(
     ticks: lanes.ticks.map((tick) => vertical(tick, tokens.line)),
     carrier: boxes.carrier ? drawCarrier(boxes.carrier) : null,
     pulses: boxes.pulse ? drawPulses(boxes.pulse) : [],
+    glitches: boxes.pulse ? drawGlitches(boxes.pulse) : [],
     symbols: boxes.symbol ? drawSymbols(boxes.symbol) : [],
     seconds: boxes.second && labels ? drawSeconds(boxes.second) : [],
     cursor:

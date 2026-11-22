@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { Symbol as WwvbSymbol, SymbolKind } from "@/protocol/messages";
-import { lastPulseText, pulseWidthHistogram } from "./model";
+import {
+  CLASS_ZONES,
+  landingZone,
+  lastPulse,
+  lastPulseText,
+  pulseWidthHistogram,
+} from "./model";
 
 const symbol = (durationMicros: number, kind: SymbolKind): WwvbSymbol => ({
   startMicros: 0,
@@ -93,7 +99,7 @@ describe("pulseWidthHistogram", () => {
       symbol(501_600, "one"),
     ]);
 
-    expect(last).toEqual({ durationMs: 502, kind: "one" });
+    expect(last).toMatchObject({ durationMs: 502, kind: "one" });
   });
 
   it("has no last pulse before any pulse", () => {
@@ -113,5 +119,68 @@ describe("lastPulseText", () => {
 
   it("says there are no pulses yet before the first", () => {
     expect(lastPulseText(null)).toBe("No pulses yet");
+  });
+});
+
+describe("lastPulse", () => {
+  it("is nothing before the first pulse", () => {
+    expect(lastPulse([])).toBeNull();
+  });
+
+  it("is the newest symbol, with its start and its duration both ways", () => {
+    const newest = { startMicros: 7_000_000, durationMicros: 501_600 };
+
+    expect(
+      lastPulse([symbol(200_000, "zero"), { ...newest, kind: "one" }]),
+    ).toEqual({ ...newest, durationMs: 502, kind: "one" });
+  });
+});
+
+describe("CLASS_ZONES", () => {
+  it("covers the axis from end to end, a zone beginning where the one before ends", () => {
+    expect(CLASS_ZONES.map(({ fromMs, toMs }) => [fromMs, toMs])).toEqual([
+      [0, 100],
+      [100, 350],
+      [350, 650],
+      [650, 900],
+      [900, 1000],
+    ]);
+  });
+
+  it("names each zone's class and where it begins", () => {
+    expect(CLASS_ZONES.map(({ kind, rule }) => [kind, rule])).toEqual([
+      ["error", "under 100 ms"],
+      ["zero", "from 100 ms"],
+      ["one", "from 350 ms"],
+      ["marker", "from 650 ms"],
+      ["error", "over 900 ms"],
+    ]);
+  });
+});
+
+describe("landingZone", () => {
+  const landed = (durationMicros: number, kind: SymbolKind): number =>
+    landingZone(lastPulse([symbol(durationMicros, kind)])!);
+
+  it.each<[number, SymbolKind, number]>([
+    [200_000, "zero", 1],
+    [500_000, "one", 2],
+    [800_000, "marker", 3],
+  ])("puts a pulse of %d µs that is a %s in zone %d", (micros, kind, zone) => {
+    expect(landed(micros, kind)).toBe(zone);
+  });
+
+  it("goes by the host's class, not by the duration", () => {
+    // Exactly 900 ms is still a marker to the host, though the last zone begins there.
+    expect(landed(900_000, "marker")).toBe(3);
+    // A class the duration does not suggest is still the host's to give.
+    expect(landed(200_000, "one")).toBe(2);
+  });
+
+  it("puts an error under the valid range in the first zone and one over it in the last", () => {
+    expect(landed(93_000, "error")).toBe(0);
+    // 99.6 ms reads 100 ms when rounded, and is still under the limit.
+    expect(landed(99_600, "error")).toBe(0);
+    expect(landed(1_200_000, "error")).toBe(4);
   });
 });

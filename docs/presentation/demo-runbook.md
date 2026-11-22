@@ -79,7 +79,7 @@ A frame that completes with a damaged bit shows as a `Rejected` row with the che
 
 Nothing changes but the source. This ends the live decode, so it comes after everything you want to show live.
 
-1. Pick **Replay** and the capture `2026-11-09 04:34 UTC · 8 h 45 min`, press `60×`, **Start**.
+1. Pick **Replay** and the capture `overnight · 9 Nov 2026, 04:34 UTC · 8 h 45 min`, press `60×`, **Start**.
 2. A frame arrives every second and the clock locks within a few seconds. The time on screen is the night of the recording. All 524 frames of that night are accepted.
 
 ### 4. A third source, with noise: `D`

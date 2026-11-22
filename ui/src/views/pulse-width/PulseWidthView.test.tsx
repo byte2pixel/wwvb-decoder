@@ -150,6 +150,112 @@ describe("PulseWidthView", () => {
       axisText.map((text) => text?.classList.contains("@2xl:text-base")),
     ).toEqual([true, true, true, true, true]);
   });
+
+  it("names no zones and labels no pulse unless it is asked for the details", () => {
+    useAppStore.setState({ symbols: [symbol(502_000, "one")] });
+    render(<PulseWidthView />);
+
+    expect(
+      screen.queryByRole("list", { name: "Classes" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTitle("Last pulse")).toBeEmptyDOMElement();
+    expect(screen.getByTitle("Last pulse")).not.toHaveClass("animate-in");
+  });
+});
+
+describe("PulseWidthView with the details", () => {
+  /** The zone above the plot that is marked as the one the last pulse landed in. */
+  const landed = (): HTMLElement | undefined =>
+    items("Classes").find(
+      (zone) => zone.getAttribute("aria-current") === "true",
+    );
+
+  it("names the five zones above the plot, each over its stretch of the axis", () => {
+    render(<PulseWidthView detailed />);
+
+    const zones = items("Classes");
+
+    expect(zones.map((zone) => zone.textContent)).toEqual([
+      "error",
+      "0",
+      "1",
+      "M",
+      "error",
+    ]);
+    expect(
+      zones.map((zone) => [
+        percent(zone.style.left),
+        percent(zone.style.width),
+      ]),
+    ).toEqual([
+      [0, 10],
+      [10, 25],
+      [35, 30],
+      [65, 25],
+      [90, 10],
+    ]);
+  });
+
+  it("marks no zone before the first pulse", () => {
+    render(<PulseWidthView detailed />);
+
+    expect(landed()).toBeUndefined();
+  });
+
+  it.each<[number, SymbolKind, number]>([
+    [200_000, "zero", 10],
+    [502_000, "one", 35],
+    [800_000, "marker", 65],
+    [93_000, "error", 0],
+    [1_200_000, "error", 90],
+  ])(
+    "marks the zone a pulse of %d µs landed in as a %s",
+    (micros, kind, left) => {
+      useAppStore.setState({ symbols: [symbol(micros, kind)] });
+      render(<PulseWidthView detailed />);
+
+      expect(percent(landed()!.style.left)).toBe(left);
+    },
+  );
+
+  it("writes the last pulse's duration on its line", () => {
+    useAppStore.setState({ symbols: [symbol(201_600, "zero")] });
+    render(<PulseWidthView detailed />);
+
+    const label = within(screen.getByTitle("Last pulse")).getByText("202 ms");
+
+    // Left of the middle the label sits to the right of its line.
+    expect(label).toHaveClass("left-1");
+  });
+
+  it("puts the label left of its line past the middle, so it stays in the plot", () => {
+    useAppStore.setState({ symbols: [symbol(1_400_000, "error")] });
+    render(<PulseWidthView detailed />);
+
+    expect(
+      within(screen.getByTitle("Last pulse")).getByText("1400 ms"),
+    ).toHaveClass("right-1");
+  });
+
+  it("drops a new line into place for each new pulse, and none under reduced motion", () => {
+    useAppStore.setState({ symbols: [symbol(200_000, "zero")] });
+    render(<PulseWidthView detailed />);
+    const first = screen.getByTitle("Last pulse");
+    expect(first).toHaveClass("animate-in", "motion-reduce:animate-none");
+
+    act(() =>
+      useAppStore.setState({
+        symbols: [
+          symbol(200_000, "zero"),
+          { startMicros: 1_000_000, durationMicros: 500_000, kind: "one" },
+        ],
+      }),
+    );
+
+    // A new element, so its animation runs again.
+    expect(screen.getByTitle("Last pulse")).not.toBe(first);
+    expect(first).not.toBeInTheDocument();
+  });
 });
 
 describe("LastPulseLine", () => {

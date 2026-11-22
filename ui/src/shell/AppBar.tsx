@@ -36,6 +36,10 @@ const sources: readonly { kind: Picks["source"]; label: string }[] = [
 
 const speeds = [1, 10, 60] as const;
 
+/** The slider's one value. It hands over a number or a list, by how many thumbs it has. */
+const levelOf = (value: number | readonly number[]): number =>
+  typeof value === "number" ? value : value[0];
+
 const levels: readonly { level: PinLevel; label: string }[] = [
   { level: "high", label: "High" },
   { level: "low", label: "Low" },
@@ -285,11 +289,12 @@ export function AppBar({ bridge }: Readonly<{ bridge: Bridge }>) {
               max={1}
               step={0.05}
               value={[noise]}
-              onValueChange={(value) => {
-                const next = typeof value === "number" ? value : value[0];
-                setPicks({ noise: next });
+              // The readout follows the thumb. The host hears of the noise once, when the
+              // thumb is let go, and not for every step it passes on the way.
+              onValueChange={(value) => setPicks({ noise: levelOf(value) })}
+              onValueCommitted={(value) => {
                 if (syntheticRunning) {
-                  bridge.send({ command: "setNoise", noise: next });
+                  bridge.send({ command: "setNoise", noise: levelOf(value) });
                 }
               }}
             />

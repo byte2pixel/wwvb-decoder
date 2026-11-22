@@ -93,6 +93,10 @@ export const initialState: AppState = {
   syncLosses: [],
 };
 
+/** True for the status the host sends when its source starts over: the page then starts over too. */
+export const isSourceReset = (status: SourceStatus): boolean =>
+  status.detail.startsWith("reset:");
+
 export const reduce = (state: AppState, message: HostMessage): AppState => {
   const gap =
     state.lastSeq === null ? 0 : Math.max(message.seq - state.lastSeq - 1, 0);
@@ -192,7 +196,7 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
       };
     }
     case "sourceStatus":
-      if (message.payload.detail.startsWith("reset:")) {
+      if (isSourceReset(message.payload)) {
         return {
           ...initialState,
           ports: state.ports,

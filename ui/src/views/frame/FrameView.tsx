@@ -11,6 +11,7 @@ import {
   ROW_SECONDS,
   type CellState,
   type FieldValues,
+  type FieldWeights,
 } from "./model";
 
 /** A second's share of a row's width, in percent. */
@@ -50,15 +51,31 @@ interface FrameGridProps {
   receiving?: number | null;
   /** Each field's value, written under its name. Without them a bracket holds the name alone. */
   values?: FieldValues | null;
+  /** The weights each field's set bits carry, written under its value. */
+  weights?: FieldWeights | null;
 }
+
+/** The bracket strip's height: a line for the name, one for the value, one for the weights. */
+const stripHeight = (lines: number): string => {
+  switch (lines) {
+    case 3:
+      return "h-[clamp(2.75rem,24cqh,4.375rem)]";
+    case 2:
+      return "h-[clamp(2rem,17cqh,3.75rem)]";
+    default:
+      return "h-[clamp(1rem,8cqh,1.75rem)]";
+  }
+};
 
 /** A frame as three rows of twenty seconds, with a bracket under each field. */
 export function FrameGrid({
   symbols,
   receiving = null,
   values = null,
+  weights = null,
 }: Readonly<FrameGridProps>) {
   const layout = useAppStore((state) => state.frameLayout);
+  const stripLines = 1 + (values ? 1 : 0) + (weights ? 1 : 0);
 
   const cells = frameCells(layout);
   const brackets = fieldBrackets(layout);
@@ -108,12 +125,7 @@ export function FrameGrid({
             </ol>
             <ul
               aria-label={`Fields in seconds ${seconds}`}
-              className={cn(
-                "relative flex-none",
-                values
-                  ? "h-[clamp(2rem,17cqh,3.75rem)]"
-                  : "h-[clamp(1rem,8cqh,1.75rem)]",
-              )}
+              className={cn("relative flex-none", stripHeight(stripLines))}
             >
               {brackets
                 .filter(
@@ -133,8 +145,13 @@ export function FrameGrid({
                       {name}
                     </span>
                     {values && (
-                      <span className="block truncate text-center text-[clamp(0.75rem,6cqh,1.25rem)] leading-tight font-semibold">
+                      <span className="block text-center text-[clamp(0.75rem,6cqh,1.25rem)] leading-tight font-semibold">
                         {values[role]}
+                      </span>
+                    )}
+                    {weights?.[role] !== undefined && (
+                      <span className="block truncate text-center font-mono text-[clamp(0.65625rem,4.5cqh,0.9375rem)] leading-tight text-muted-foreground">
+                        {weights[role]}
                       </span>
                     )}
                   </li>

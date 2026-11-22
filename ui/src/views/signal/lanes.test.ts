@@ -489,3 +489,152 @@ describe("cursor", () => {
     expect(signalLanes(input()).cursorMicros).toBeNull();
   });
 });
+
+describe("glitches", () => {
+  /** A marker, a 5 ms dip 100 ms after it, and a zero. */
+  const withDip = [
+    edge(1_000_000, "high"),
+    edge(1_800_000, "low"),
+    edge(1_900_000, "high"),
+    edge(1_905_000, "low"),
+    edge(2_000_000, "high"),
+    edge(2_200_000, "low"),
+  ];
+
+  it("has none in a clean signal", () => {
+    const lanes = signalLanes(
+      input({
+        edges: markerThenZero,
+        pulses: [pulse(1_000_000, 800_000), pulse(2_000_000, 200_000)],
+        nowMicros: 2_500_000,
+      }),
+    );
+
+    expect(lanes.glitches).toEqual([]);
+  });
+
+  it("marks reduced carrier that no measured pulse covers as dropped", () => {
+    const lanes = signalLanes(
+      input({
+        edges: withDip,
+        pulses: [pulse(1_000_000, 800_000), pulse(2_000_000, 200_000)],
+        nowMicros: 2_500_000,
+      }),
+    );
+
+    expect(lanes.glitches).toEqual([
+      { startMicros: 1_900_000, endMicros: 1_905_000, kind: "dropped" },
+    ]);
+  });
+
+  it("leaves a dip pending, not dropped, until a newer pulse is measured", () => {
+    const lanes = signalLanes(
+      input({
+        edges: withDip,
+        // The zero at 2 s is not measured yet, so stage 2 has not decided about the dip.
+        pulses: [pulse(1_000_000, 800_000)],
+        nowMicros: 2_500_000,
+      }),
+    );
+
+    expect(lanes.glitches).toEqual([]);
+    expect(lanes.pulses).toContainEqual({
+      startMicros: 1_900_000,
+      endMicros: 1_905_000,
+      durationMs: null,
+    });
+  });
+
+  it("marks full carrier inside a measured pulse as bridged", () => {
+    const lanes = signalLanes(
+      input({
+        edges: [
+          edge(1_000_000, "high"),
+          edge(1_300_000, "low"), // the carrier comes back for 10 ms
+          edge(1_310_000, "high"),
+          edge(1_500_000, "low"),
+          edge(2_000_000, "high"),
+          edge(2_200_000, "low"),
+        ],
+        // Stage 2 measured one pulse of 500 ms across the gap.
+        pulses: [pulse(1_000_000, 500_000), pulse(2_000_000, 200_000)],
+        nowMicros: 2_500_000,
+      }),
+    );
+
+    expect(lanes.glitches).toEqual([
+      { startMicros: 1_300_000, endMicros: 1_310_000, kind: "bridged" },
+    ]);
+    // The pulse is still one bar with its measured duration.
+    expect(lanes.pulses[0]).toEqual({
+      startMicros: 1_000_000,
+      endMicros: 1_500_000,
+      durationMs: 500,
+    });
+  });
+
+  it("does not mark the full carrier between two pulses", () => {
+    const lanes = signalLanes(
+      input({
+        edges: markerThenZero,
+        pulses: [pulse(1_000_000, 800_000), pulse(2_000_000, 200_000)],
+        nowMicros: 2_500_000,
+      }),
+    );
+
+    expect(
+      lanes.glitches.filter((glitch) => glitch.kind === "bridged"),
+    ).toEqual([]);
+  });
+
+  it("marks nothing older than the oldest pulse the page holds", () => {
+    const lanes = signalLanes(
+      input({
+        edges: withDip,
+        // The marker's pulse has left the buffer. The dip may have been part of anything.
+        pulses: [pulse(2_000_000, 200_000), pulse(3_000_000, 200_000)],
+        nowMicros: 3_500_000,
+      }),
+    );
+
+    expect(lanes.glitches).toEqual([]);
+  });
+
+  it("goes by the reduced-carrier level of the setting", () => {
+    const flipped = (level: PinLevel): PinLevel =>
+      level === "high" ? "low" : "high";
+    const lanes = signalLanes(
+      input({
+        edges: withDip.map(({ micros, level }) => edge(micros, flipped(level))),
+        pulses: [pulse(1_000_000, 800_000), pulse(2_000_000, 200_000)],
+        nowMicros: 2_500_000,
+        reducedLevel: "low",
+      }),
+    );
+
+    expect(lanes.glitches).toEqual([
+      { startMicros: 1_900_000, endMicros: 1_905_000, kind: "dropped" },
+    ]);
+  });
+
+  it("keeps a glitch's own start when the window cuts it, and drops one outside the window", () => {
+    const pulses = [pulse(1_000_000, 800_000), pulse(2_000_000, 200_000)];
+    // 12 s back from 13.902 s is 1.902 s: inside the dip.
+    const cut = signalLanes(
+      input({ edges: withDip, pulses, nowMicros: 13_902_000 }),
+    );
+    // And from 13.95 s it is 1.95 s: past the dip.
+    const gone = signalLanes(
+      input({ edges: withDip, pulses, nowMicros: 13_950_000 }),
+    );
+
+    expect(cut.glitches).toEqual([
+      { startMicros: 1_900_000, endMicros: 1_905_000, kind: "dropped" },
+    ]);
+    expect(gone.glitches).toEqual([]);
+  });
+
+  it("has none in a picture with no edges", () => {
+    expect(signalLanes(input()).glitches).toEqual([]);
+  });
+});

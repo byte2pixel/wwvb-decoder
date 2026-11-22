@@ -256,7 +256,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: /Edges/ }));
 
     expect(screen.getByText("IEdgeSource")).toBeInTheDocument();
-    expect(panels()).toEqual(["Signal", "Edge log"]);
+    expect(panels()).toEqual(["Signal", "Edge log", "Info lines"]);
   });
 
   it("starts the noise demo on D through the app's bridge, and the app bar shows it", async () => {

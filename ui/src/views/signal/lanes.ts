@@ -61,17 +61,59 @@ export interface SecondLabel {
   second: number | null;
 }
 
+/**
+ * A stretch of the carrier that stage 2's 50 ms rule took care of, seen from what it reported.
+ * The page compares the edges with the measured pulses and applies no threshold of its own.
+ */
+export interface Glitch {
+  /** The start is the stretch's own, not clipped. */
+  startMicros: number;
+  /** The end is clipped to the window's end. */
+  endMicros: number;
+  /**
+   * `dropped`: reduced carrier that no measured pulse covers, so stage 2 dropped it.
+   * `bridged`: full carrier inside a measured pulse, so stage 2 bridged it.
+   */
+  kind: "dropped" | "bridged";
+}
+
 export interface SignalLanes {
   /** The timespan the lanes cover. */
   window: { startMicros: number; endMicros: number } | null;
   carrier: CarrierSegment[];
   pulses: PulseBar[];
+  /** What stage 2 dropped or bridged, oldest first. */
+  glitches: Glitch[];
   symbols: SymbolChip[];
   seconds: SecondLabel[];
   /** The vertical lines marking each second. */
   ticks: number[];
   /** The present, where the cursor is drawn. Null in a still picture. */
   cursorMicros: number | null;
+}
+
+/**
+ * What stage 2 did with one stretch of the carrier that has both its edges, or null when the
+ * stretch is a pulse or the ordinary gap between two pulses.
+ */
+function glitchKind(
+  reduced: boolean,
+  startMicros: number,
+  endMicros: number,
+  pulses: ReadonlyArray<Pulse>,
+): Glitch["kind"] | null {
+  if (reduced) {
+    const measured = pulses.some(
+      (pulse) =>
+        pulse.startMicros <= startMicros && endMicros <= pulse.endMicros,
+    );
+    return measured ? null : "dropped";
+  }
+
+  const insidePulse = pulses.some(
+    (pulse) => pulse.startMicros < startMicros && endMicros < pulse.endMicros,
+  );
+  return insidePulse ? "bridged" : null;
 }
 
 export function signalLanes(input: SignalInput): SignalLanes {
@@ -86,6 +128,7 @@ export function signalLanes(input: SignalInput): SignalLanes {
   } = input;
   const carrier: CarrierSegment[] = [];
   const bars: PulseBar[] = [];
+  const glitches: Glitch[] = [];
   const chips: SymbolChip[] = [];
   const labels: SecondLabel[] = [];
   const ticks: number[] = [];
@@ -96,6 +139,7 @@ export function signalLanes(input: SignalInput): SignalLanes {
       window: null,
       carrier,
       pulses: bars,
+      glitches,
       symbols: chips,
       seconds: labels,
       ticks,
@@ -143,8 +187,12 @@ export function signalLanes(input: SignalInput): SignalLanes {
   // edges are all the page has, so reduced carrier after the last measured pulse
   // is drawn as a pending bar.
   const measuredUntil = pulses.at(-1)?.endMicros ?? -Infinity;
+  // Before the oldest pulse the page holds, it cannot tell a dropped glitch from a pulse it
+  // no longer has.
+  const measuredFrom = pulses.at(0)?.startMicros ?? Infinity;
   edges.forEach((edge, i) => {
-    const span = clip(edge.micros, edges[i + 1]?.micros ?? windowEnd);
+    const next = edges[i + 1]?.micros;
+    const span = clip(edge.micros, next ?? windowEnd);
     if (!span) return;
     const reduced = edge.level === reducedLevel;
     carrier.push({ ...span, reduced });
@@ -155,12 +203,25 @@ export function signalLanes(input: SignalInput): SignalLanes {
         durationMs: null,
       });
       chips.push({ startMicros: edge.micros, kind: "pending" });
+      return;
+    }
+    // Only a stretch with both its edges, older than the newest pulse, has been decided.
+    if (next === undefined || edge.micros < measuredFrom) return;
+
+    const kind = glitchKind(reduced, edge.micros, next, pulses);
+    if (kind) {
+      glitches.push({
+        startMicros: edge.micros,
+        endMicros: span.endMicros,
+        kind,
+      });
     }
   });
   return {
     window: { startMicros: windowStart, endMicros: windowEnd },
     carrier,
     pulses: bars,
+    glitches,
     symbols: chips,
     seconds: labels,
     ticks,

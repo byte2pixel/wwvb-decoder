@@ -1,6 +1,10 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import { frameLayoutSchema, type DecodedFrame } from "@/protocol/messages";
+import {
+  frameLayoutSchema,
+  type DecodedFrame,
+  type SymbolKind,
+} from "@/protocol/messages";
 import fixture from "@/sim/fixtures/frameLayout.json";
 import { useAppStore } from "@/state/store";
 import { DecodedFrameLine, DecodedFrameView } from "./DecodedFrameView";
@@ -8,16 +12,26 @@ import { DecodedFrameLine, DecodedFrameView } from "./DecodedFrameView";
 /** The host's layout, from the copy of its message example. */
 const frameLayout = frameLayoutSchema.parse(fixture.payload);
 
-/** A frame that reads 19:35 on day 344: a marker and a 1, then zeros, with an error in second 44. */
+const KINDS: Record<string, SymbolKind> = {
+  "0": "zero",
+  "1": "one",
+  M: "marker",
+  "×": "error",
+};
+
+/** A frame that reads 19:35 on day 344 of year 26, ten seconds to a line, with an error in second 44. */
 const decodedFrame: DecodedFrame = {
   frame: {
     startMicros: 61_000_000,
     endMicros: 120_800_000,
-    symbols: Array.from({ length: 60 }, (_, second) => {
-      if (second === 0) return "marker";
-      if (second === 44) return "error";
-      return second === 1 ? "one" : "zero";
-    }),
+    symbols: [
+      "M01100101M",
+      "000101001M",
+      "001100100M",
+      "010000010M",
+      "0011×0010M",
+      "011000101M",
+    ].flatMap((line) => [...line].map((symbol) => KINDS[symbol])),
   },
   minute: 35,
   hour: 19,
@@ -58,26 +72,28 @@ describe("DecodedFrameView", () => {
     render(<DecodedFrameView />);
 
     expect(screen.getByTitle("Second 0: marker")).toHaveTextContent("M");
-    expect(screen.getByTitle("Second 1: 1")).toHaveTextContent("1");
+    expect(screen.getByTitle("Second 1: 0")).toHaveTextContent("0");
+    expect(screen.getByTitle("Second 2: 1")).toHaveTextContent("1");
     expect(screen.getByTitle("Second 44: error")).toHaveTextContent("×");
-    expect(screen.getByTitle("Second 59: 0")).toHaveTextContent("0");
+    expect(screen.getByTitle("Second 59: marker")).toHaveTextContent("M");
   });
 
-  it("writes each field's decoded value under its name", () => {
+  it("writes each field's decoded value under its name, and the weights of its set bits under that", () => {
     useAppStore.setState({ frameLayout, decodedFrame });
     render(<DecodedFrameView />);
 
     expect(fields("Fields in seconds 0 to 19")).toEqual([
-      ["Minute", "35"],
-      ["Hour", "19"],
+      ["Minute", "35", "20 + 10 + 4 + 1"],
+      ["Hour", "19", "10 + 8 + 1"],
     ]);
+    // The sign's three seconds carry no weight, and neither do the flags below.
     expect(fields("Fields in seconds 20 to 39")).toEqual([
-      ["Day of year", "344"],
+      ["Day of year", "344", "200 + 100 + 40 + 4"],
       ["UT1 sign", "-"],
     ]);
     expect(fields("Fields in seconds 40 to 59")).toEqual([
-      ["UT1", "0.3 s"],
-      ["Year", "26"],
+      ["UT1", "0.3 s", "2 + 1"],
+      ["Year", "26", "20 + 4 + 2"],
       ["LY", "no"],
       ["LS", "yes"],
       ["DST", "ends today"],

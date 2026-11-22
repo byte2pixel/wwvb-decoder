@@ -1,4 +1,11 @@
-import type { Line, Polyline, Text, Rect, SignalDrawing } from "./model";
+import type {
+  Line,
+  Polyline,
+  PulseMark,
+  Text,
+  Rect,
+  SignalDrawing,
+} from "./model";
 
 export function paintSignal(
   ctx: CanvasRenderingContext2D,
@@ -50,12 +57,16 @@ export function paintSignal(
     ctx.fillText(text, x, y);
   };
 
+  const paintMark = ({ bar, label }: PulseMark): void => {
+    paintRect(bar);
+    writeText(label);
+  };
+
   drawing.ticks.forEach(strokeLine);
   strokePolyline(drawing.carrier);
-  drawing.pulses.forEach((pulse) => {
-    paintRect(pulse.bar);
-    writeText(pulse.label);
-  });
+  drawing.pulses.forEach(paintMark);
+  // Over the pulses, because a bridged gap is a notch in its pulse's bar.
+  drawing.glitches.forEach(paintMark);
   drawing.symbols.forEach((chip) => {
     const { box, text } = chip;
     paintRect(box);

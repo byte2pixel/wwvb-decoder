@@ -1,13 +1,19 @@
 import { useAppStore } from "@/state/store";
-import { BIN_MS, lastPulseText, pulseWidthHistogram, RANGE_MS } from "./model";
+import {
+  BIN_MS,
+  CLASS_ZONES,
+  landingZone,
+  lastPulse,
+  lastPulseText,
+  MAX_VALID_MS,
+  MIN_VALID_MS,
+  ONE_MARKER_THRESHOLD_MS,
+  pulseWidthHistogram,
+  RANGE_MS,
+  ZERO_ONE_THRESHOLD_MS,
+} from "./model";
 import { cn } from "cn";
 import type { SymbolKind } from "@/protocol/messages";
-
-// repeat the host's SymbolClassifier defaults.
-const MIN_VALID_MS = 100;
-const ZERO_ONE_THRESHOLD_MS = 350;
-const ONE_MARKER_THRESHOLD_MS = 650;
-const MAX_VALID_MS = 900;
 
 /** A duration as a distance along the axis. */
 const along = (ms: number): string => `${ms / (RANGE_MS / 100)}%`;
@@ -35,13 +41,54 @@ const BAR_CLASSES: Record<SymbolKind, string> = {
   error: "bg-bad",
 };
 
-export function PulseWidthView() {
+/** A class as the zone above the plot names it. */
+const CLASS_TEXT: Record<SymbolKind, string> = {
+  zero: "0",
+  one: "1",
+  marker: "M",
+  error: "error",
+};
+
+interface PulseWidthViewProps {
+  /**
+   * The stage 3 focus view's additions: each zone named above the plot with the one the last
+   * pulse landed in marked, and the last pulse's line carrying its duration and dropping into
+   * place when a new pulse arrives.
+   */
+  detailed?: boolean;
+}
+
+export function PulseWidthView({
+  detailed = false,
+}: Readonly<PulseWidthViewProps>) {
   const symbols = useAppStore((state) => state.symbols);
   const { bins, last } = pulseWidthHistogram(symbols);
+  const landed = last ? landingZone(last) : null;
 
   return (
-    <div className="@container h-full px-3 pt-2 pb-5">
+    <div
+      className={cn("@container h-full px-3 pb-5", detailed ? "pt-8" : "pt-2")}
+    >
       <div className="relative h-full border-b border-input">
+        {detailed && (
+          <ul aria-label="Classes">
+            {CLASS_ZONES.map(({ fromMs, toMs, kind }, zone) => (
+              <li
+                key={fromMs}
+                aria-current={zone === landed ? "true" : undefined}
+                className={cn(
+                  "absolute bottom-full mb-1 rounded-sm text-center font-mono text-base leading-tight",
+                  zone === landed
+                    ? "bg-accent font-semibold text-foreground"
+                    : "text-muted-foreground",
+                )}
+                style={{ left: along(fromMs), width: along(toMs - fromMs) }}
+              >
+                {CLASS_TEXT[kind]}
+              </li>
+            ))}
+          </ul>
+        )}
         {ERROR_ZONES.map(({ fromMs, toMs, title }) => (
           <div
             key={title}
@@ -91,10 +138,28 @@ export function PulseWidthView() {
         </ul>
         {last && (
           <div
+            // A new pulse is a new line, so the line drops in again for each pulse.
+            key={detailed ? last.startMicros : "last"}
             title="Last pulse"
-            className="absolute top-0 h-full border-l border-dashed border-foreground"
+            className={cn(
+              "absolute top-0 h-full border-l border-dashed border-foreground",
+              detailed &&
+                "animate-in duration-200 fade-in slide-in-from-top-4 motion-reduce:animate-none",
+            )}
             style={{ left: along(Math.min(last.durationMs, RANGE_MS)) }}
-          />
+          >
+            {detailed && (
+              <span
+                className={cn(
+                  "absolute top-1 rounded-sm bg-foreground px-1.5 font-mono text-sm leading-tight font-semibold whitespace-nowrap text-background",
+                  // The label stays inside the plot: past the middle it sits left of its line.
+                  last.durationMs > RANGE_MS / 2 ? "right-1" : "left-1",
+                )}
+              >
+                {last.durationMs} ms
+              </span>
+            )}
+          </div>
         )}
       </div>
     </div>
@@ -103,6 +168,5 @@ export function PulseWidthView() {
 
 export function LastPulseLine() {
   const symbols = useAppStore((state) => state.symbols);
-  const { last } = pulseWidthHistogram(symbols);
-  return lastPulseText(last);
+  return lastPulseText(lastPulse(symbols));
 }

@@ -3,6 +3,7 @@ import type { HostMessage, PinLevel, Selection } from "@/protocol/messages";
 import {
   expireSyncLoss,
   initialState,
+  isSourceReset,
   reduce,
   type AppState,
 } from "./appState";
@@ -44,6 +45,11 @@ interface AppStore extends AppState, UiState {
   picks: Picks;
   /** The warning the presenter closed. The banner stays away while the host sends this text. */
   closedWarning: string | null;
+  /**
+   * The frame picked in the stage 6 table, by its number since the source reset. Null follows
+   * the newest frame.
+   */
+  selectedFrame: number | null;
   /** Feeds one host message through the reducer. */
   dispatch: (message: HostMessage) => void;
   setFocus: (focus: number | null) => void;
@@ -52,22 +58,29 @@ interface AppStore extends AppState, UiState {
   /** Changes some of the picks and keeps the rest. */
   setPicks: (change: Partial<Picks>) => void;
   closeWarning: (warning: string) => void;
+  selectFrame: (frame: number | null) => void;
 }
 
 /**
  * The two messages that reach the page's own state. `selection` sets the picks and the level.
  * A status without a warning forgets the warning that was closed, so the same text shows
- * again when it comes back.
+ * again when it comes back. A source reset forgets the selected frame, because the frames are
+ * numbered from 1 again.
  */
 const fromHost = (
   message: HostMessage,
-): Partial<Pick<AppStore, "picks" | "reducedLevel" | "closedWarning">> => {
+): Partial<
+  Pick<AppStore, "picks" | "reducedLevel" | "closedWarning" | "selectedFrame">
+> => {
   if (message.type === "selection") {
     const { reducedCarrierLevel, ...picks } = message.payload;
     return { picks, reducedLevel: reducedCarrierLevel };
   }
-  if (message.type === "sourceStatus" && !message.payload.warning) {
-    return { closedWarning: null };
+  if (message.type === "sourceStatus") {
+    return {
+      ...(message.payload.warning ? {} : { closedWarning: null }),
+      ...(isSourceReset(message.payload) ? { selectedFrame: null } : {}),
+    };
   }
   return {};
 };
@@ -83,6 +96,7 @@ export const useAppStore = create<AppStore>()((set) => ({
   reducedLevel: "high",
   picks: defaultPicks,
   closedWarning: null,
+  selectedFrame: null,
   // set() merges, so what the reducer does not return survives every update, a source
   // reset included: dispatch and the setters, the focus, the drawer, and the picks.
   dispatch: (message) => {
@@ -101,4 +115,5 @@ export const useAppStore = create<AppStore>()((set) => ({
   setPicks: (change) =>
     set((state) => ({ picks: { ...state.picks, ...change } })),
   closeWarning: (closedWarning) => set({ closedWarning }),
+  selectFrame: (selectedFrame) => set({ selectedFrame }),
 }));
