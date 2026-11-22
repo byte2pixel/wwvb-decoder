@@ -124,7 +124,7 @@ describe("useKeyboard", () => {
     expect(isDark()).toBe(false);
   });
 
-  it("switches the noise of a running synthetic source on and off on D, and does not start it again", async () => {
+  it("starts a running synthetic source again on D, takes the noise away on the next D, and starts it again on the third", async () => {
     const user = userEvent.setup();
     useAppStore.setState({ sourceStatus: status("synthetic", "running") });
     render(<Page />);
@@ -137,9 +137,9 @@ describe("useKeyboard", () => {
 
     await user.keyboard("d");
     expect(bridge.send.mock.calls).toEqual([
-      [{ command: "setNoise", noise: 0.1 }],
+      [{ command: "selectSource", source: "synthetic", noise: 0.1 }],
       [{ command: "setNoise", noise: 0 }],
-      [{ command: "setNoise", noise: 0.1 }],
+      [{ command: "selectSource", source: "synthetic", noise: 0.1 }],
     ]);
   });
 

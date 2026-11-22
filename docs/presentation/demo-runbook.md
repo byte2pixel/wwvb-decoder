@@ -2,7 +2,7 @@
 
 The checklist for the live demo on Thursday, 2026-12-10, and for the dry runs before it. It says what to do in what order, what the screen should show, and what to do when it does not.
 
-Written on 2026-11-22 against commit `bab88bc`. Each time and count below was measured, unless the line says it was not: the app's on that build, the transmitter's on the bench on 2026-11-20 and 21, and the overnight capture's when it was first decoded. The dry runs fill in the tables under [Dry-run record](#dry-run-record), and what they find goes back into the steps above them.
+Written on 2026-11-22. Each time and count below was measured, unless the line says it was not: the app's on that day's build, the transmitter's on the bench on 2026-11-20 and 21, and the overnight capture's when it was first decoded. The dry runs fill in the tables under [Dry-run record](#dry-run-record), and what they find goes back into the steps above them.
 
 ## The plan on one page
 
@@ -138,7 +138,7 @@ If the dry run left a charger capture with rejected frames in it, this is where 
 
 ### 4. A third source, with noise: `D`
 
-Press `D` while the replay runs. It starts the synthetic source, a signal the PC makes up, at noise 0.10. What follows is the same every time, because the synthetic source draws the same noise on each start:
+Press `D`. It starts the synthetic source, a signal the PC makes up, at noise 0.10, whatever ran before. What follows is the same every time, because the synthetic source draws the same noise on each start:
 
 | Time from `D` | What happens |
 | --- | --- |
@@ -152,7 +152,7 @@ Measured on the pipeline, and seen in the published app on 2026-11-22.
 
 Press `D` again and the noise is 0 on the same source: a clean frame every minute, from the first whole minute after the press.
 
-`D` gives the rejected row only when it starts the synthetic source, which it does when Live or Replay is running, or nothing is. Pressed while Synthetic already runs, it only turns the noise up on the running source: sync is lost within about three minutes every time, but a rejected row came within five minutes in 8 of 60 tries. So from Synthetic, press **Stop** first and then `D`.
+The third `D` starts the source again, and the table with it. The noise slider is no substitute: noise turned up on a synthetic source that already runs loses sync within about three minutes, but a rejected row came within five minutes in 8 of 60 tries.
 
 Back to the station afterwards: pick **Live**, **Start**, and allow the two to three minutes of a new lock.
 
