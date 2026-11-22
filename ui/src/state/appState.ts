@@ -215,6 +215,9 @@ function applyMessage(state: AppState, message: HostMessage): AppState {
         ...state,
         captures: message.payload.items,
       };
+    case "selection":
+      // The store takes it into the page's own state, which a source reset must not clear.
+      return state;
     default:
       message satisfies never;
       return state;

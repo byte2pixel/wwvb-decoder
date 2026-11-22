@@ -7,6 +7,7 @@ import { FocusLayout } from "./shell/FocusLayout";
 import { PipelineRail } from "./shell/PipelineRail";
 import { ShortcutList } from "./shell/ShortcutList";
 import { StatusBar } from "./shell/StatusBar";
+import { WarningBanner } from "./shell/WarningBanner";
 import {
   DecodedFramesPanel,
   FramePanel,
@@ -41,7 +42,7 @@ export default function App({
     return off;
   }, [bridge]);
 
-  useKeyboard();
+  useKeyboard(bridge);
 
   const focus = useAppStore((state) => state.focus);
   const focused = stages.find((stage) => stage.number === focus);
@@ -50,6 +51,7 @@ export default function App({
     <TooltipProvider>
       <div className="flex h-full flex-col">
         <AppBar bridge={bridge} />
+        <WarningBanner />
         <PipelineRail />
         {focused ? (
           <FocusLayout stage={focused} clock={clock} />

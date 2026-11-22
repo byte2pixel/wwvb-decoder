@@ -142,3 +142,133 @@ describe("sync loss hold", () => {
     expect(useAppStore.getState().syncLoss).toBeNull();
   });
 });
+
+const selection: HostMessage = {
+  type: "selection",
+  seq: 1,
+  payload: {
+    source: "replay",
+    port: "COM5",
+    capture: String.raw`C:\captures\2026-11-08T2300Z-desk.edges.txt`,
+    speed: 10,
+    noise: 0.1,
+    reducedCarrierLevel: "low",
+  },
+};
+
+describe("the app bar's picks", () => {
+  beforeEach(() => {
+    useAppStore.setState(useAppStore.getInitialState(), true);
+  });
+
+  it("start as what a host that remembers nothing sends", () => {
+    expect(useAppStore.getState().picks).toEqual({
+      source: "synthetic",
+      port: null,
+      capture: null,
+      speed: 1,
+      noise: 0,
+    });
+  });
+
+  it("are set by the host's selection, and the level with them", () => {
+    useAppStore.getState().dispatch(selection);
+
+    expect(useAppStore.getState().picks).toEqual({
+      source: "replay",
+      port: "COM5",
+      capture: String.raw`C:\captures\2026-11-08T2300Z-desk.edges.txt`,
+      speed: 10,
+      noise: 0.1,
+    });
+    expect(useAppStore.getState().reducedLevel).toBe("low");
+    expect(useAppStore.getState().lastSeq).toBe(1);
+  });
+
+  it("change one at a time and keep the rest", () => {
+    useAppStore.getState().dispatch(selection);
+
+    useAppStore.getState().setPicks({ speed: 60 });
+    useAppStore.getState().setPicks({ source: "serial", port: "COM3" });
+
+    expect(useAppStore.getState().picks).toEqual({
+      source: "serial",
+      port: "COM3",
+      capture: String.raw`C:\captures\2026-11-08T2300Z-desk.edges.txt`,
+      speed: 60,
+      noise: 0.1,
+    });
+  });
+
+  it("stay through a source reset", () => {
+    useAppStore.getState().dispatch(selection);
+
+    useAppStore.getState().dispatch(reset);
+
+    expect(useAppStore.getState().picks.source).toBe("replay");
+    expect(useAppStore.getState().picks.speed).toBe(10);
+  });
+
+  it("notify subscribers once for a selection", () => {
+    const listener = vi.fn();
+    const unsubscribe = useAppStore.subscribe(listener);
+
+    useAppStore.getState().dispatch(selection);
+    unsubscribe();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("the warning that was closed", () => {
+  const warned = (seq: number, warning?: string): HostMessage => ({
+    type: "sourceStatus",
+    seq,
+    payload: {
+      source: "replay",
+      name: "replay",
+      state: "running",
+      detail: "",
+      ...(warning === undefined ? {} : { warning }),
+    },
+  });
+
+  beforeEach(() => {
+    useAppStore.setState(useAppStore.getInitialState(), true);
+  });
+
+  it("is none to begin with", () => {
+    expect(useAppStore.getState().closedWarning).toBeNull();
+  });
+
+  it("is kept while the host sends that warning, and through a reset", () => {
+    useAppStore.getState().closeWarning("COM9 was not found.");
+
+    useAppStore.getState().dispatch(warned(1, "COM9 was not found."));
+    useAppStore.getState().dispatch({
+      ...reset,
+      payload: { ...reset.payload, warning: "COM9 was not found." },
+    });
+
+    expect(useAppStore.getState().closedWarning).toBe("COM9 was not found.");
+  });
+
+  it.each([
+    ["an empty warning", warned(1, "")],
+    ["no warning at all", warned(1)],
+  ])("is forgotten by a status with %s", (_, message) => {
+    useAppStore.getState().closeWarning("COM9 was not found.");
+
+    useAppStore.getState().dispatch(message);
+
+    expect(useAppStore.getState().closedWarning).toBeNull();
+  });
+
+  it("is left alone by a message that is not a status", () => {
+    useAppStore.getState().closeWarning("COM9 was not found.");
+
+    useAppStore.getState().dispatch(info(1));
+
+    expect(useAppStore.getState().closedWarning).toBe("COM9 was not found.");
+  });
+});

@@ -39,7 +39,8 @@ public partial class App
         _controller = new SourceController(
             pipeline,
             new HostEnvironment(clock, HostEnvironment.FindCapturesDirectory(e.Args)),
-            _bridge
+            _bridge,
+            new SettingsStore(SettingsStore.FindPath(e.Args))
         );
 
         window = new MainWindow(_controller);

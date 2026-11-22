@@ -30,10 +30,16 @@ describe("ShortcutList", () => {
       "Esc or 0",
       "← → Page Up Page Down",
       "T",
+      "D",
+      "F11",
       "L",
       "?",
     ]);
     expect(within(list).getByText("Back to the overview")).toBeInTheDocument();
+    expect(
+      within(list).getByText("Noise demo: Synthetic at 0.10, and back to 0"),
+    ).toBeInTheDocument();
+    expect(within(list).getByText("Full screen")).toBeInTheDocument();
   });
 
   it("tells the store when it is closed", async () => {

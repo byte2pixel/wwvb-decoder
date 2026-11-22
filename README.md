@@ -76,6 +76,10 @@ Sonar rules run in every C# build through the `SonarAnalyzer.CSharp` package, so
 
 The pre-commit hook (`lefthook.yml`) formats only staged files and re-stages them; unstaged edits in the same file are left alone. `LEFTHOOK=0 git commit` skips it, and CI still checks. `.csharpierignore` and `ui/.prettierignore` skip files that tools rewrite (`*.csproj`, `Directory.Packages.props`, `*.slnx`, `package-lock.json`) and Markdown. C# analyzers run at `latest-recommended`; each host project commits a `packages.lock.json`, and CI restores in locked mode. `.git-blame-ignore-revs` lists bulk-format commits for `git blame` to skip.
 
+## Publishing
+
+`./publish.ps1` builds the folder that goes to the presentation laptop, `publish/` by default: the app as one self-contained exe with the page in `wwwroot/` beside it, the tools under `tools/`, and the captures under `captures/`. The laptop needs no SDK. See [Publishing](host/README.md#publishing) in the host README.
+
 ## Hardware
 
 - Raspberry Pi Pico 2 (RP2350)

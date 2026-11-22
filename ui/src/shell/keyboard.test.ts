@@ -49,6 +49,10 @@ describe("keyAction", () => {
     expect(keyAction(key, onStage(2))).toEqual({ kind: "theme" });
   });
 
+  it.each(["d", "D"])("asks for the noise demo on %s", (key) => {
+    expect(keyAction(key, onStage(2))).toEqual({ kind: "noiseDemo" });
+  });
+
   it.each(["l", "L"])("opens and closes the protocol log on %s", (key) => {
     expect(keyAction(key, overview)).toEqual({ kind: "drawer", drawer: "log" });
     expect(keyAction(key, { focus: null, drawer: "log" })).toEqual({
@@ -75,7 +79,7 @@ describe("keyAction", () => {
     });
   });
 
-  it.each(["2", "0", "Escape", "ArrowRight", "PageUp", "t"])(
+  it.each(["2", "0", "Escape", "ArrowRight", "PageUp", "t", "d"])(
     "leaves the page behind an open drawer alone on %s",
     (key) => {
       expect(keyAction(key, { focus: 5, drawer: "log" })).toBeNull();

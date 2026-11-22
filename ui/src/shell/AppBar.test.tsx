@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bridge } from "@/protocol/bridge";
-import type { Command, SourceStatus } from "@/protocol/messages";
+import type { Command, HostMessage, SourceStatus } from "@/protocol/messages";
 import { useAppStore } from "@/state/store";
 import { AppBar } from "./AppBar";
 
@@ -21,6 +21,20 @@ const status = (
   source: SourceStatus["source"],
   state: SourceStatus["state"],
 ): SourceStatus => ({ source, name: "", state, detail: "", speed: 1 });
+
+/** What the host remembers, as it sends it with its reply to hello. Nothing in it is a default. */
+const remembered: HostMessage = {
+  type: "selection",
+  seq: 1,
+  payload: {
+    source: "replay",
+    port: "COM5",
+    capture: desk.path,
+    speed: 10,
+    noise: 0.25,
+    reducedCarrierLevel: "low",
+  },
+};
 
 const fakeBridge = () =>
   ({
@@ -88,6 +102,117 @@ describe("AppBar", () => {
     expect(
       screen.getByLabelText("Noise", { selector: "input" }),
     ).toBeInTheDocument();
+  });
+
+  it("starts from the host's selection", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    useAppStore.setState({ captures: [overnight, desk] });
+    useAppStore.getState().dispatch(remembered);
+    render(<AppBar bridge={bridge} />);
+
+    expect(
+      screen.getByRole("button", { name: "Replay", pressed: true }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Capture" })).toHaveTextContent(
+      "2026-11-08 23:00 UTC · 3 min",
+    );
+    expect(
+      within(screen.getByRole("group", { name: "Speed" })).getByRole("button", {
+        name: "10×",
+        pressed: true,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(bridge.send).toHaveBeenCalledExactlyOnceWith({
+      command: "selectSource",
+      source: "replay",
+      path: desk.path,
+      speed: 10,
+    });
+  });
+
+  it("follows a selection that arrives while it is on show", () => {
+    useAppStore.setState({ ports: ["COM3", "COM5"] });
+    render(<AppBar bridge={fakeBridge()} />);
+
+    act(() =>
+      useAppStore.getState().dispatch({
+        ...remembered,
+        payload: { ...remembered.payload, source: "serial" },
+      }),
+    );
+
+    expect(
+      screen.getByRole("button", { name: "Live", pressed: true }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent(
+      "COM5",
+    );
+  });
+
+  it("shows the remembered noise and level, which belong to other controls", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    useAppStore.getState().dispatch(remembered);
+    render(<AppBar bridge={bridge} />);
+
+    await user.click(screen.getByRole("button", { name: "Synthetic" }));
+    expect(screen.getByText("0.25")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Signal settings" }));
+    expect(
+      await screen.findByRole("button", { name: "Low", pressed: true }),
+    ).toBeInTheDocument();
+
+    // The page learned these from the host, so it tells the host nothing
+    expect(bridge.send).not.toHaveBeenCalled();
+  });
+
+  it("keeps a remembered port that is unplugged, and starts it when it is back", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    useAppStore.setState({ ports: ["COM3"] });
+    useAppStore.getState().dispatch({
+      ...remembered,
+      payload: { ...remembered.payload, source: "serial", port: "COM9" },
+    });
+    render(<AppBar bridge={bridge} />);
+
+    expect(screen.getByRole("combobox", { name: "Port" })).toHaveTextContent(
+      "COM3",
+    );
+
+    act(() => useAppStore.setState({ ports: ["COM3", "COM9"] }));
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(bridge.send).toHaveBeenCalledExactlyOnceWith({
+      command: "selectSource",
+      source: "serial",
+      port: "COM9",
+    });
+  });
+
+  it("takes the newest capture when the remembered one is gone", async () => {
+    const user = userEvent.setup();
+    const bridge = fakeBridge();
+    useAppStore.setState({ captures: [overnight, desk] });
+    useAppStore.getState().dispatch({
+      ...remembered,
+      payload: { ...remembered.payload, capture: null },
+    });
+    render(<AppBar bridge={bridge} />);
+
+    await user.click(screen.getByRole("button", { name: "Start" }));
+
+    expect(bridge.send).toHaveBeenCalledExactlyOnceWith({
+      command: "selectSource",
+      source: "replay",
+      path: overnight.path,
+      speed: 10,
+    });
   });
 
   it("starts the newest capture when none was picked", async () => {

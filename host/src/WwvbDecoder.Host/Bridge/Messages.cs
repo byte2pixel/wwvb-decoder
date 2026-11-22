@@ -55,7 +55,8 @@ public sealed record SourceStatus(
     string Name,
     SourceState State,
     string Detail,
-    double Speed = 1.0
+    double Speed = 1.0,
+    string Warning = ""
 );
 
 /// <summary>One capture file. <paramref name="Path"/> is what <c>selectSource</c> takes back.</summary>
@@ -87,3 +88,21 @@ public sealed record FrameLayoutPayload(
         return new FrameLayoutPayload(WwvbFrameLayout.Roles, [.. weights]);
     }
 }
+
+/// <summary>
+/// Represents the current state of the host so the UI can reflect it on a refresh.
+/// </summary>
+/// <param name="Source">The kind of source selected.</param>
+/// <param name="Port">The serial port in use, if any.</param>
+/// <param name="Capture">The capture file in use, if any.</param>
+/// <param name="Speed">The playback speed.</param>
+/// <param name="Noise">The noise level.</param>
+/// <param name="ReducedCarrierLevel">The reduced carrier level.</param>
+public sealed record Selection(
+    SourceKind Source,
+    string? Port,
+    string? Capture,
+    double Speed,
+    double Noise,
+    PinLevel ReducedCarrierLevel
+);

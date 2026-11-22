@@ -1,0 +1,12 @@
+{
+  "type": "selection",
+  "seq": 7,
+  "payload": {
+    "source": "replay",
+    "port": "COM5",
+    "capture": "captures/2026-11-02T0310Z-home-west-window.edges.txt",
+    "speed": 10,
+    "noise": 0.1,
+    "reducedCarrierLevel": "high"
+  }
+}

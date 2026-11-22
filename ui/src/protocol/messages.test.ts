@@ -12,14 +12,14 @@ const files = readdirSync(examplesDir)
   .sort();
 
 describe("message examples", () => {
-  it("has 20 example files", () => {
-    expect(files).toHaveLength(20);
+  it("has 21 example files", () => {
+    expect(files).toHaveLength(21);
   });
 
-  it("has 8 command files and 12 host message files", () => {
+  it("has 8 command files and 13 host message files", () => {
     const commands = files.filter((f) => f.startsWith("command-"));
     expect(commands).toHaveLength(8);
-    expect(files.length - commands.length).toBe(12);
+    expect(files.length - commands.length).toBe(13);
   });
 });
 
@@ -49,6 +49,62 @@ describe("a source status", () => {
     if (message.type !== "sourceStatus") throw new Error("wrong type");
 
     expect(message.payload.speed).toBe(1);
+  });
+
+  it("keeps its warning", () => {
+    const example = hostMessageSchema.parse(load("sourceStatus.json"));
+    if (example.type !== "sourceStatus") throw new Error("wrong type");
+    expect(example.payload.warning).toBe("");
+
+    const warned = hostMessageSchema.parse({
+      ...example,
+      payload: { ...example.payload, warning: "COM9 was not found." },
+    });
+
+    expect(warned).toMatchObject({
+      payload: { warning: "COM9 was not found." },
+    });
+  });
+
+  it("may come without a speed or a warning, from an older host", () => {
+    const result = hostMessageSchema.safeParse({
+      type: "sourceStatus",
+      seq: 1,
+      payload: { source: "none", name: "", state: "stopped", detail: "" },
+    });
+
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("a selection", () => {
+  const nothingRemembered = {
+    source: "synthetic",
+    port: null,
+    capture: null,
+    speed: 1,
+    noise: 0,
+    reducedCarrierLevel: "high",
+  };
+
+  it("takes null for a port and a capture that were never picked", () => {
+    const message = hostMessageSchema.parse({
+      type: "selection",
+      seq: 5,
+      payload: nothingRemembered,
+    });
+
+    expect(message.payload).toEqual(nothingRemembered);
+  });
+
+  it("is rejected with none as its source", () => {
+    const result = hostMessageSchema.safeParse({
+      type: "selection",
+      seq: 5,
+      payload: { ...nothingRemembered, source: "none" },
+    });
+
+    expect(result.success).toBe(false);
   });
 });
 

@@ -337,4 +337,63 @@ public class MessageSerializationTests
         // Assert
         JsonNode.DeepEquals(JsonNode.Parse(json), Examples.Read("info")).ShouldBeTrue(json);
     }
+
+    [Fact]
+    public void Serialize_Selection_MatchesExample()
+    {
+        // Arrange
+        var selection = new Selection(
+            Source: SourceKind.Replay,
+            Port: "COM5",
+            Capture: "captures/2026-11-02T0310Z-home-west-window.edges.txt",
+            Speed: 10,
+            Noise: 0.1,
+            ReducedCarrierLevel: PinLevel.High
+        );
+
+        // Act
+        string json = MessageJson.Serialize("selection", seq: 7, selection);
+
+        // Assert
+        JsonNode.DeepEquals(JsonNode.Parse(json), Examples.Read("selection")).ShouldBeTrue(json);
+    }
+
+    [Fact]
+    public void Serialize_Selection_NothingRemembered_WritesNulls()
+    {
+        // Arrange
+        var selection = new Selection(SourceKind.Synthetic, null, null, 1, 0, PinLevel.High);
+
+        // Act
+        JsonNode payload = JsonNode.Parse(MessageJson.Serialize("selection", seq: 1, selection))![
+            "payload"
+        ]!;
+
+        // Assert: a null is written, not left out, as the serialization rules say
+        payload.AsObject().ContainsKey("port").ShouldBeTrue();
+        payload["port"].ShouldBeNull();
+        payload.AsObject().ContainsKey("capture").ShouldBeTrue();
+        payload["capture"].ShouldBeNull();
+        payload["source"]!.GetValue<string>().ShouldBe("synthetic");
+    }
+
+    [Fact]
+    public void Serialize_SourceStatus_WithAWarning_WritesIt()
+    {
+        // Arrange
+        var status = new SourceStatus(SourceKind.Replay, "replay", SourceState.Running, "")
+        {
+            Warning = "COM5 was not found. Replaying the newest capture.",
+        };
+
+        // Act
+        JsonNode payload = JsonNode.Parse(MessageJson.Serialize("sourceStatus", seq: 1, status))![
+            "payload"
+        ]!;
+
+        // Assert
+        payload["warning"]!
+            .GetValue<string>()
+            .ShouldBe("COM5 was not found. Replaying the newest capture.");
+    }
 }
