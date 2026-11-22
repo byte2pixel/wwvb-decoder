@@ -73,6 +73,19 @@ describe("Panel", () => {
     consoleError.mockRestore();
   });
 
+  it("names itself for the view transition by its title", () => {
+    render(
+      <Panel title="Last complete frame" stages={[5]}>
+        body
+      </Panel>,
+    );
+
+    expect(
+      screen.getByRole("region", { name: "Last complete frame" }).style
+        .viewTransitionName,
+    ).toBe("panel-last-complete-frame");
+  });
+
   it("takes extra classes for its place in the page grid", () => {
     render(
       <Panel title="Time" stages={[7]} className="row-span-2">

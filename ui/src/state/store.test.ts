@@ -272,3 +272,41 @@ describe("the warning that was closed", () => {
     expect(useAppStore.getState().closedWarning).toBe("COM9 was not found.");
   });
 });
+
+describe("the selected frame", () => {
+  beforeEach(() => {
+    useAppStore.setState(useAppStore.getInitialState(), true);
+  });
+
+  it("is none to begin with, so the newest frame is followed", () => {
+    expect(useAppStore.getState().selectedFrame).toBeNull();
+  });
+
+  it("is the frame that was picked, until it is let go", () => {
+    useAppStore.getState().selectFrame(4);
+    expect(useAppStore.getState().selectedFrame).toBe(4);
+
+    useAppStore.getState().selectFrame(null);
+    expect(useAppStore.getState().selectedFrame).toBeNull();
+  });
+
+  it("is forgotten by a source reset, which numbers the frames from 1 again", () => {
+    useAppStore.getState().selectFrame(4);
+
+    useAppStore.getState().dispatch(reset);
+
+    expect(useAppStore.getState().selectedFrame).toBeNull();
+  });
+
+  it("is kept by a status that is not a reset, and by any other message", () => {
+    useAppStore.getState().selectFrame(4);
+
+    useAppStore.getState().dispatch({
+      ...reset,
+      payload: { ...reset.payload, detail: "" },
+    });
+    useAppStore.getState().dispatch(info(2));
+
+    expect(useAppStore.getState().selectedFrame).toBe(4);
+  });
+});

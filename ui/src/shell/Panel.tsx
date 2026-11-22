@@ -39,6 +39,10 @@ interface PanelProps {
   className?: string;
 }
 
+/** A panel's name in a view transition, from its title: `panel-pulse-width`. */
+const transitionName = (title: string): string =>
+  `panel-${title.toLowerCase().replaceAll(/[^a-z0-9]+/g, "-")}`;
+
 /** One titled surface of the screen. See "Panels" in docs/design/ui-design.md. */
 export function Panel({
   title,
@@ -52,6 +56,9 @@ export function Panel({
   return (
     <section
       aria-labelledby={titleId}
+      // A panel that the overview and a focus view both show moves to its new place in the
+      // view transition between them. The name is the title, which no two panels on a screen share.
+      style={{ viewTransitionName: transitionName(title) }}
       className={cn(
         "flex min-h-0 flex-col overflow-hidden rounded-lg border bg-card text-card-foreground",
         className,

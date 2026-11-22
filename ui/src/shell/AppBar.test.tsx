@@ -115,7 +115,7 @@ describe("AppBar", () => {
       screen.getByRole("button", { name: "Replay", pressed: true }),
     ).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Capture" })).toHaveTextContent(
-      "2026-11-08 23:00 UTC · 3 min",
+      "desk · 8 Nov 2026, 23:00 UTC · 3 min",
     );
     expect(
       within(screen.getByRole("group", { name: "Speed" })).getByRole("button", {
@@ -224,7 +224,7 @@ describe("AppBar", () => {
     await user.click(screen.getByRole("button", { name: "Replay" }));
 
     expect(screen.getByRole("combobox", { name: "Capture" })).toHaveTextContent(
-      "2026-11-09 04:34 UTC · 8 h 45 min",
+      "overnight · 9 Nov 2026, 04:34 UTC · 8 h 45 min",
     );
 
     await user.click(screen.getByRole("button", { name: "Start" }));
@@ -248,8 +248,8 @@ describe("AppBar", () => {
 
     const options = await screen.findAllByRole("option");
     expect(options.map((option) => option.textContent)).toEqual([
-      "2026-11-09 04:34 UTC · 8 h 45 min",
-      "2026-11-08 23:00 UTC · 3 min",
+      "overnight · 9 Nov 2026, 04:34 UTC · 8 h 45 min",
+      "desk · 8 Nov 2026, 23:00 UTC · 3 min",
     ]);
     expect(bridge.send).toHaveBeenCalledExactlyOnceWith({
       command: "listCaptures",
@@ -266,13 +266,13 @@ describe("AppBar", () => {
     await user.click(screen.getByRole("combobox", { name: "Capture" }));
     await user.click(
       await screen.findByRole("option", {
-        name: "2026-11-08 23:00 UTC · 3 min",
+        name: "desk · 8 Nov 2026, 23:00 UTC · 3 min",
       }),
     );
     await user.click(await screen.findByRole("button", { name: "Start" }));
 
     expect(screen.getByRole("combobox", { name: "Capture" })).toHaveTextContent(
-      "2026-11-08 23:00 UTC · 3 min",
+      "desk · 8 Nov 2026, 23:00 UTC · 3 min",
     );
     expect(bridge.send).toHaveBeenLastCalledWith({
       command: "selectSource",
@@ -291,7 +291,7 @@ describe("AppBar", () => {
     await user.click(screen.getByRole("combobox", { name: "Capture" }));
     await user.click(
       await screen.findByRole("option", {
-        name: "2026-11-08 23:00 UTC · 3 min",
+        name: "desk · 8 Nov 2026, 23:00 UTC · 3 min",
       }),
     );
 
@@ -299,13 +299,13 @@ describe("AppBar", () => {
 
     expect(
       await screen.findByRole("combobox", { name: "Capture" }),
-    ).toHaveTextContent("2026-11-09 04:34 UTC · 8 h 45 min");
+    ).toHaveTextContent("overnight · 9 Nov 2026, 04:34 UTC · 8 h 45 min");
 
     act(() => useAppStore.setState({ captures: [overnight, desk] }));
     await user.click(screen.getByRole("button", { name: "Start" }));
 
     expect(screen.getByRole("combobox", { name: "Capture" })).toHaveTextContent(
-      "2026-11-08 23:00 UTC · 3 min",
+      "desk · 8 Nov 2026, 23:00 UTC · 3 min",
     );
     expect(bridge.send).toHaveBeenLastCalledWith({
       command: "selectSource",
@@ -327,7 +327,7 @@ describe("AppBar", () => {
     await user.click(screen.getByRole("button", { name: "Start" }));
 
     expect(screen.getByRole("combobox", { name: "Capture" })).toHaveTextContent(
-      "2026-11-09 04:34 UTC · 8 h 45 min",
+      "overnight · 9 Nov 2026, 04:34 UTC · 8 h 45 min",
     );
     expect(bridge.send).toHaveBeenCalledExactlyOnceWith({
       command: "selectSource",

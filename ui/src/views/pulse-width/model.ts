@@ -7,6 +7,57 @@ export const BIN_MS = 25;
  * A longer pulse will fall into the last bin.
  */
 export const RANGE_MS = 1_000;
+
+// The four boundaries repeat the defaults of the host's SymbolClassifier, because no message
+// carries them.
+export const MIN_VALID_MS = 100;
+export const ZERO_ONE_THRESHOLD_MS = 350;
+export const ONE_MARKER_THRESHOLD_MS = 650;
+export const MAX_VALID_MS = 900;
+
+/** A stretch of the axis that the host gives one class. */
+export interface ClassZone {
+  fromMs: number;
+  toMs: number;
+  kind: SymbolKind;
+  /** Where the zone begins, in the words of the stage's rule. */
+  rule: string;
+}
+
+/** The classifier's rule as five stretches of the axis. A boundary belongs to the class above it. */
+export const CLASS_ZONES: readonly ClassZone[] = [
+  {
+    fromMs: 0,
+    toMs: MIN_VALID_MS,
+    kind: "error",
+    rule: `under ${MIN_VALID_MS} ms`,
+  },
+  {
+    fromMs: MIN_VALID_MS,
+    toMs: ZERO_ONE_THRESHOLD_MS,
+    kind: "zero",
+    rule: `from ${MIN_VALID_MS} ms`,
+  },
+  {
+    fromMs: ZERO_ONE_THRESHOLD_MS,
+    toMs: ONE_MARKER_THRESHOLD_MS,
+    kind: "one",
+    rule: `from ${ZERO_ONE_THRESHOLD_MS} ms`,
+  },
+  {
+    fromMs: ONE_MARKER_THRESHOLD_MS,
+    toMs: MAX_VALID_MS,
+    kind: "marker",
+    rule: `from ${ONE_MARKER_THRESHOLD_MS} ms`,
+  },
+  {
+    fromMs: MAX_VALID_MS,
+    toMs: RANGE_MS,
+    kind: "error",
+    rule: `over ${MAX_VALID_MS} ms`,
+  },
+];
+
 /** The number of bins in the histogram. */
 const BIN_COUNT = RANGE_MS / BIN_MS;
 /** The bin width in microseconds. */
@@ -25,6 +76,9 @@ export interface HistogramBin {
 
 /** The newest pulse, for the dashed line and the header line. */
 export interface LastPulse {
+  /** When the pulse began. No two pulses share it, so it tells a new pulse from the last one. */
+  startMicros: number;
+  durationMicros: number;
   /** Rounded to the millisecond, as the rail shows it. */
   durationMs: number;
   kind: SymbolKind;
@@ -64,15 +118,34 @@ export function pulseWidthHistogram(
     bin.height = bin.count / maxCount;
   }
 
-  const lastSymbol = symbols.at(-1);
-  const last = lastSymbol
-    ? {
-        durationMs: Math.round(lastSymbol.durationMicros / 1000),
-        kind: lastSymbol.kind,
-      }
-    : null;
+  return { bins, last: lastPulse(symbols) };
+}
 
-  return { bins, last };
+/** The newest pulse as the host classified it, or null before the first. */
+export function lastPulse(
+  symbols: ReadonlyArray<WwvbSymbol>,
+): LastPulse | null {
+  const symbol = symbols.at(-1);
+  if (!symbol) return null;
+
+  return {
+    startMicros: symbol.startMicros,
+    durationMicros: symbol.durationMicros,
+    durationMs: Math.round(symbol.durationMicros / 1000),
+    kind: symbol.kind,
+  };
+}
+
+/**
+ * Which of `CLASS_ZONES` the pulse landed in, as an index. The class is the host's: the page
+ * does not classify a duration. Two zones are errors, and there the duration says which side
+ * of the valid range the pulse fell on.
+ */
+export function landingZone({ kind, durationMicros }: LastPulse): number {
+  if (kind !== "error") {
+    return CLASS_ZONES.findIndex((zone) => zone.kind === kind);
+  }
+  return durationMicros < MIN_VALID_MS * 1_000 ? 0 : CLASS_ZONES.length - 1;
 }
 
 const KIND_TEXT: Record<SymbolKind, string> = {
@@ -82,7 +155,9 @@ const KIND_TEXT: Record<SymbolKind, string> = {
   error: "error",
 };
 
-export function lastPulseText(last: LastPulse | null): string {
+export function lastPulseText(
+  last: Pick<LastPulse, "durationMs" | "kind"> | null,
+): string {
   if (!last) {
     return "No pulses yet";
   }

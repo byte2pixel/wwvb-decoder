@@ -92,4 +92,65 @@ describe("PipelineRail", () => {
 
     expect(highlighted()).toHaveTextContent("Decode");
   });
+
+  describe("when a frame completes", () => {
+    /** Each button's light, or null where it has none, in pipeline order. */
+    const lights = (): (HTMLElement | null)[] =>
+      screen
+        .getAllByRole("button")
+        .map((button) =>
+          button.querySelector<HTMLElement>(".animate-rail-light"),
+        );
+
+    it("lights no button before the first frame", () => {
+      render(<PipelineRail />);
+
+      expect(lights()).toEqual([null, null, null, null, null, null, null]);
+    });
+
+    it("lights the buttons of stages 4 to 7 in order, 80 ms apart", () => {
+      useAppStore.setState({ frameCount: 1 });
+      render(<PipelineRail />);
+
+      expect(lights().map((light) => light?.style.animationDelay)).toEqual([
+        undefined,
+        undefined,
+        undefined,
+        "0ms",
+        "80ms",
+        "160ms",
+        "240ms",
+      ]);
+    });
+
+    it("lights them again for the next frame", () => {
+      useAppStore.setState({ frameCount: 1 });
+      render(<PipelineRail />);
+      const first = lights()[3];
+
+      act(() => useAppStore.setState({ frameCount: 2 }));
+
+      // A new element, so its animation runs again.
+      expect(lights()[3]).not.toBeNull();
+      expect(lights()[3]).not.toBe(first);
+    });
+
+    it("keeps the light from the pointer and a screen reader, and away under reduced motion", () => {
+      useAppStore.setState({ frameCount: 1 });
+      render(<PipelineRail />);
+
+      const light = lights()[3];
+      expect(light).toHaveClass("pointer-events-none", "motion-reduce:hidden");
+      expect(light).toHaveAttribute("aria-hidden", "true");
+    });
+
+    it("takes the lights away when the source resets", () => {
+      useAppStore.setState({ frameCount: 3 });
+      render(<PipelineRail />);
+
+      act(() => useAppStore.setState({ frameCount: 0 }));
+
+      expect(lights()[3]).toBeNull();
+    });
+  });
 });

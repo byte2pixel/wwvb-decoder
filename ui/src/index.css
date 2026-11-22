@@ -54,6 +54,23 @@ body,
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+@theme {
+  /* A rail button's light when a frame completes: on at once, then fading out. */
+  --animate-rail-light: rail-light 500ms ease-out both;
+
+  @keyframes rail-light {
+    0% {
+      opacity: 0;
+    }
+    20% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+    }
+  }
+}
+
 :root {
   color-scheme: light;
   --radius: 0.625rem;
@@ -136,5 +153,30 @@ body,
 
   body {
     @apply bg-background text-foreground tabular-nums;
+  }
+}
+
+/* The overview and a focus view cross-fade, and a panel both of them show moves to its new place. */
+::view-transition-group(*),
+::view-transition-old(*),
+::view-transition-new(*) {
+  animation-duration: 200ms;
+}
+
+/* With less motion asked for, every change is instant. The signal still scrolls: it is the data. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-delay: 0s !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
   }
 }

@@ -1,12 +1,18 @@
 import type { SourceClock } from "@/time/sourceClock";
 import type { LaneName } from "@/views/signal/model";
 import {
+  ChecksPanel,
+  ClassificationPanel,
+  ClockDiagramPanel,
   DecodedFramesPanel,
+  DecodedRecordPanel,
   EdgeLogPanel,
   FramePanel,
+  InfoLinesPanel,
   LastFramePanel,
   PulseWidthPanel,
   SignalPanel,
+  SyncDiagramPanel,
   SyncLossPanel,
   TimePanel,
 } from "./panels";
@@ -16,6 +22,9 @@ import type { Stage } from "./stages";
 const CARRIER: readonly LaneName[] = ["carrier"];
 const CARRIER_AND_PULSE: readonly LaneName[] = ["carrier", "pulse"];
 const SYMBOL: readonly LaneName[] = ["symbol"];
+
+/** The frames the stage 6 table lists: what a 16:9 window holds without cutting a row. */
+const STAGE_6_ROWS = 16;
 
 interface FocusProps {
   stage: Stage;
@@ -27,9 +36,10 @@ function StagePanels({ stage, clock }: Readonly<FocusProps>) {
   switch (stage.number) {
     case 1:
       return (
-        <div className="grid h-full grid-cols-[minmax(0,1fr)_30rem] gap-3">
+        <div className="grid h-full grid-cols-[minmax(0,1fr)_30rem] grid-rows-[minmax(0,1fr)_10rem] gap-3">
           <SignalPanel clock={clock} lanes={CARRIER} />
-          <EdgeLogPanel />
+          <EdgeLogPanel className="row-span-2" />
+          <InfoLinesPanel />
         </div>
       );
     case 2:
@@ -42,25 +52,42 @@ function StagePanels({ stage, clock }: Readonly<FocusProps>) {
       );
     case 3:
       return (
-        <div className="grid h-full grid-rows-[minmax(0,1fr)_9rem] gap-3">
-          <PulseWidthPanel />
+        <div className="grid h-full grid-cols-[minmax(0,1fr)_19rem] grid-rows-[minmax(0,1fr)_9rem] gap-3">
+          <PulseWidthPanel detailed />
+          <ClassificationPanel className="row-span-2" />
           <SignalPanel clock={clock} lanes={SYMBOL} />
         </div>
       );
     case 4:
       return (
-        <div className="grid h-full grid-rows-[minmax(0,1fr)_10.5rem] gap-3">
-          <FramePanel />
+        <div className="grid h-full grid-cols-[minmax(0,1fr)_27rem] grid-rows-[minmax(0,1fr)_11.5rem] gap-3">
+          <FramePanel className="col-span-2" />
+          <SyncDiagramPanel />
           <SyncLossPanel />
         </div>
       );
     case 5:
-      return <LastFramePanel className="h-full" />;
+      return (
+        <div className="grid h-full grid-cols-[minmax(0,1fr)_17rem] gap-3">
+          <LastFramePanel />
+          <DecodedRecordPanel />
+        </div>
+      );
     case 6:
-      return <DecodedFramesPanel rows={16} details className="h-full" />;
+      return (
+        <div className="grid h-full grid-cols-[minmax(0,1fr)_31rem] gap-3">
+          <DecodedFramesPanel rows={STAGE_6_ROWS} selectable />
+          <ChecksPanel rows={STAGE_6_ROWS} />
+        </div>
+      );
     default:
       // Stage 7.
-      return <TimePanel clock={clock} className="h-full" />;
+      return (
+        <div className="grid h-full grid-cols-[27rem_minmax(0,1fr)] gap-3">
+          <TimePanel clock={clock} />
+          <ClockDiagramPanel />
+        </div>
+      );
   }
 }
 

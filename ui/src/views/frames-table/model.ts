@@ -26,7 +26,8 @@ export interface FrameRow {
   failures: readonly ValidationFailure[];
 }
 
-const CHECK_NAMES: Record<ValidationCheck, string> = {
+/** A check in words, as the table's result and the check list write it. */
+export const CHECK_NAMES: Record<ValidationCheck, string> = {
   markers: "markers",
   unusedBits: "unused bits",
   errorSymbols: "error symbols",
@@ -74,4 +75,15 @@ export function frameRows(
       failures,
     }))
     .reverse();
+}
+
+/**
+ * The frame the stage 6 view is about: the selected one while its row is on show, and the
+ * newest otherwise. Null before the first frame.
+ */
+export function shownFrame(
+  rows: readonly FrameRow[],
+  selected: number | null,
+): FrameRow | null {
+  return rows.find((row) => row.number === selected) ?? rows.at(0) ?? null;
 }

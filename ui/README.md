@@ -4,7 +4,7 @@ React + TypeScript, built with Vite. The host loads it inside WebView2. Opened i
 
 The layout and visual language are specified in [`docs/design/ui-design.md`](../docs/design/ui-design.md), and the libraries are decided in [ADR-0007](../docs/design/adr/0007-tailwind-shadcn-hand-drawn-views.md).
 
-As of construction plan Step 12b the page shows the signal. The Signal panel draws four lanes on one time axis, scrolling on the source clock, and the Pulse width panel draws the histogram. A key from `1` to `7`, or a click on the rail, opens that stage's focus view. Step 13 fills the Frame, Decoded frames, and Time panels, which show their no-data states until then, and enables Live and Replay.
+The overview shows the whole pipeline at once: the signal as four lanes on one time axis, scrolling on the source clock, the pulse-width histogram, the frame in progress, the decoded frames, and the clock. A key from `1` to `7`, or a click on the rail, opens that stage's focus view, which shows the stage at work on its latest input: what went in, the rule, and what came out (construction plan Step 16).
 
 ```powershell
 npm install
@@ -40,7 +40,7 @@ CI runs `format:check`, `lint`, `test`, and `build`; `../verify.ps1 -Only ui` ru
 | `time/` | The source clock, and the feed that keeps it on the stream's time |
 | `sim/` | The simulator, the recorder, and their fixtures: the recorded stream and a copy of the `frameLayout` example. Development builds only |
 | `shell/` | The frame of the screen: app bar, pipeline rail, panels, focus layout, keyboard map, status bar, protocol log |
-| `views/` | What the panels show, one folder per view: the signal lanes, the pulse-width histogram, the frame, the decoded-frames table, the clock, the edge log |
+| `views/` | What the panels show, one folder per view: the signal lanes, the pulse-width histogram, the frame, the decoded-frames table, the checks of one frame, the clock, the edge log, and the parts the two state diagrams are drawn from |
 | `components/ui/` | Controls written by the shadcn CLI. They are linted and formatted like the rest, and left out of coverage |
 | `lib/` | `cn`, which the generated controls import |
 
@@ -72,7 +72,7 @@ The page talks to the host over WebView2 web messages, as [`docs/design/webview2
 | `syncLosses` | The newest 5 losses of frame sync, each with its count since the source reset and the host's reason. Only a source reset clears them |
 | `log` | The protocol log: the last 200 messages and a count per type |
 
-A `sourceStatus` whose `detail` starts with `reset:` is a source reset. The reducer goes back to `initialState` and keeps `ports`, `captures`, `frameLayout`, the sequence tracking, and the log. The host sends the layout only in its reply to `hello`, so a reset that dropped it would leave the frame panel without one.
+A `sourceStatus` whose `detail` starts with `reset:` is a source reset, and `isSourceReset(status)` is the one place that says so. The reducer goes back to `initialState` and keeps `ports`, `captures`, `frameLayout`, the sequence tracking, and the log. The host sends the layout only in its reply to `hello`, so a reset that dropped it would leave the frame panel without one.
 
 `state/store.ts` wraps the reducer in one Zustand store, `useAppStore`. `dispatch(message)` runs the reducer, and starts the 5 s timer when the message is a `syncLost`.
 
@@ -85,22 +85,23 @@ The store also holds what the page decides for itself, `UiState`, beside the red
 
 No host message changes these, and a source reset leaves them alone: the reducer never returns them, and `set` merges what it does return.
 
-Three more values are the page's own and are kept the same way. They sit beside `UiState` and not in it, because `UiState` is what the keyboard map takes.
+Four more values are the page's own and are kept the same way. They sit beside `UiState` and not in it, because `UiState` is what the keyboard map takes.
 
 | Field | Holds | Set by |
 | --- | --- | --- |
 | `reducedLevel` | The pin level that means reduced carrier, `"high"` to begin with. The signal view reads it | `setReducedLevel`, from the signal settings, and the host's `selection` |
 | `picks` | What the app bar has picked for the next Start: `source`, `port`, `capture`, `speed`, and `noise`. The type is the `selection` payload without its level. A `port` or `capture` of `null` means none was picked, and the first port and the newest capture then count as picked | `setPicks(change)`, which changes the picks it is given and keeps the rest, and the host's `selection` |
 | `closedWarning` | The text of the warning the presenter closed, or `null` | `closeWarning(text)`, and a `sourceStatus` without a warning, which sets it back to `null` |
+| `selectedFrame` | The frame picked in the stage 6 table, by its number since the source reset, or `null` to follow the newest frame | `selectFrame(number)`, and a source reset, which sets it back to `null` |
 
-So two host messages do reach the page's own state, and `dispatch` applies both in the same `set` as the reducer's result, so subscribers hear of a message once:
+So two host messages do reach the page's own state, and `dispatch` applies them in the same `set` as the reducer's result, so subscribers hear of a message once:
 
 - `selection` comes last in the reply to `hello` and sets the picks and the level. That is how a page that has just loaded shows what the host is running or ran last. The reducer itself only counts and logs the message.
-- A `sourceStatus` whose `warning` is empty or missing forgets the closed warning, so the same text shows again when its cause comes back.
+- A `sourceStatus` whose `warning` is empty or missing forgets the closed warning, so the same text shows again when its cause comes back. One that is a source reset also forgets the selected frame, because the frames are numbered from 1 again and the number would point at another frame.
 
 - A component subscribes to the slice it shows: `useAppStore((state) => state.lastSeq)`.
 - Zustand compares a selector's result by identity. A selector that builds a new object on every call goes through `useShallow`, as the rail's buttons do.
-- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus`, `drawer`, `reducedLevel`, `picks`, and `closedWarning` keep their values. A test file that touches any of those replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
+- A test puts the store back in `beforeEach`. `useAppStore.setState(initialState)` resets the reducer's state, and merges, so `focus`, `drawer`, `reducedLevel`, `picks`, `closedWarning`, and `selectedFrame` keep their values. A test file that touches any of those replaces the whole store: `useAppStore.setState(useAppStore.getInitialState(), true)`.
 
 ## Time
 
@@ -117,18 +118,19 @@ Nothing in a message says what time it is now, only when each edge happened. `ti
 
 | File | Holds |
 | --- | --- |
-| `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md`. Each stage also carries the host type and the one-sentence rule that its focus view's header shows |
-| `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone. A click focuses the stage, the focused stage's button is pressed (`aria-pressed`), and a click on it goes back to the overview |
-| `Panel.tsx` | A titled region with a chip per stage, an optional line of state, and an error boundary around its children: a view that throws shows a message in its own panel and the rest of the screen keeps running |
-| `panels.tsx` | The screen's panels, each a view inside its `Panel`: `SignalPanel`, `PulseWidthPanel`, `EdgeLogPanel`, `FramePanel`, `SyncLossPanel`, `LastFramePanel`, `DecodedFramesPanel` (three rows unless `rows` says otherwise, and `details` lists every failure in its row; the stage 6 focus view asks for 16 rows, which is what fits a 16:9 window, with the details), and `TimePanel`, which takes the source clock. The overview and the focus views lay out the same components; the edge log, the sync losses, and the last frame appear only in a focus view |
-| `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels. `StagePanels` is the "Baseline" column of the focus-view table in `ui-design.md` as code |
+| `stages.ts` | One pure function per stage, from `AppState` to what the rail shows (`readout` and `health`), and the `stages` table the rail maps over. The rules are the rail table in `ui-design.md`. Each stage also carries the host type and the rule, a sentence or two, that its focus view's header shows |
+| `PipelineRail.tsx` | The seven stage buttons. Each subscribes to its own stage's function, so a new edge re-renders one button. Health is a glyph with a hidden word, not a color alone. A click focuses the stage, the focused stage's button is pressed (`aria-pressed`), and a click on it goes back to the overview. When a frame completes, the buttons of stages 4 to 7 light 80 ms apart: each holds a ring that is a new element for every frame, keyed on `frameCount`, so its animation runs once per frame |
+| `Panel.tsx` | A titled region with a chip per stage, an optional line of state, and an error boundary around its children: a view that throws shows a message in its own panel and the rest of the screen keeps running. Its `view-transition-name` comes from its title, so a panel that two views share moves from its old place to its new one |
+| `panels.tsx` | The screen's panels, each a view inside its `Panel`. The overview's five: `SignalPanel`, `PulseWidthPanel` (`detailed` for stage 3), `FramePanel`, `DecodedFramesPanel` (three rows unless `rows` says otherwise, and `selectable` for stage 6), and `TimePanel`, which takes the source clock. Only in a focus view: `EdgeLogPanel` and `InfoLinesPanel` (stage 1), `ClassificationPanel` (3), `SyncDiagramPanel` and `SyncLossPanel` (4), `LastFramePanel` and `DecodedRecordPanel` (5), `ChecksPanel` (6), and `ClockDiagramPanel` (7) |
+| `FocusLayout.tsx` | One stage's focus view: a header with the stage's number, name, host type, and rule, over that stage's panels. `StagePanels` is the focus-view table in `ui-design.md` as code. The stage 6 table and its check list are given the same number of rows, 16, because a frame's checks are listed only while its row is in the table |
+| `transition.ts` | `focusStage(stage)` changes the view, and is what the keyboard and the rail call. `withViewTransition(update)` runs the change inside `document.startViewTransition`, with React rendering in its callback through `flushSync`. Under `prefers-reduced-motion`, and where the API is missing, as in jsdom, the change is made at once |
 | `keyboard.ts` | `keyAction(key, { focus, drawer })`: the keyboard map as a pure function. It returns what the key does, or `null`. The table is under "Keyboard" in `ui-design.md` |
-| `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too. It takes the bridge for `D`, the one key that sends a command |
+| `useKeyboard.ts` | Runs the map for the whole page from one `keydown` listener on `window`. It stands back for a key pressed in an `input`, `textarea`, or `select`, in an open list or the open signal settings, on the button of one that is open, for Ctrl, Alt, and the Windows key, and for a key that is held down. A key it acts on goes no further, so the control with focus does not act on it too. It takes the bridge for `D`, the one key that sends a command. A key that changes the view goes through `focusStage` |
 | `noiseDemo.ts` | `noiseDemo(syntheticRunning, noise)`: what `D` does, as a pure function that returns the picks to show and the command to send. On starts the synthetic source at `demoNoise`, 0.10, also when it already runs, because only a new start rejects its first frame every time. Off takes the noise from a source that runs the demo and leaves it running. The rule is under "Keyboard" in `ui-design.md` |
 | `theme.ts` | `toggleTheme()`, for the app bar's button and the `T` key |
-| `AppBar.tsx` | The name, the source control with each source's own controls (the port list, the capture list and speed buttons, the noise slider), Start, Stop, and the buttons for the signal settings, the theme, and the shortcut list. `PickList`, `SpeedButtons`, and `SignalSettings` are components local to the file. What is picked is the store's `picks`, not component state, so the host's `selection` can set it. The rules are under "App bar" in `ui-design.md` |
+| `AppBar.tsx` | The name, the source control with each source's own controls (the port list, the capture list and speed buttons, the noise slider), Start, Stop, and the buttons for the signal settings, the theme, and the shortcut list. `PickList`, `SpeedButtons`, and `SignalSettings` are components local to the file. What is picked is the store's `picks`, not component state, so the host's `selection` can set it. The noise slider sets the pick on every step (`onValueChange`) and sends `setNoise` when the thumb is let go (`onValueCommitted`). The rules are under "App bar" in `ui-design.md` |
 | `WarningBanner.tsx` | The host's warning, in a row between the app bar and the rail: the `warning` of the latest `sourceStatus`, in the host's words, as an `output` element, which is a status to a screen reader, with a warning glyph and a hidden `Warning:` before the text. It draws nothing while there is no warning, and none while the text is the one in `closedWarning`, which its close button sets. The rules are under "Warning banner" in `ui-design.md` |
-| `captures.ts` | `captureLabel(entry)`: what the capture list shows for one capture, built from `formatRecorded` and `formatLength` |
+| `captures.ts` | `captureLabel(entry)`: what the capture list shows for one capture, built from `captureName` (the label in the file's name), `formatRecorded`, and `formatLength` |
 | `StatusBar.tsx`, `ProtocolLog.tsx` | The run state, the source's name and detail, the last `seq`, the lost count, the key hints, and the Log button. The protocol log is a sheet that opens when the store's `drawer` is `"log"` |
 | `ShortcutList.tsx` | The shortcut list, a sheet that opens when `drawer` is `"shortcuts"`. Its rows are written out by hand, so a key added to the map is added here too. `F11` has a row though the map does not know it: the host's window takes that key |
 
@@ -140,8 +142,8 @@ A view is split as ADR-0007 asks: a pure function decides what to show and is te
 
 | File | Holds |
 | --- | --- |
-| `lanes.ts` | `signalLanes(input)`: what is on each lane, in source microseconds, from the store's buffers, the present, and the window. No pixels |
-| `model.ts` | `drawSignal(lanes, view)`: the same lanes as a `SignalDrawing` of lines, rectangles, and text in CSS pixels, for a canvas of a given size. The drawing's proportions are the constants at the top, each a multiple of the root font size |
+| `lanes.ts` | `signalLanes(input)`: what is on each lane, in source microseconds, from the store's buffers, the present, and the window. No pixels. Its `glitches` are the stretches stage 2 dropped or bridged, found by comparing the edges with the measured pulses and with no threshold of the page's own |
+| `model.ts` | `drawSignal(lanes, view)`: the same lanes as a `SignalDrawing` of lines, rectangles, and text in CSS pixels, for a canvas of a given size. The drawing's proportions are the constants at the top, each a multiple of the root font size. The glitches are drawn only in a pulse lane of 8 rem or more, which is the stage 2 focus view's, because their names need a line of their own |
 | `paint.ts` | `paintSignal(ctx, drawing, fontFamily)`: paints a drawing on a 2D context, and decides nothing |
 | `style.ts` | `readSignalStyle(element)`: the colors from the CSS variables, the root font size, and the font family, read from the page. A canvas cannot use a Tailwind class for a color |
 | `timeWindow.ts` | `timeWindowFor(speed)`: 12 s with labels at 1× and below, 60 s without above |
@@ -152,16 +154,19 @@ A view is split as ADR-0007 asks: a pure function decides what to show and is te
 
 | File | Holds |
 | --- | --- |
-| `model.ts` | `pulseWidthHistogram(symbols)`: 40 bins of 25 ms, each with a count, a height against the fullest bin, and the host's class of its newest pulse. The page does not classify a duration. `lastPulseText(last)` writes the panel's state line |
-| `PulseWidthView.tsx` | The bars, the four boundaries, the error zones, and the last-pulse line. Every position is a percentage of the plot, so the view measures nothing. The four boundaries repeat the defaults of the host's `SymbolClassifier`, because no message carries them |
+| `model.ts` | `pulseWidthHistogram(symbols)`: 40 bins of 25 ms, each with a count, a height against the fullest bin, and the host's class of its newest pulse. The page does not classify a duration. `lastPulse(symbols)` is the newest pulse, and `lastPulseText(last)` writes the panel's state line. The four boundaries are constants here that repeat the defaults of the host's `SymbolClassifier`, because no message carries them, and `CLASS_ZONES` is the rule as five stretches of the axis. `landingZone(last)` is the zone of the host's class; for an error, the duration says which of the two error zones |
+| `PulseWidthView.tsx` | The bars, the four boundaries, the error zones, and the last-pulse line. Every position is a percentage of the plot, so the view measures nothing. With `detailed` it names the zones above the plot, marks the one the last pulse landed in, and writes the pulse's duration on its line, which is keyed on the pulse's start so that it drops in again for each pulse |
+| `Classification.tsx` | The stage 3 focus view's card: the last pulse as input, rule, and output |
 
 **`views/frame/`**, a frame as three rows of twenty seconds, in DOM. The frame in progress and the last complete frame share one grid:
 
 | File | Holds |
 | --- | --- |
-| `model.ts` | Pure functions, each from one slice of the store. `frameCells(layout)`: the 60 seconds with their role and the weight or marker name above each. `fieldBrackets(layout)`: each field's first and last second and its name. `placedSymbols(slots)`: the symbol in each second of the newest frame, which is how a new frame clears the cells. `receivingSecond(frameSync)`: the second after the one just placed. `frameHeader(state)`: the header line's text and the share of the frame placed. `cellState(role, symbol)` names how a cell is drawn. For the last complete frame: `frameSymbols(decodedFrame)`, `fieldValues(decodedFrame)` (each field's decoded value in words, keyed by its role), and `decodedFrameLine(decodedFrame)` (the seconds that hold an error symbol) |
-| `FrameView.tsx` | `FrameGrid` draws a frame from the symbols it is given: a list of cells per row over a list of brackets, each bracket placed by a percentage. With `values` it writes each field's value under its name and makes the bracket strip taller. `CELL_CLASSES` maps a cell state to its classes. `FrameView` is the grid with the symbols frame sync has placed and the second being received. `FrameHeaderLine` is the panel's state line, with a `<progress>` bar while symbols are being placed |
-| `DecodedFrameView.tsx` | `DecodedFrameView` is the grid with the newest `decodedFrame`: its symbols, and the host's decoded value under each field. `DecodedFrameLine` is its panel's state line |
+| `model.ts` | Pure functions, each from one slice of the store. `frameCells(layout)`: the 60 seconds with their role and the weight or marker name above each. `fieldBrackets(layout)`: each field's first and last second and its name. `placedSymbols(slots)`: the symbol in each second of the newest frame, which is how a new frame clears the cells. `receivingSecond(frameSync)`: the second after the one just placed. `frameHeader(state)`: the header line's text and the share of the frame placed. `cellState(role, symbol)` names how a cell is drawn. For the last complete frame: `frameSymbols(decodedFrame)`, `fieldValues(decodedFrame)` (each field's decoded value in words, keyed by its role), `setWeights(decodedFrame, layout)` (the weights of each field's bits that are 1, as a sum the page does not work out), `decodedRecord(decodedFrame)` (the host's record, a row for each property under its C# name), and `decodedFrameLine(decodedFrame)` (the seconds that hold an error symbol). For the stage 4 diagram: `syncDiagram(state)` (the state frame sync is in, its count, and the label of the arrow back) |
+| `FrameView.tsx` | `FrameGrid` draws a frame from the symbols it is given: a list of cells per row over a list of brackets, each bracket placed by a percentage. With `values` it writes each field's value under its name, with `weights` the set weights under that, and the bracket strip is as tall as its lines. `CELL_CLASSES` maps a cell state to its classes. `FrameView` is the grid with the symbols frame sync has placed and the second being received. `FrameHeaderLine` is the panel's state line, with a `<progress>` bar while symbols are being placed |
+| `DecodedFrameView.tsx` | `DecodedFrameView` is the grid with the newest `decodedFrame`: its symbols, the host's decoded value under each field, and the set weights under that. `DecodedFrameLine` is its panel's state line |
+| `DecodedRecord.tsx` | The record handed to stage 6, as a list of names and values |
+| `SyncDiagram.tsx` | Frame sync's two states as a diagram, drawn from `views/state-diagram/parts` |
 | `SyncLossList.tsx` | The store's `syncLosses`, newest first, each as its number and the host's reason |
 
 The frame grid sizes its type with `clamp(small, n cqh, large)` inside a container of type `size` (`@container-size`), so it follows the panel's height. A width query such as `@2xl:` is wrong here: the overview's frame panel is wide and short, and it would get the focus view's sizes with no height to hold them.
@@ -170,23 +175,34 @@ The frame grid sizes its type with `clamp(small, n cqh, large)` inside a contain
 
 | File | Holds |
 | --- | --- |
-| `model.ts` | `frameRows(validations, frameCount)`: the rows, newest first, each with its number since the source reset, its 60 symbols, the decoded values, and the result in words. `failureLine(failure)` writes one failure as its check in words and the host's detail. `CHECK_NAMES` holds the words for a check; the words for a UT1 sign and a DST status come from `protocol/decodedText.ts` |
-| `FramesTable.tsx` | A `<table>` with fixed column widths in percent, the strip of 60 ticks, a tint on a rejected row, and every failure in the result's tooltip. `maxRows` is how many rows it shows; when they do not fit, the table scrolls under its headings. With `details` a rejected row reads `Rejected` over one line per failure, in a list named `Failures of frame N`, with no tooltip, and the columns give the result more of the width (`narrow` in `COLUMNS`) |
+| `model.ts` | `frameRows(validations, frameCount)`: the rows, newest first, each with its number since the source reset, its 60 symbols, the decoded values, and the result in words. `failureLine(failure)` writes one failure as its check in words and the host's detail. `CHECK_NAMES` holds the words for a check; the words for a UT1 sign and a DST status come from `protocol/decodedText.ts`. `shownFrame(rows, selected)` is the frame the stage 6 view is about: the selected one while its row is among the rows, and the newest otherwise |
+| `FramesTable.tsx` | A `<table>` with fixed column widths in percent, the strip of 60 ticks, a tint on a rejected row, and every failure in the result's tooltip. `maxRows` is how many rows it shows; when they do not fit, the table scrolls under its headings. With `selectable` each frame's number is a button that covers its row, a click sets the store's `selectedFrame` and a second click clears it, and the row of the frame on show is outlined. A row whose frame arrived after the table appeared slides in; the count at that moment is kept in state, and set back by a source reset |
+
+**`views/checks/`**, the ten checks of one frame, in DOM:
+
+| File | Holds |
+| --- | --- |
+| `model.ts` | `checkLines(failures)`: the ten checks in the host's order, each passed or failed, with the host's detail for a failure and what the check asks otherwise. `CHECK_RULES` holds those lines, which repeat the host's contract. `frameTime(row)`, `verdict(row)`, and `checksLine(shown, selected)` write the lines above the list |
+| `CheckList.tsx` | `CheckList` is the frame's line and its ten checks. `ChecksLine` is its panel's state line. Both take the number of rows the table beside them shows |
 
 **`views/time/`**, the clock the decoder has built, in DOM:
 
 | File | Holds |
 | --- | --- |
-| `model.ts` | `decodedTimeMs(clock, atMicros)`: the last accepted frame's time plus the source time since that frame began. `clockFace` cuts it to the second as digits, date, and day of year. `statusChips` lists the four statuses with the current one marked. `lockRows`, `offsetRow`, and `localTimeRow` are the four rows; under replay the offset comes from the capture's newest `# wall` line |
+| `model.ts` | `decodedTimeMs(clock, atMicros)`: the last accepted frame's time plus the source time since that frame began. `clockFace` cuts it to the second as digits, date, and day of year. `statusChips` lists the four statuses with the current one marked. `lockRows`, `offsetRow`, and `localTimeRow` are the four rows; under replay the offset comes from the capture's newest `# wall` line. For the stage 7 diagram: `CLOCK_MOVES` (what each arrow says) and `clockCounters(clock)` (the host's two counts, each with the number at which it moves the clock) |
+| `ClockDiagram.tsx` | The four statuses as a state diagram with the two counters, drawn from `views/state-diagram/parts` |
 | `TimeView.tsx` | `TimeView` reads the source clock on every animation frame and renders when the decoded second changes, so it ticks once a second at any replay speed. One font size from the panel's width and height (`min(19cqw, 22cqh)`) scales the rest, which is sized in `em`. `ClockStatusLine` is the panel's state line |
 
-**`views/edge-log/`**: `EdgeLog.tsx` lists the newest 50 edges, newest first, as `edgeLine` writes them.
+**`views/edge-log/`**: `EdgeLog.tsx` lists the newest 50 edges, newest first, as `edgeLine` writes them. `InfoLines.tsx` lists the newest four informational lines the same way, and `infoRows.ts` gives each a key that tells two equal lines apart.
+
+**`views/state-diagram/`**: `parts.tsx` holds what both state diagrams are drawn from, in SVG: `StateNode` (a state's box, tinted and marked `aria-current` when the machine is in it), `Transition` (an arrow with what causes it), and `ArrowHead`. A diagram sets a `viewBox` and places the parts in its units, so it scales with its panel as one piece, text included. Text sizes inside a diagram are in those units, written as `text-[20px]`.
 
 ## Styling
 
 - **Tokens.** `src/index.css` declares them as CSS variables, light values in `:root` and dark values under `.dark`. The names follow the "Variable names" table in `ui-design.md`. The `@theme inline` block maps each one into Tailwind (`--color-signal: var(--signal)`), which is what makes `bg-signal` and `text-good` exist. A new token needs a value per theme and a line in that block.
 - **Theme.** `index.html` puts `class="dark"` on `<html>`, and the theme button toggles the class.
 - **Imported styles.** `index.css` also imports `tw-animate-css` and `shadcn/tailwind.css`, which the generated controls rely on. That import is why `shadcn` is a dependency of the build and not only a command.
+- **Motion.** `index.css` sets the view transition to 200 ms, defines the rail's light (`--animate-rail-light` and its keyframes, in a `@theme` block), and holds the one rule for `prefers-reduced-motion`, which cuts every animation and transition to nothing. A component that animates also carries `motion-reduce:` on its own classes where a test can see it. The rules are under "Motion" in `ui-design.md`.
 - **Scale.** The root font size is `min(100vw / 80, 100vh / 45)`: 16 px at 1280 by 720 and 24 px at 1920 by 1080, so the page scales as one piece. Every size is in `rem`. An arbitrary value is the size at the baseline divided by 16, so 13 px is `text-[0.8125rem]`. Borders stay 1 px.
 
 ## Simulator
@@ -326,6 +342,10 @@ jsdom lays nothing out and has no canvas, so `test-setup.ts` also gives every do
 Because jsdom lays nothing out, a test cannot see cells that collapse or text that overlaps. A view drawn in DOM is looked at in the app at both of its sizes, in the overview and in its focus view, before it is called done.
 
 jsdom also shows focus on every focused element: it matches `:focus-visible` wherever `:focus` matches. What a mouse click leaves behind, focus without a focus ring, can only be seen in a browser.
+
+The same holds for motion. jsdom has no View Transitions API and runs no animation, so a test can show that a transition is asked for, that an animated element is a new one for each event, and that reduced motion asks for none. That the picture moves is seen in a browser.
+
+A thumb cannot be dragged in jsdom either. `AppBar.noise.test.tsx` puts a stand-in in the slider's place, with a button for each thing the real slider reports, to show that a step sends nothing and letting go sends once. `AppBar.test.tsx` keeps the real slider, where a change of its input is a step and a letting go in one.
 
 Coverage leaves out the tests, `components/ui/`, `main.tsx`, and `test-setup.ts`.
 

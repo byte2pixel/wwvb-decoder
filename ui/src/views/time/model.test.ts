@@ -7,6 +7,8 @@ import {
   type DstStatus,
 } from "@/protocol/messages";
 import {
+  CLOCK_MOVES,
+  clockCounters,
   clockFace,
   decodedTimeMs,
   localTimeRow,
@@ -222,5 +224,33 @@ describe("localTimeRow", () => {
   it("shows a dash without a time or without a decoded frame", () => {
     expect(localTimeRow(null, "standard").value).toBe("—");
     expect(localTimeRow(at, undefined).value).toBe("—");
+  });
+});
+
+describe("clockCounters", () => {
+  it("reads both counts as 0 before the clock has any state", () => {
+    expect(clockCounters(null).map(({ value }) => value)).toEqual(["0", "0"]);
+  });
+
+  it("reads the host's two counts, each with the number that moves the clock", () => {
+    expect(
+      clockCounters({
+        ...example,
+        consecutiveAccepted: 3,
+        rejectedSinceLastAccepted: 2,
+      }),
+    ).toEqual([
+      { label: "Accepted in a row", value: "3", limit: "2 lock the clock" },
+      { label: "Rejected in a row", value: "2", limit: "3 end the hold" },
+    ]);
+  });
+});
+
+describe("CLOCK_MOVES", () => {
+  it("names what moves the clock, with the host's two limits", () => {
+    expect(CLOCK_MOVES).toMatchObject({
+      lock: "2 accepted in a row",
+      letGo: "3 rejected in a row",
+    });
   });
 });

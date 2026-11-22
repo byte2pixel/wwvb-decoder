@@ -180,3 +180,41 @@ export function localTimeRow(
     value: `${local} ${zone}${approximate ? ", approximate" : ""}`,
   };
 }
+
+/** The accepted frames in a row that lock the clock. The host's default. */
+const ACCEPTED_TO_LOCK = 2;
+
+/** What moves the clock from one status to another, for the arrows of the state diagram. */
+export const CLOCK_MOVES = {
+  firstFrame: "first frame",
+  lock: `${ACCEPTED_TO_LOCK} accepted in a row`,
+  hold: "rejected",
+  recover: "accepted",
+  letGo: `${REJECTED_TO_ACQUIRE} rejected in a row`,
+  reset: "A source reset returns the clock to No signal.",
+} as const;
+
+/** One of the two counts the host keeps, and the number at which it moves the clock. */
+export interface ClockCounter {
+  label: string;
+  /** The count now. */
+  value: string;
+  /** What the count does when it reaches its limit. */
+  limit: string;
+}
+
+/** The two counters that move the clock, as the host last sent them. Both are 0 before a frame. */
+export function clockCounters(clock: ClockState | null): ClockCounter[] {
+  return [
+    {
+      label: "Accepted in a row",
+      value: String(clock?.consecutiveAccepted ?? 0),
+      limit: `${ACCEPTED_TO_LOCK} lock the clock`,
+    },
+    {
+      label: "Rejected in a row",
+      value: String(clock?.rejectedSinceLastAccepted ?? 0),
+      limit: `${REJECTED_TO_ACQUIRE} end the hold`,
+    },
+  ];
+}

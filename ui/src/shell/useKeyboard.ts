@@ -4,6 +4,7 @@ import { useAppStore } from "@/state/store";
 import { keyAction } from "./keyboard";
 import { noiseDemo } from "./noiseDemo";
 import { toggleTheme } from "./theme";
+import { focusStage } from "./transition";
 
 /** True when a key pressed here belongs to the control: a text field, a list, or a slider, which is an `input` too. */
 const takesKeys = (target: EventTarget | null): boolean =>
@@ -25,7 +26,7 @@ export function useKeyboard(bridge: Bridge): void {
       }
       if (takesKeys(event.target)) return;
 
-      const { focus, drawer, setFocus, setDrawer } = useAppStore.getState();
+      const { focus, drawer, setDrawer } = useAppStore.getState();
       const action = keyAction(event.key, { focus, drawer });
       if (!action) return;
 
@@ -36,7 +37,7 @@ export function useKeyboard(bridge: Bridge): void {
       document.querySelector<HTMLElement>(":focus")?.blur();
       switch (action.kind) {
         case "focus":
-          setFocus(action.stage);
+          focusStage(action.stage);
           break;
         case "drawer":
           setDrawer(action.drawer);

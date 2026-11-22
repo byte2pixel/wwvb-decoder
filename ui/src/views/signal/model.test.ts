@@ -22,6 +22,7 @@ const lanes = (over: Partial<SignalLanes> = {}): SignalLanes => ({
   window: { startMicros: 0, endMicros: 12_000_000 },
   carrier: [],
   pulses: [],
+  glitches: [],
   symbols: [],
   seconds: [],
   ticks: [],
@@ -65,6 +66,7 @@ describe("drawSignal", () => {
       ticks: [],
       carrier: null,
       pulses: [],
+      glitches: [],
       symbols: [],
       seconds: [],
       cursor: null,
@@ -200,6 +202,129 @@ describe("pulses", () => {
 
     expect(pulses[0].bar).toMatchObject({ x: -50, w: 80 });
     expect(pulses[0].label).toMatchObject({ x: -50, text: "800 ms" });
+  });
+});
+
+describe("glitches", () => {
+  const dropped = {
+    startMicros: 1_900_000,
+    endMicros: 1_905_000,
+    kind: "dropped" as const,
+  };
+  const bridged = {
+    startMicros: 1_300_000,
+    endMicros: 1_310_000,
+    kind: "bridged" as const,
+  };
+  /**
+   * The stage 2 focus view: the carrier and the pulses in 420 px, so the pulse lane has
+   * 280 to 420, which is 8.75 rem.
+   */
+  const tall = (over: Partial<SignalView> = {}): SignalView =>
+    view({ height: 420, show: ["carrier", "pulse"], ...over });
+
+  it("draws none in a pulse lane too short for a second line of text", () => {
+    // The overview: the pulse lane is 20 px of 100.
+    const { glitches } = drawSignal(lanes({ glitches: [dropped] }), view());
+
+    expect(glitches).toEqual([]);
+  });
+
+  it("draws them from a pulse lane of 8 rem", () => {
+    const at = (height: number) =>
+      drawSignal(
+        lanes({ glitches: [dropped] }),
+        view({ height, show: ["pulse"] }),
+      ).glitches;
+
+    expect(at(127)).toEqual([]);
+    expect(at(128)).toHaveLength(1);
+  });
+
+  it("draws none when the pulse lane is not shown", () => {
+    const { glitches } = drawSignal(
+      lanes({ glitches: [dropped] }),
+      view({ height: 420, show: ["carrier"] }),
+    );
+
+    expect(glitches).toEqual([]);
+  });
+
+  it("outlines a dropped glitch where its bar would be, and names it under the durations", () => {
+    const { glitches, pulses } = drawSignal(
+      lanes({
+        pulses: [
+          { startMicros: 1_000_000, endMicros: 1_800_000, durationMs: 800 },
+        ],
+        glitches: [dropped],
+      }),
+      tall(),
+    );
+
+    expect(glitches).toHaveLength(1);
+    const { bar, label } = glitches[0];
+    // 5 ms is half a pixel, so the mark is as wide as the least a mark may be.
+    expect(bar).toMatchObject({
+      x: 190,
+      w: 2,
+      fill: null,
+      stroke: "lineStrong",
+    });
+    // The same row and height as a pulse's bar.
+    expect([bar.y, bar.h]).toEqual([pulses[0].bar.y, pulses[0].bar.h]);
+    expect(label).toMatchObject({
+      x: 190,
+      text: "dropped",
+      fill: "textMuted",
+      align: "left",
+    });
+    // On a line of its own, under the pulse's duration and inside the lane.
+    expect(label!.y - label!.size / 2).toBeGreaterThanOrEqual(
+      pulses[0].label!.y + pulses[0].label!.size / 2,
+    );
+    expect(label!.y + label!.size / 2).toBeLessThanOrEqual(420);
+  });
+
+  it("cuts a bridged gap as a notch into the top of its pulse's bar, and names it", () => {
+    const { glitches, pulses } = drawSignal(
+      lanes({
+        pulses: [
+          { startMicros: 1_000_000, endMicros: 1_500_000, durationMs: 500 },
+        ],
+        glitches: [bridged],
+      }),
+      tall(),
+    );
+
+    const { bar, label } = glitches[0];
+    const pulseBar = pulses[0].bar;
+    expect(bar).toMatchObject({ x: 130, fill: "onSignal", stroke: null });
+    // From the bar's top, and not all the way down: the bar still runs on under the notch.
+    expect(bar.y).toBe(pulseBar.y);
+    expect(bar.h).toBeGreaterThan(0);
+    expect(bar.h).toBeLessThan(pulseBar.h);
+    expect(label).toMatchObject({ x: 130, text: "bridged" });
+  });
+
+  it("is as wide as its stretch of the carrier when that is wider than a hairline", () => {
+    const { glitches } = drawSignal(
+      lanes({
+        glitches: [{ ...dropped, endMicros: dropped.startMicros + 40_000 }],
+      }),
+      tall(),
+    );
+
+    expect(glitches[0].bar.w).toBe(4);
+  });
+
+  it("keeps the marks and drops the names when labels are off", () => {
+    const { glitches } = drawSignal(
+      lanes({ glitches: [dropped, bridged] }),
+      tall({ labels: false }),
+    );
+
+    expect(glitches.map((glitch) => glitch.label)).toEqual([null, null]);
+    expect(glitches.map((glitch) => glitch.bar.x)).toEqual([190, 130]);
   });
 });
 

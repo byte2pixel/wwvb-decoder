@@ -188,6 +188,83 @@ export function fieldValues(frame: DecodedFrame | null): FieldValues | null {
 }
 
 /**
+ * The weights of each field's bits that are 1, written as a sum: `20 + 10`.
+ * A field whose seconds carry no weight, a flag or the UT1 sign, has no entry.
+ */
+export type FieldWeights = Readonly<Partial<Record<FieldRole, string>>>;
+
+/** What a weighted field reads when none of its bits is 1. */
+const NO_WEIGHTS = "none";
+
+/**
+ * Which weights the last complete frame set in each field, or null before the first frame or
+ * the layout. Only a 1 counts: the host reads an error symbol as 0, so the weights listed add
+ * up to the value it decoded. The page lists them and does not add them.
+ */
+export function setWeights(
+  frame: DecodedFrame | null,
+  layout: FrameLayout | null,
+): FieldWeights | null {
+  if (!frame || !layout) return null;
+
+  const set = new Map<SecondRole, number[]>();
+  layout.roles.forEach((role, second) => {
+    const weight = layout.weights[second];
+    if (weight === null) return;
+
+    const weights = set.get(role) ?? [];
+    if (frame.frame.symbols[second] === "one") weights.push(weight);
+    set.set(role, weights);
+  });
+
+  return Object.fromEntries(
+    [...set].map(([role, weights]) => [
+      role,
+      weights.length === 0 ? NO_WEIGHTS : weights.join(" + "),
+    ]),
+  );
+}
+
+/** One property of the host's `DecodedFrame` record. */
+export interface RecordRow {
+  /** The property as C# names it. */
+  name: string;
+  value: string;
+}
+
+/** A JSON enum value under its C# name: the host writes `EndsToday` as `endsToday`. */
+const pascal = (word: string): string =>
+  word.charAt(0).toUpperCase() + word.slice(1);
+
+/**
+ * The record stage 5 hands to stage 6, a row for each property in the order C# declares them,
+ * or null before the first frame.
+ */
+export function decodedRecord(frame: DecodedFrame | null): RecordRow[] | null {
+  if (!frame) return null;
+
+  return [
+    { name: "Frame", value: `${frame.frame.symbols.length} symbols` },
+    { name: "Minute", value: String(frame.minute) },
+    { name: "Hour", value: String(frame.hour) },
+    { name: "DayOfYear", value: String(frame.dayOfYear) },
+    { name: "Year", value: String(frame.year) },
+    { name: "Ut1Sign", value: pascal(frame.ut1Sign) },
+    { name: "Ut1Tenths", value: String(frame.ut1Tenths) },
+    { name: "LeapYear", value: String(frame.leapYear) },
+    { name: "LeapSecondPending", value: String(frame.leapSecondPending) },
+    { name: "Dst", value: pascal(frame.dst) },
+    {
+      name: "ErrorSeconds",
+      value:
+        frame.errorSeconds.length === 0
+          ? "none"
+          : frame.errorSeconds.join(", "),
+    },
+  ];
+}
+
+/**
  * The last-frame panel's header line: the seconds that hold an error symbol.
  * It counts the frame's own symbols, so it names every cell drawn as an error. The host's
  * `errorSeconds` leaves out an unused second.
@@ -226,5 +303,63 @@ export function cellState(
       return role === "unused" ? "unusedZero" : "zero";
     default:
       return symbol;
+  }
+}
+
+/** What moves frame sync from one state to the other, for the arrows of its diagram. */
+export const SYNC_MOVES = {
+  sync: `${MARKERS_TO_SYNC} markers a second apart`,
+  lose: "sync lost",
+} as const;
+
+/** Frame sync's two states as its diagram draws them. */
+export interface SyncDiagram {
+  /** The state frame sync is in, or null while no source has run. */
+  state: "searching" | "synced" | null;
+  /** The count under the state it is in: markers while searching, symbols while synced. */
+  count: string;
+  /** The label of the arrow back to searching. It names the host's reason while a loss is held. */
+  lose: string;
+  /** True while a loss is held, which is 5 s. */
+  lost: boolean;
+}
+
+export function syncDiagram({
+  frameSync,
+  syncLoss,
+  sourceStatus,
+}: Pick<AppState, "frameSync" | "syncLoss" | "sourceStatus">): SyncDiagram {
+  const lose = syncLoss
+    ? `${SYNC_MOVES.lose}: ${syncLoss.reason}`
+    : SYNC_MOVES.lose;
+  const lost = syncLoss !== null;
+  const searching = (markers: number): SyncDiagram => ({
+    state: "searching",
+    count: `${markers} of ${MARKERS_TO_SYNC} markers`,
+    lose,
+    lost,
+  });
+  const inSync = (placed: number): SyncDiagram => ({
+    state: "synced",
+    count: `${placed} of ${FRAME_SECONDS} symbols`,
+    lose,
+    lost,
+  });
+
+  switch (frameSync?.kind) {
+    case "slotFilled":
+      return inSync(frameSync.second + 1);
+    case "frameComplete":
+      return inSync(FRAME_SECONDS);
+    case "searching":
+      return searching(frameSync.consecutiveMarkers);
+    case "syncLost":
+      // The host's next event says how many markers the search starts with.
+      return searching(0);
+    default:
+      // Frame sync starts out searching, so a running source is searching before it reports.
+      return sourceStatus?.state === "running"
+        ? searching(0)
+        : { state: null, count: "", lose, lost };
   }
 }
