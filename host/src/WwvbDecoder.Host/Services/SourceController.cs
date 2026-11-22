@@ -110,6 +110,11 @@ public sealed class SourceController(
                 break;
             case Command.SetReducedCarrierLevel level:
                 pipeline.PulseMeasurement.ReducedCarrierLevel = level.Level;
+                // The presenter acted on the warning, or made it moot. The count starts again.
+                if (_run is { } current && current.Polarity.Clear())
+                {
+                    ChangeStatus(status => status with { Warning = current.Warning });
+                }
                 Remember(_remembered with { ReducedCarrierLevel = level.Level });
                 break;
             case Command.SetReplaySpeed speed:
@@ -117,7 +122,7 @@ public sealed class SourceController(
                 {
                     replaying.Speed = speed.Speed;
                     Remember(_remembered with { Speed = speed.Speed });
-                    SetStatus(Status with { Detail = "" });
+                    ChangeStatus(status => status with { Detail = "" });
                 }
                 break;
             case Command.Stop:
@@ -140,11 +145,17 @@ public sealed class SourceController(
         await StopRunAsync();
     }
 
-    private sealed class Run(IEdgeSource source, CancellationTokenSource cts)
+    private sealed class Run(IEdgeSource source, CancellationTokenSource cts, string warning)
     {
         public IEdgeSource Source { get; } = source;
         public CancellationTokenSource Cts { get; } = cts;
         public Task Completion { get; set; } = Task.CompletedTask;
+
+        /// <summary>The warning the run started with: empty, or what the launch had to say.</summary>
+        public string Warning { get; } = warning;
+
+        /// <summary>Its warning takes the place of the run's own while the level looks inverted.</summary>
+        public PolarityWatch Polarity { get; } = new();
     }
 
     private volatile Run? _run;
@@ -353,7 +364,7 @@ public sealed class SourceController(
 
     private void StartRun(IEdgeSource source, SourceKind kind, string warning)
     {
-        var run = new Run(source, new CancellationTokenSource());
+        var run = new Run(source, new CancellationTokenSource(), warning);
         _run = run;
 
         // The warning belongs to the run: every later status of it is made from this one.
@@ -368,12 +379,14 @@ public sealed class SourceController(
     {
         pipeline.SourceReset += OnReset;
         pipeline.InfoReceived += OnInfo;
+        pipeline.SymbolClassified += OnSymbol;
+        pipeline.FrameSyncChanged += OnFrameSync;
         try
         {
             await pipeline.RunAsync(run.Source, run.Cts.Token);
             if (ReferenceEquals(_run, run))
             {
-                SetStatus(Status with { State = SourceState.Stopped, Detail = "" });
+                ChangeStatus(status => status with { State = SourceState.Stopped, Detail = "" });
             }
         }
         catch (OperationCanceledException) when (run.Cts.IsCancellationRequested)
@@ -384,13 +397,21 @@ public sealed class SourceController(
         {
             if (ReferenceEquals(_run, run))
             {
-                SetStatus(Status with { State = SourceState.Error, Detail = e.Message });
+                ChangeStatus(status =>
+                    status with
+                    {
+                        State = SourceState.Error,
+                        Detail = e.Message,
+                    }
+                );
             }
         }
         finally
         {
             pipeline.SourceReset -= OnReset;
             pipeline.InfoReceived -= OnInfo;
+            pipeline.SymbolClassified -= OnSymbol;
+            pipeline.FrameSyncChanged -= OnFrameSync;
         }
 
         return;
@@ -399,7 +420,36 @@ public sealed class SourceController(
         {
             if (ReferenceEquals(_run, run))
             {
-                SetStatus(Status with { Detail = $"reset: {reason}" });
+                // What the symbols said before the reset says nothing about the stream after it.
+                run.Polarity.Clear();
+                ChangeStatus(status =>
+                    status with
+                    {
+                        Detail = $"reset: {reason}",
+                        Warning = run.Warning,
+                    }
+                );
+            }
+        }
+
+        void OnSymbol(Symbol symbol)
+        {
+            if (ReferenceEquals(_run, run) && run.Polarity.Add(symbol))
+            {
+                ChangeStatus(status => status with { Warning = PolarityWatch.Warning });
+            }
+        }
+
+        // A frame that was completed shows the level is right.
+        void OnFrameSync(FrameSyncEvent frameSync)
+        {
+            if (
+                frameSync is FrameSyncEvent.FrameComplete
+                && ReferenceEquals(_run, run)
+                && run.Polarity.Clear()
+            )
+            {
+                ChangeStatus(status => status with { Warning = run.Warning });
             }
         }
 
@@ -412,7 +462,7 @@ public sealed class SourceController(
                 && line.StartsWith(BannerPrefix, StringComparison.Ordinal)
             )
             {
-                SetStatus(Status with { Detail = line });
+                ChangeStatus(status => status with { Detail = line });
             }
         }
     }
@@ -434,11 +484,18 @@ public sealed class SourceController(
 
     private readonly Lock _statusGate = new();
 
-    private void SetStatus(SourceStatus status)
+    private void SetStatus(SourceStatus status) => ChangeStatus(_ => status);
+
+    /// <summary>
+    /// Makes the next status from the current one and posts it, in one step. The pump thread
+    /// changes the detail and the warning while the dispatcher answers a command, and a change
+    /// made from a status read outside the lock could undo the other thread's.
+    /// </summary>
+    private void ChangeStatus(Func<SourceStatus, SourceStatus> change)
     {
         lock (_statusGate)
         {
-            Status = status with
+            Status = change(Status) with
             {
                 Speed = _run?.Source is ReplayEdgeSource replay ? replay.Speed : 1.0,
             };

@@ -329,8 +329,13 @@ The page has no other way to learn the speed, and a reloaded page gets it back w
 | Warning | When | Until |
 | --- | --- | --- |
 | `<port> was not found. Replaying the newest capture.`, and the three like it in [What the host remembers](#what-the-host-remembers) | At launch, when the host cannot start the source it remembers | The run ends |
+| `The reduced-carrier level looks inverted. Try the other level in the signal settings.` | More than 20 markers start within 60 s of the source's time, with no frame completed among them | A frame is completed, `setReducedCarrierLevel` arrives, the source resets, or the run ends |
 
 The texts are for people. The page shows them and does not parse them.
+
+A status carries one warning. While the level looks inverted its warning takes the place of the launch warning, and the launch warning is back when it goes.
+
+**Why 20 markers.** A single pulse cannot show that the level is inverted: 0.2 s of reduced carrier in a second is 0.8 s of full carrier, so every 0 reads as a marker and every marker as a 0. A frame has seven markers and some forty zeros. Measured on 2026-11-21: with the right level, the most markers within 60 s and no frame among them was 11, on the synthetic source at every noise from 0 to 1; with the level inverted it was 33 to 42, on the overnight capture and on the synthetic source, and no frame was completed in 8 h 45 min. The time is the source's, so a replay at 60× is judged over one second of the PC's time. Once the level looks inverted it stays so until one of the four things in the table happens, so the warning does not come and go with a noisy signal.
 
 ```json
 {
