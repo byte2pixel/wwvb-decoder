@@ -5,7 +5,8 @@ import { stages } from "./stages";
 export type KeyAction =
   | { kind: "focus"; stage: number | null }
   | { kind: "drawer"; drawer: Drawer | null }
-  | { kind: "theme" };
+  | { kind: "theme" }
+  | { kind: "noiseDemo" };
 
 /** The arrow keys walk a row of eight places: the overview, then the seven stages. */
 const OVERVIEW = 0;
@@ -53,6 +54,9 @@ export function keyAction(
     case "t":
     case "T":
       return { kind: "theme" };
+    case "d":
+    case "D":
+      return { kind: "noiseDemo" };
   }
 
   const stage = stages.find(({ number }) => String(number) === key);

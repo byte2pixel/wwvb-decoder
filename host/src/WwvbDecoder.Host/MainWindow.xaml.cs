@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using Microsoft.Web.WebView2.Core;
 using WwvbDecoder.Host.Bridge;
 using WwvbDecoder.Host.Services;
@@ -30,6 +31,9 @@ public partial class MainWindow
 
     private readonly SourceController _controller;
 
+    /// <summary>What the window was before <c>F11</c> made it full screen, or null when it is not.</summary>
+    private (WindowState State, WindowStyle Style, ResizeMode Resize)? _beforeFullScreen;
+
     /// <summary>
     /// Initializes the window and starts the WebView2 control.
     /// </summary>
@@ -49,6 +53,45 @@ public partial class MainWindow
     /// <param name="json">The message, already serialized.</param>
     public void PostWebMessage(string json) => Wv.CoreWebView2?.PostWebMessageAsJson(json);
 
+    /// <summary>
+    /// Takes <c>F11</c> for full screen. The key arrives here whether the page or the window
+    /// has the keyboard: WebView2 raises the keys it calls accelerators, the function keys
+    /// among them, as WPF key events on its control.
+    /// </summary>
+    /// <param name="e">The key.</param>
+    protected override void OnPreviewKeyDown(KeyEventArgs e)
+    {
+        base.OnPreviewKeyDown(e);
+        if (e.Key != Key.F11 || e.IsRepeat)
+        {
+            return;
+        }
+
+        e.Handled = true;
+
+        // WebView2's browser process waits for this handler to return, and a window that
+        // changes its size calls into that process. So the change is made after the handler.
+        Dispatcher.BeginInvoke(ToggleFullScreen);
+    }
+
+    private void ToggleFullScreen()
+    {
+        (WindowState State, WindowStyle Style, ResizeMode Resize) next =
+            _beforeFullScreen ?? (WindowState.Maximized, WindowStyle.None, ResizeMode.NoResize);
+        _beforeFullScreen = _beforeFullScreen is null
+            ? (WindowState, WindowStyle, ResizeMode)
+            : null;
+
+        // The window is made normal first and takes its state last, so that it is sized again
+        // for the border it then has. Maximized with no border and no resize grip, it covers
+        // the whole monitor it is on, the taskbar too. Maximized with a border, it stops at
+        // the taskbar.
+        WindowState = WindowState.Normal;
+        WindowStyle = next.Style;
+        ResizeMode = next.Resize;
+        WindowState = next.State;
+    }
+
     private async Task InitializeAsync()
     {
         try
@@ -66,6 +109,16 @@ public partial class MainWindow
                 );
                 await Wv.EnsureCoreWebView2Async(environment);
                 Wv.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
+
+                // The page's keys work from the start, with no click on the page first.
+                Wv.CoreWebView2.NavigationCompleted += (_, _) => Wv.Focus();
+#if !DEBUG
+                // A desktop app, not a browser: F5 and Ctrl+R load nothing again, F12 opens
+                // no tools, and the right mouse button opens no menu. The keys still reach
+                // OnPreviewKeyDown. Debug keeps them all, for work on the page.
+                Wv.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = false;
+                Wv.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
+#endif
             }
             catch (WebView2RuntimeNotFoundException ex)
             {

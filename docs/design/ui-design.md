@@ -375,7 +375,8 @@ Keys are left to the control while a text field or slider has focus, and while a
 | `T` | Switch theme |
 | `L` | Protocol log |
 | `?` | Shortcut list |
-| `F11`, `D` | Full screen and the noise demo preset, both added in Step 15 |
+| `D` | The noise demo preset, on and off |
+| `F11` | Full screen, on and off. The host's window takes this key, not the page |
 
 - The arrow and page keys walk a row of eight places: the overview, then stages 1 to 7. They stop at both ends.
 - Pressing the number of the stage in focus changes nothing. Only the rail's button toggles.
@@ -386,6 +387,12 @@ Keys are left to the control while a text field or slider has focus, and while a
 - A closed list and the signal settings button are buttons like any other. A stage key pressed on one acts on the page, and the control stays closed.
 - A key the page acts on goes no further. An arrow key pressed on a source or speed button changes the stage and does not also move the focus along the buttons.
 - When a key acts, the control that has focus gives it up. A button clicked with the mouse keeps focus, and the browser draws its focus ring on the next key press, so a stage key would light up the Start button. Tab carries on from the control that had focus.
+
+Three things were added in Step 15, for the presenter:
+
+- **`D`, the noise demo.** On is the synthetic source at noise 0.10, where frames still complete and stage 6 rejects some of them. `D` picks Synthetic and that noise in the app bar and sends the command that makes the host follow: `selectSource` when the synthetic source is not the one running, and `setNoise` when it is, so a clock that has locked is not started again. Pressed while the synthetic source runs at 0.10, `D` sets the noise to 0 on the same source. So one press shows the rejections and the next shows the clock recovering. Like `T`, it does nothing while a drawer is open.
+- **`F11`, full screen.** The window loses its title bar and its border and covers the monitor it is on, the taskbar too. `F11` again gives the window back as it was, maximized or not. The page does not see the key. In a browser, where the page runs on the simulator, `F11` is the browser's own full screen.
+- **A desktop app, not a browser.** The host gives the page the keyboard when the page has loaded, so the keys work with no click on the page first. In a Release build of the host, `F5` and `Ctrl+R` do not load the page again, `F12` opens no tools, and the right mouse button opens no menu. A Debug build keeps all of them, for work on the page.
 
 ## Motion
 

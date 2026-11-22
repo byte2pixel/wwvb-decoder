@@ -12,6 +12,8 @@ const SHORTCUTS = [
   { keys: "Esc or 0", does: "Back to the overview" },
   { keys: "← → Page Up Page Down", does: "Previous and next stage" },
   { keys: "T", does: "Switch theme" },
+  { keys: "D", does: "Noise demo: Synthetic at 0.10, and back to 0" },
+  { keys: "F11", does: "Full screen" },
   { keys: "L", does: "Protocol log" },
   { keys: "?", does: "This list" },
 ];

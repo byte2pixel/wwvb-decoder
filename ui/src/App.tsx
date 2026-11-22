@@ -42,7 +42,7 @@ export default function App({
     return off;
   }, [bridge]);
 
-  useKeyboard();
+  useKeyboard(bridge);
 
   const focus = useAppStore((state) => state.focus);
   const focused = stages.find((stage) => stage.number === focus);

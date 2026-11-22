@@ -259,6 +259,25 @@ describe("App", () => {
     expect(panels()).toEqual(["Signal", "Edge log"]);
   });
 
+  it("starts the noise demo on D through the app's bridge, and the app bar shows it", async () => {
+    const user = userEvent.setup();
+    const { bridge } = fakeBridge();
+    render(<App bridge={bridge} clock={idleClock()} />);
+    await user.click(screen.getByRole("button", { name: "Replay" }));
+
+    await user.keyboard("d");
+
+    expect(bridge.send).toHaveBeenLastCalledWith({
+      command: "selectSource",
+      source: "synthetic",
+      noise: 0.1,
+    });
+    expect(
+      screen.getByRole("button", { name: "Synthetic", pressed: true }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("0.10")).toBeInTheDocument();
+  });
+
   it("closes a drawer on Esc and keeps the focus view behind it", async () => {
     const user = userEvent.setup();
     render(<App bridge={fakeBridge().bridge} clock={idleClock()} />);

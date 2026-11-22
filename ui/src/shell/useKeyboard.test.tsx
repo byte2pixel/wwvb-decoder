@@ -1,12 +1,24 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Bridge } from "@/protocol/bridge";
+import type { Command, SourceStatus } from "@/protocol/messages";
 import { useAppStore } from "@/state/store";
 import { useKeyboard } from "./useKeyboard";
 
+const bridge = {
+  onMessage: () => () => {},
+  send: vi.fn<(command: Command) => void>(),
+} satisfies Bridge;
+
+const status = (
+  source: SourceStatus["source"],
+  state: SourceStatus["state"],
+): SourceStatus => ({ source, name: "", state, detail: "", speed: 1 });
+
 /** A page with the map running, and one of each kind of control to press keys in. */
 function Page() {
-  useKeyboard();
+  useKeyboard(bridge);
   return (
     <>
       <input aria-label="Port" />
@@ -37,6 +49,7 @@ describe("useKeyboard", () => {
   // The store is one module-level object shared by every test.
   beforeEach(() => {
     useAppStore.setState(useAppStore.getInitialState(), true);
+    bridge.send.mockClear();
   });
 
   afterEach(() => {
@@ -78,6 +91,77 @@ describe("useKeyboard", () => {
     await user.keyboard("t");
     expect(isDark()).toBe(false);
   });
+
+  it("starts the noise demo on D, and the picks show it", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({
+      sourceStatus: status("replay", "running"),
+      picks: {
+        source: "replay",
+        port: "COM5",
+        capture: "overnight",
+        speed: 10,
+        noise: 0.4,
+      },
+    });
+    render(<Page />);
+
+    await user.keyboard("d");
+
+    expect(bridge.send.mock.calls).toEqual([
+      [{ command: "selectSource", source: "synthetic", noise: 0.1 }],
+    ]);
+    // The source and the noise change, and what was picked for the other sources stays.
+    expect(useAppStore.getState().picks).toEqual({
+      source: "synthetic",
+      port: "COM5",
+      capture: "overnight",
+      speed: 10,
+      noise: 0.1,
+    });
+    // And nothing else on the page does: the view, the drawers, and the theme stay.
+    expect(ui()).toEqual({ focus: null, drawer: null });
+    expect(isDark()).toBe(false);
+  });
+
+  it("switches the noise of a running synthetic source on and off on D, and does not start it again", async () => {
+    const user = userEvent.setup();
+    useAppStore.setState({ sourceStatus: status("synthetic", "running") });
+    render(<Page />);
+
+    await user.keyboard("d");
+    expect(useAppStore.getState().picks.noise).toBe(0.1);
+
+    await user.keyboard("D");
+    expect(useAppStore.getState().picks.noise).toBe(0);
+
+    await user.keyboard("d");
+    expect(bridge.send.mock.calls).toEqual([
+      [{ command: "setNoise", noise: 0.1 }],
+      [{ command: "setNoise", noise: 0 }],
+      [{ command: "setNoise", noise: 0.1 }],
+    ]);
+  });
+
+  it.each([
+    ["has stopped", status("synthetic", "stopped")],
+    ["has failed", status("synthetic", "error")],
+    ["never ran", null],
+  ])(
+    "starts the synthetic source on D when it %s, the demo's noise picked or not",
+    async (_, sourceStatus) => {
+      const user = userEvent.setup();
+      useAppStore.setState({ sourceStatus });
+      useAppStore.getState().setPicks({ noise: 0.1 });
+      render(<Page />);
+
+      await user.keyboard("d");
+
+      expect(bridge.send.mock.calls).toEqual([
+        [{ command: "selectSource", source: "synthetic", noise: 0.1 }],
+      ]);
+    },
+  );
 
   it("opens the protocol log on L and the shortcut list on ?", async () => {
     const user = userEvent.setup();
@@ -133,10 +217,11 @@ describe("useKeyboard", () => {
       render(<Page />);
 
       screen.getByLabelText(name).focus();
-      await user.keyboard("2tl{ArrowRight}");
+      await user.keyboard("2tld{ArrowRight}");
 
       expect(ui()).toEqual({ focus: null, drawer: null });
       expect(isDark()).toBe(false);
+      expect(bridge.send).not.toHaveBeenCalled();
     },
   );
 
@@ -145,10 +230,11 @@ describe("useKeyboard", () => {
     render(<Page />);
 
     screen.getByRole("button", { name: "Open list" }).focus();
-    await user.keyboard("2tl{ArrowRight}{Escape}");
+    await user.keyboard("2tld{ArrowRight}{Escape}");
 
     expect(ui()).toEqual({ focus: null, drawer: null });
     expect(isDark()).toBe(false);
+    expect(bridge.send).not.toHaveBeenCalled();
   });
 
   it("still listens while the button of a closed list has focus", async () => {
@@ -167,9 +253,10 @@ describe("useKeyboard", () => {
       const user = userEvent.setup();
       render(<Page />);
 
-      await user.keyboard(`{${modifier}>}l1{/${modifier}}`);
+      await user.keyboard(`{${modifier}>}l1d{/${modifier}}`);
 
       expect(ui()).toEqual({ focus: null, drawer: null });
+      expect(bridge.send).not.toHaveBeenCalled();
     },
   );
 
